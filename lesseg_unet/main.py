@@ -48,8 +48,8 @@ def main():
     lesion_paths_group.add_argument('-lli', '--lesion_input_list', type=str,
                                     help='Text file containing the list of b1000')
     parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
-    parser.add_argument('-nw', '--num_workers', default=8, type=float, help='Number of torch workers')
-    parser.add_argument('-ne', '--num_epochs', default=5, type=float, help='Number of epochs')
+    parser.add_argument('-nw', '--num_workers', default=8, type=int, help='Number of torch workers')
+    parser.add_argument('-ne', '--num_epochs', default=5, type=int, help='Number of epochs')
     parser.add_argument('-tb', '--show_tensorboard', action='store_true', help='Show tensorboard in the web browser')
     parser.add_argument('-tbp', '--tensorboard_port', help='Tensorboard port')
     parser.add_argument('-tbnw', '--tensorboard_new_window', action='store_true',
