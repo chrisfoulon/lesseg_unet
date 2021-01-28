@@ -180,9 +180,9 @@ def main():
     if args.tensorboard_port is not None:
         tb_port = args.tensorboard_port
         args.show_tensorboard = True
-    if args.tensorboard_new_window is not None:
+    if args.tensorboard_new_window:
         tb_window = True
-    if args.show_tensorboard is not None:
+    if args.show_tensorboard:
         tensorboard_utils.open_tensorboard_page(log_dir, tb_port, tb_window)
     # optional section for model validation during training
     validation_every_n_epochs = 1
