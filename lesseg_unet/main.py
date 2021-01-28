@@ -88,6 +88,8 @@ def main():
     logging.info('Matching the dwi and lesions')
     if args.image_prefix is not None:
         b1000_pref = args.image_prefix
+    else:
+        b1000_pref = None
         # b1000_pref = 'wodctH25_b1000'
     # images = []
     # images = [str(p) for p in img_list if b1000_pref in Path(p).name]
