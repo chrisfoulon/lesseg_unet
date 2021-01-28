@@ -47,6 +47,7 @@ def main():
                                     help='Root folder of the b1000 dataset')
     lesion_paths_group.add_argument('-lli', '--lesion_input_list', type=str,
                                     help='Text file containing the list of b1000')
+    parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
     parser.add_argument('-nw', '--num_workers', default=8, type=float, help='Number of torch workers')
     parser.add_argument('-ne', '--num_epochs', default=5, type=float, help='Number of epochs')
     parser.add_argument('-tb', '--show_tensorboard', action='store_true', help='Show tensorboard in the web browser')
@@ -85,7 +86,9 @@ def main():
 
     # match the lesion labels with the images
     logging.info('Matching the dwi and lesions')
-    b1000_pref = 'wodctH25_b1000'
+    if args.image_prefix is not None:
+        b1000_pref = args.image_prefix
+        # b1000_pref = 'wodctH25_b1000'
     # images = []
     # images = [str(p) for p in img_list if b1000_pref in Path(p).name]
     # segs = []
@@ -148,6 +151,8 @@ def main():
     # adding checkpoint handler to save models (network params and optimizer stats) during training
     logging.info('Optional checkpoint logging stuff')
     log_dir = Path(output_root, "logs")
+    if not log_dir.is_dir():
+        os.makedirs(log_dir)
     checkpoint_handler = ignite.handlers.ModelCheckpoint(
         log_dir, "net", n_saved=10, require_empty=False
     )
