@@ -47,6 +47,8 @@ def main():
                                     help='Root folder of the b1000 dataset')
     lesion_paths_group.add_argument('-lli', '--lesion_input_list', type=str,
                                     help='Text file containing the list of b1000')
+    parser.add_argument('-nw', '--num_workers', default=8, type=float, help='Number of torch workers')
+    parser.add_argument('-ne', '--num_epochs', default=5, type=float, help='Number of epochs')
     parser.add_argument('-tb', '--show_tensorboard', action='store_true', help='Show tensorboard in the web browser')
     parser.add_argument('-tbp', '--tensorboard_port', help='Tensorboard port')
     parser.add_argument('-tbnw', '--tensorboard_new_window', action='store_true',
@@ -90,7 +92,7 @@ def main():
     # segs = [str(p) for p in les_list if b1000_pref in Path(p).name]
     # segs = [str(p) for p in les_list if [Path(p).name in Path(pp).name for pp in images]]
 
-    images, segs = data_loading.match_img_seg_by_names(img_list, les_list)
+    images, segs = data_loading.match_img_seg_by_names(img_list, les_list, b1000_pref)
     training_validation_cut = 75
     training_end_index = math.ceil(training_validation_cut / 100 * len(images))
     # Define transforms for image and segmentation
@@ -239,9 +241,9 @@ def main():
     logging.info('Running loop!')
     train_ds = ArrayDataset(images[:training_end_index], imtrans, segs[:training_end_index], segtrans)
     train_loader = torch.utils.data.DataLoader(
-        train_ds, batch_size=5, shuffle=True, num_workers=8, pin_memory=torch.cuda.is_available(),
+        train_ds, batch_size=5, shuffle=True, num_workers=args.num_workers, pin_memory=torch.cuda.is_available(),
     )
 
-    train_epochs = 5
+    train_epochs = args.num_epochs
     state = trainer.run(train_loader, train_epochs)
 
