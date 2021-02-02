@@ -16,6 +16,7 @@ from monai.config import print_config
 from monai.data import ArrayDataset, create_test_image_3d
 from monai.handlers import MeanDice, StatsHandler, TensorBoardImageHandler, TensorBoardStatsHandler
 from monai.losses import DiceLoss
+from monai.metrics import DiceMetric
 from monai.networks.nets import UNet
 from monai.transforms import (
     Activations,
@@ -29,7 +30,7 @@ from monai.transforms import (
     ToTensor,
 )
 from monai.utils import first
-from lesseg_unet import utils, data_loading, tensorboard_utils
+from lesseg_unet import utils, data_loading
 from bcblib.tools.nifti_utils import file_to_list
 
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
@@ -47,13 +48,11 @@ def main():
                                     help='Root folder of the b1000 dataset')
     lesion_paths_group.add_argument('-lli', '--lesion_input_list', type=str,
                                     help='Text file containing the list of b1000')
+    parser.add_argument('-d', '--torch_device', default='cuda:0', type=str, help='Device type and number given to '
+                                                                                 'torch.device(), default "cuda:0"')
     parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
     parser.add_argument('-nw', '--num_workers', default=8, type=int, help='Number of torch workers')
     parser.add_argument('-ne', '--num_epochs', default=5, type=int, help='Number of epochs')
-    parser.add_argument('-tb', '--show_tensorboard', action='store_true', help='Show tensorboard in the web browser')
-    parser.add_argument('-tbp', '--tensorboard_port', help='Tensorboard port')
-    parser.add_argument('-tbnw', '--tensorboard_new_window', action='store_true',
-                        help='Open tensorboard in a new browser window')
     args = parser.parse_args()
     # print MONAI config
     print_config()
@@ -97,6 +96,14 @@ def main():
     # segs = [str(p) for p in les_list if b1000_pref in Path(p).name]
     # segs = [str(p) for p in les_list if [Path(p).name in Path(pp).name for pp in images]]
 
+    # create_segmentation_data_loader
+    dice_metric = DiceMetric(include_background=True, reduction="mean")
+    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
+
+
+
+
+
     images, segs = data_loading.match_img_seg_by_names(img_list, les_list, b1000_pref)
     training_validation_cut = 75
     training_end_index = math.ceil(training_validation_cut / 100 * len(images))
@@ -132,7 +139,8 @@ def main():
     logging.info('First loader batch size: images {}, lesions {}'.format(im.shape, seg.shape))
     # Create UNet, DiceLoss and Adam optimizer
     # device = torch.device("cuda:0")
-    device = torch.device("cpu:0")
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(args.torch_device)
     net = UNet(
         dimensions=3,
         in_channels=1,
@@ -174,16 +182,6 @@ def main():
     train_tensorboard_stats_handler = TensorBoardStatsHandler(log_dir=log_dir)
     train_tensorboard_stats_handler.attach(trainer)
 
-    # If the tensorboard show option is selected we open a new tensorboard window/tab in the browser
-    tb_port = '8008'
-    tb_window = False
-    if args.tensorboard_port is not None:
-        tb_port = args.tensorboard_port
-        args.show_tensorboard = True
-    if args.tensorboard_new_window:
-        tb_window = True
-    if args.show_tensorboard:
-        tensorboard_utils.open_tensorboard_page(log_dir, tb_port, tb_window)
     # optional section for model validation during training
     validation_every_n_epochs = 1
     # Set parameters for validation
@@ -207,7 +205,7 @@ def main():
         [LoadImage(image_only=True), ScaleIntensity(), AddChannel(), Resize((96, 96, 96)), ToTensor()]
     )
     val_segtrans = Compose([LoadImage(image_only=True), AddChannel(), Resize((96, 96, 96)), ToTensor()])
-    val_ds = ArrayDataset(images[training_end_index+1:], val_imtrans, segs[training_end_index+1:], val_segtrans)
+    val_ds = ArrayDataset(images[training_end_index:], val_imtrans, segs[training_end_index:], val_segtrans)
     val_loader = torch.utils.data.DataLoader(
         val_ds, batch_size=5, num_workers=8, pin_memory=torch.cuda.is_available()
     )
