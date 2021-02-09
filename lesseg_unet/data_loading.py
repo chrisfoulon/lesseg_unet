@@ -69,7 +69,7 @@ class Binarize(Transform):
         """
         Apply the transform to `img`.
         """
-        return np.asarray(np.where(img > 0, 1, 0), dtype=img.dtype)
+        return np.asarray(np.where(img != 0, 1, 0), dtype=img.dtype)
 
 
 def segmentation_train_transform(spatial_size=None):
@@ -81,7 +81,7 @@ def segmentation_train_transform(spatial_size=None):
             AddChannel(),
             # RandSpatialCrop(spatial_size, random_size=False),
             Resize(spatial_size),
-            RandRotate90(prob=0.5, spatial_axes=(0, 2)),
+            # RandRotate90(prob=0.5, spatial_axes=(0, 2)),
             ToTensor(),
         ]
     )
@@ -90,8 +90,8 @@ def segmentation_train_transform(spatial_size=None):
             AddChannel(),
             # RandSpatialCrop(spatial_size, random_size=False),
             Resize(spatial_size),
+            # RandRotate90(prob=0.5, spatial_axes=(0, 2)),
             Binarize(),
-            RandRotate90(prob=0.5, spatial_axes=(0, 2)),
             ToTensor(),
         ]
     )
@@ -118,9 +118,13 @@ def segmentation_train_transformd(spatial_size=None):
     return train_transforms
 
 
-def segmentation_val_transform():
-    val_imtrans = Compose([ScaleIntensity(), AddChannel(), ToTensor()])
-    val_segtrans = Compose([AddChannel(), Binarize(), ToTensor()])
+def segmentation_val_transform(spatial_size=None):
+    if spatial_size is None:
+        val_imtrans = Compose([ScaleIntensity(), AddChannel(), ToTensor()])
+        val_segtrans = Compose([AddChannel(), Binarize(), ToTensor()])
+    else:
+        val_imtrans = Compose([ScaleIntensity(), AddChannel(), Resize(spatial_size), ToTensor()])
+        val_segtrans = Compose([AddChannel(), Resize(spatial_size), Binarize(), ToTensor()])
     return val_imtrans, val_segtrans
 
 
@@ -144,8 +148,8 @@ def create_training_data_loader(train_ds: monai.data.Dataset,
         train_ds,
         batch_size=batch_size,
         shuffle=True,
+        drop_last=True,
         num_workers=dataloader_workers,
-        collate_fn=list_data_collate,
         pin_memory=torch.cuda.is_available(),
     )
     return train_loader
@@ -155,7 +159,8 @@ def create_validation_data_loader(val_ds: monai.data.Dataset,
                                   batch_size: int = 1,
                                   dataloader_workers: int = 4):
     logging.info('Creating validation data loader')
-    val_loader = DataLoader(val_ds, batch_size=batch_size, num_workers=dataloader_workers, collate_fn=list_data_collate)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, num_workers=dataloader_workers,
+                            pin_memory=torch.cuda.is_available())
     return val_loader
 
 
@@ -167,3 +172,4 @@ def data_loader_checker_first(check_ds, set_name=''):
         set_name,
         img_batch.shape,
         seg_batch.shape))
+    return img_batch, seg_batch

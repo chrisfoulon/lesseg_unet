@@ -3,11 +3,12 @@ import logging
 import math
 from pathlib import Path
 from typing import Sequence, Tuple, Union
+import numpy as np
 
 import monai
 import torch
 from monai.metrics import DiceMetric
-from monai.data import NiftiDataset
+from monai.data import NiftiDataset, NiftiSaver
 from monai.transforms import (
     Activations,
     AsDiscrete,
@@ -16,7 +17,8 @@ from monai.transforms import (
 from monai.visualize import plot_2d_or_3d_image
 from monai.inferers import sliding_window_inference
 from torch.utils.tensorboard import SummaryWriter
-from lesseg_unet import data_loading, net
+from lesseg_unet import data_loading, net, utils
+import nibabel as nib
 
 
 def init_training_data(img_path_list: Sequence,
@@ -39,7 +41,7 @@ def init_training_data(img_path_list: Sequence,
             val_seg.append(img_seg_dict[img])
     logging.info('Create transformations')
     train_img_transforms, train_seg_transforms = data_loading.segmentation_train_transform(spatial_size=[96, 96, 96])
-    val_img_transforms, val_seg_transforms = data_loading.segmentation_val_transform()
+    val_img_transforms, val_seg_transforms = data_loading.segmentation_val_transform(spatial_size=[96, 96, 96])
 
     # define dataset, data loader
     logging.info('Create training monai datasets')
@@ -56,20 +58,46 @@ def init_training_data(img_path_list: Sequence,
     return train_ds, val_ds
 
 
-def training_loop(img_path_list: Sequence, seg_path_list: Sequence, output_dir: Union[str, bytes, os.PathLike],
-                  img_pref: str = None, device: str = None):
+def training_loop(img_path_list: Sequence,
+                  seg_path_list: Sequence,
+                  output_dir: Union[str, bytes, os.PathLike],
+                  img_pref: str = None,
+                  device: str = None,
+                  batch_size: int = 10,
+                  epoch_num: int = 25,
+                  dataloader_workers: int = 4):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
+    val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
     train_ds, val_ds = init_training_data(img_path_list, seg_path_list, img_pref)
-    train_loader = data_loading.create_training_data_loader(train_ds)
-    val_loader = data_loading.create_validation_data_loader(val_ds)
+    train_loader = data_loading.create_training_data_loader(train_ds, batch_size, dataloader_workers)
+    val_loader = data_loading.create_validation_data_loader(val_ds, dataloader_workers)
     model = net.create_unet_model(device, net.default_unet_hyper_params)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
     loss_function = monai.losses.DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
+
+    # ##################################################################################
+    # # Code for restoring!
+    # state_dict_fullpath = os.path.join(hyper_params['checkpoint_folder'], 'state_dictionary.pt')
+    # checkpoint = torch.load(state_dict_fullpath)
+    # model.load_state_dict(checkpoint['model_state_dict'])
+    # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    # starting_epoch = checkpoint['epoch'] + 1
+    # scaler.load_state_dict(checkpoint['scaler'])
+    #
+    # # Code for saving (to be used in the validaiton vlock)
+    # checkpoint_dict = {'epoch': epoch,
+    #                    'model_state_dict': model.state_dict(),
+    #                    'optimizer_state_dict': optimizer.state_dict(),
+    #                    'loss_tally_train': loss_tally_train,
+    #                    'nifti_t1_paths': nifti_t1_paths,}
+    # checkpoint_dict['scaler'] = scaler.state_dict()
+    # torch.save(checkpoint_dict, os.path.join(hyper_params['checkpoint_folder'], 'state_dictionary.pt'))
+    # ##################################################################################
 
     # start a typical PyTorch training
     val_interval = 2
@@ -78,9 +106,10 @@ def training_loop(img_path_list: Sequence, seg_path_list: Sequence, output_dir: 
     epoch_loss_values = list()
     metric_values = list()
     writer = SummaryWriter(log_dir=str(output_dir))
-    for epoch in range(5):
+    batches_per_epoch = len(train_loader)
+    for epoch in range(epoch_num):
         print("-" * 10)
-        print(f"epoch {epoch + 1}/{5}")
+        print(f"epoch {epoch + 1}/{epoch_num}")
         model.train()
         epoch_loss = 0
         step = 0
@@ -93,48 +122,77 @@ def training_loop(img_path_list: Sequence, seg_path_list: Sequence, output_dir: 
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
-            epoch_len = len(train_ds) // train_loader.batch_size
-            print(f"{step}/{epoch_len}, train_loss: {loss.item():.4f}")
-            writer.add_scalar("train_loss", loss.item(), epoch_len * epoch + step)
+            print(f"{step}/{batches_per_epoch}, train_loss: {loss.item():.4f}")
+            writer.add_scalar("train_loss", loss.item(), batches_per_epoch * epoch + step)
+
         epoch_loss /= step
         epoch_loss_values.append(epoch_loss)
         print(f"epoch {epoch + 1} average loss: {epoch_loss:.4f}")
 
-        if (epoch + 1) % val_interval == 1:
         # if (epoch + 1) % val_interval == 0:
+        if (epoch + 1) % val_interval == 1:
             model.eval()
             with torch.no_grad():
                 metric_sum = 0.0
                 metric_count = 0
-                val_images = None
-                val_labels = None
-                val_outputs = None
+                # val_images = None
+                # val_labels = None
+                # val_outputs = None
+                inputs = None
+                labels = None
+                outputs = None
+                saver = NiftiSaver(output_dir=output_dir)
                 for val_data in val_loader:
-                    val_images, val_labels = val_data[0].to(device), val_data[1].to(device)
-                    roi_size = (96, 96, 96)
-                    sw_batch_size = 4
-                    val_outputs = sliding_window_inference(val_images, roi_size, sw_batch_size, model)
-                    val_outputs = post_trans(val_outputs)
-                    value, _ = dice_metric(y_pred=val_outputs, y=val_labels)
+                    inputs, labels = val_data[0].to(device), val_data[1].to(device)
+                    # roi_size = (96, 96, 96)
+                    # sw_batch_size = 4
+                    outputs = model(inputs)
+                    outputs = post_trans(outputs)
+                    np_inputs = inputs.to('cpu:0').detach().numpy()
+                    np_labels = labels.detach().numpy()
+                    np_outputs = outputs.detach().numpy()
+                    value, _ = dice_metric(y_pred=outputs, y=labels)
                     metric_count += len(value)
                     metric_sum += value.item() * len(value)
+                    # nib.save(nib.Nifti1Image(np.array(inputs.cpu()[2:5], dtype=np.float32), val_output_affine),
+                    #          Path(output_dir, 'nib_inputs_{}.nii'.format(epoch+1)))
+                    saver.save_batch(outputs, val_data[1])
+                    # saver.save(inputs, {'filename_or_obj': 'inputs_{}.nii'.format(epoch + 1),
+                    #                     'original_affine': val_output_affine})
+                    # saver.save(inputs, val_data[2])
+                    # saver.save(labels, val_data[2])
+                    # saver.save(outputs, val_data[2])
+                    # val_images, val_labels = val_data[0].to(device), val_data[1].to(device)
+                    # roi_size = (96, 96, 96)
+                    # sw_batch_size = 4
+                    # val_outputs = sliding_window_inference(val_images, roi_size, sw_batch_size, model)
+                    # val_outputs = post_trans(val_outputs)
+                    # value, _ = dice_metric(y_pred=val_outputs, y=val_labels)
+                    # metric_count += len(value)
+                    # metric_sum += value.item() * len(value)
                 metric = metric_sum / metric_count
                 metric_values.append(metric)
                 if metric > best_metric:
                     best_metric = metric
                     best_metric_epoch = epoch + 1
-                    torch.save(model.state_dict(), Path(output_dir, "best_metric_model_segmentation3d_array.pth"))
+                    torch.save(model.state_dict(),
+                               Path(output_dir,
+                                    "best_metric_model_segmentation3d_array_epo_{}.pth".format(best_metric_epoch)))
                     print("saved new best metric model")
+                    writer.add_scalar("val_mean_dice", metric, epoch + 1)
+                    # plot the last model output as GIF image in TensorBoard with the corresponding image and label
+                    # plot_2d_or_3d_image(val_images, epoch + 1, writer, index=0, tag="image")
+                    # plot_2d_or_3d_image(val_labels, epoch + 1, writer, index=0, tag="label")
+                    # plot_2d_or_3d_image(val_outputs, epoch + 1, writer, index=0, tag="output")
+                    plot_2d_or_3d_image(inputs, epoch + 1, writer, index=0, tag="image")
+                    plot_2d_or_3d_image(labels, epoch + 1, writer, index=0, tag="label")
+                    plot_2d_or_3d_image(outputs, epoch + 1, writer, index=0, tag="output")
                 print(
                     "current epoch: {} current mean dice: {:.4f} best mean dice: {:.4f} at epoch {}".format(
                         epoch + 1, metric, best_metric, best_metric_epoch
                     )
                 )
-                writer.add_scalar("val_mean_dice", metric, epoch + 1)
-                # plot the last model output as GIF image in TensorBoard with the corresponding image and label
-                plot_2d_or_3d_image(val_images, epoch + 1, writer, index=0, tag="image")
-                plot_2d_or_3d_image(val_labels, epoch + 1, writer, index=0, tag="label")
-                plot_2d_or_3d_image(val_outputs, epoch + 1, writer, index=0, tag="output")
 
+                utils.save_checkpoint(model, epoch + 1, optimizer, output_dir)
     print(f"train completed, best_metric: {best_metric:.4f} at epoch: {best_metric_epoch}")
     writer.close()
