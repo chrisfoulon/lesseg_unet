@@ -64,7 +64,7 @@ def training_loop(img_path_list: Sequence,
                   img_pref: str = None,
                   device: str = None,
                   batch_size: int = 10,
-                  epoch_num: int = 25,
+                  epoch_num: int = 50,
                   dataloader_workers: int = 4):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -73,7 +73,7 @@ def training_loop(img_path_list: Sequence,
     val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
     train_ds, val_ds = init_training_data(img_path_list, seg_path_list, img_pref)
     train_loader = data_loading.create_training_data_loader(train_ds, batch_size, dataloader_workers)
-    val_loader = data_loading.create_validation_data_loader(val_ds, dataloader_workers)
+    val_loader = data_loading.create_validation_data_loader(val_ds, dataloader_workers=dataloader_workers)
     model = net.create_unet_model(device, net.default_unet_hyper_params)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
@@ -106,6 +106,12 @@ def training_loop(img_path_list: Sequence,
     epoch_loss_values = list()
     metric_values = list()
     writer = SummaryWriter(log_dir=str(output_dir))
+    val_images_dir = Path(output_dir, 'val_images')
+    if not val_images_dir.is_dir():
+        val_images_dir.mkdir(exist_ok=True)
+    trash_val_images_dir = Path(output_dir, 'trash_val_images')
+    if not trash_val_images_dir.is_dir():
+        trash_val_images_dir.mkdir(exist_ok=True)
     batches_per_epoch = len(train_loader)
     for epoch in range(epoch_num):
         print("-" * 10)
@@ -135,41 +141,34 @@ def training_loop(img_path_list: Sequence,
             with torch.no_grad():
                 metric_sum = 0.0
                 metric_count = 0
+                img_count = 0
+                trash_count = 0
+                img_max_num = 50
                 # val_images = None
                 # val_labels = None
                 # val_outputs = None
                 inputs = None
                 labels = None
                 outputs = None
-                saver = NiftiSaver(output_dir=output_dir)
+                # saver = NiftiSaver(output_dir=output_dir)
                 for val_data in val_loader:
                     inputs, labels = val_data[0].to(device), val_data[1].to(device)
-                    # roi_size = (96, 96, 96)
-                    # sw_batch_size = 4
                     outputs = model(inputs)
                     outputs = post_trans(outputs)
-                    np_inputs = inputs.to('cpu:0').detach().numpy()
-                    np_labels = labels.detach().numpy()
-                    np_outputs = outputs.detach().numpy()
+
                     value, _ = dice_metric(y_pred=outputs, y=labels)
                     metric_count += len(value)
                     metric_sum += value.item() * len(value)
-                    # nib.save(nib.Nifti1Image(np.array(inputs.cpu()[2:5], dtype=np.float32), val_output_affine),
-                    #          Path(output_dir, 'nib_inputs_{}.nii'.format(epoch+1)))
-                    saver.save_batch(outputs, val_data[1])
-                    # saver.save(inputs, {'filename_or_obj': 'inputs_{}.nii'.format(epoch + 1),
-                    #                     'original_affine': val_output_affine})
-                    # saver.save(inputs, val_data[2])
-                    # saver.save(labels, val_data[2])
-                    # saver.save(outputs, val_data[2])
-                    # val_images, val_labels = val_data[0].to(device), val_data[1].to(device)
-                    # roi_size = (96, 96, 96)
-                    # sw_batch_size = 4
-                    # val_outputs = sliding_window_inference(val_images, roi_size, sw_batch_size, model)
-                    # val_outputs = post_trans(val_outputs)
-                    # value, _ = dice_metric(y_pred=val_outputs, y=val_labels)
-                    # metric_count += len(value)
-                    # metric_sum += value.item() * len(value)
+                    if best_metric > 0.7:
+                        if value.item() * len(value) > 0.7 and img_count < img_max_num:
+                            img_count += 1
+                            utils.save_img_lbl_seg_to_nifti(
+                                inputs, labels, outputs, val_images_dir, val_output_affine, img_count)
+                        if value.item() * len(value) < 0.1:
+                            trash_count += 1
+                            if trash_count < img_max_num:
+                                utils.save_img_lbl_seg_to_nifti(
+                                    inputs, labels, outputs, trash_val_images_dir, val_output_affine, trash_count)
                 metric = metric_sum / metric_count
                 metric_values.append(metric)
                 if metric > best_metric:
@@ -180,6 +179,7 @@ def training_loop(img_path_list: Sequence,
                                     "best_metric_model_segmentation3d_array_epo_{}.pth".format(best_metric_epoch)))
                     print("saved new best metric model")
                     writer.add_scalar("val_mean_dice", metric, epoch + 1)
+                    writer.add_scalar("trash images (Dice < 0.1)", trash_count, epoch + 1)
                     # plot the last model output as GIF image in TensorBoard with the corresponding image and label
                     # plot_2d_or_3d_image(val_images, epoch + 1, writer, index=0, tag="image")
                     # plot_2d_or_3d_image(val_labels, epoch + 1, writer, index=0, tag="label")
@@ -188,8 +188,9 @@ def training_loop(img_path_list: Sequence,
                     plot_2d_or_3d_image(labels, epoch + 1, writer, index=0, tag="label")
                     plot_2d_or_3d_image(outputs, epoch + 1, writer, index=0, tag="output")
                 print(
-                    "current epoch: {} current mean dice: {:.4f} best mean dice: {:.4f} at epoch {}".format(
-                        epoch + 1, metric, best_metric, best_metric_epoch
+                    "current epoch: {} current mean dice: {:.4f} with {} "
+                    "trash images best mean dice: {:.4f} at epoch {}".format(
+                        epoch + 1, metric, trash_count, best_metric, best_metric_epoch
                     )
                 )
 

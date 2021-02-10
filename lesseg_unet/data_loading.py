@@ -81,7 +81,7 @@ def segmentation_train_transform(spatial_size=None):
             AddChannel(),
             # RandSpatialCrop(spatial_size, random_size=False),
             Resize(spatial_size),
-            # RandRotate90(prob=0.5, spatial_axes=(0, 2)),
+            RandRotate90(prob=0.5, spatial_axes=(0, 2)),
             ToTensor(),
         ]
     )
@@ -90,7 +90,7 @@ def segmentation_train_transform(spatial_size=None):
             AddChannel(),
             # RandSpatialCrop(spatial_size, random_size=False),
             Resize(spatial_size),
-            # RandRotate90(prob=0.5, spatial_axes=(0, 2)),
+            RandRotate90(prob=0.5, spatial_axes=(0, 2)),
             Binarize(),
             ToTensor(),
         ]

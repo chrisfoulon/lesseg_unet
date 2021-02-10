@@ -35,3 +35,14 @@ def save_checkpoint(model, epoch, optimizer, output_folder):
     #                       is_best=is_best,  # True if this is the model with best metrics
     #                       checkpoint=model_dir)  # path to folder
     return
+
+
+def save_tensor_to_nifti(tensor, output_path, val_output_affine):
+    np_tensor = tensor[0, 0, :, :, :].cpu().detach().numpy()
+    nib.save(nib.Nifti1Image(np_tensor, val_output_affine), output_path)
+
+
+def save_img_lbl_seg_to_nifti(input_tensor, label_tensor, seg_tensor, output_dir, val_output_affine, suffix):
+    save_tensor_to_nifti(input_tensor, Path(output_dir, 'nib_input_{}.nii'.format(suffix)), val_output_affine)
+    save_tensor_to_nifti(label_tensor, Path(output_dir, 'nib_label_{}.nii'.format(suffix)), val_output_affine)
+    save_tensor_to_nifti(seg_tensor, Path(output_dir, 'nib_output_{}.nii'.format(suffix)), val_output_affine)
