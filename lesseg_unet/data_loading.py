@@ -14,6 +14,7 @@ from monai.transforms import (
     AddChannel,
     Compose,
     RandRotate90,
+    RandFlip,
     RandSpatialCrop,
     ScaleIntensity,
     ToTensor,
@@ -80,8 +81,10 @@ def segmentation_train_transform(spatial_size=None):
             ScaleIntensity(),
             AddChannel(),
             # RandSpatialCrop(spatial_size, random_size=False),
+            # RandShiftIntensity(offsets, prob=0.1),
+            RandFlip(prob=0.1, spatial_axis=None),
             Resize(spatial_size),
-            RandRotate90(prob=0.5, spatial_axes=(0, 2)),
+            # RandRotate90(prob=0.5, spatial_axes=(0, 2)),
             ToTensor(),
         ]
     )
@@ -90,7 +93,8 @@ def segmentation_train_transform(spatial_size=None):
             AddChannel(),
             # RandSpatialCrop(spatial_size, random_size=False),
             Resize(spatial_size),
-            RandRotate90(prob=0.5, spatial_axes=(0, 2)),
+            RandFlip(prob=0.1, spatial_axis=None),
+            # RandRotate90(prob=0.5, spatial_axes=(0, 2)),
             Binarize(),
             ToTensor(),
         ]
@@ -121,10 +125,14 @@ def segmentation_train_transformd(spatial_size=None):
 def segmentation_val_transform(spatial_size=None):
     if spatial_size is None:
         val_imtrans = Compose([ScaleIntensity(), AddChannel(), ToTensor()])
-        val_segtrans = Compose([AddChannel(), Binarize(), ToTensor()])
+        val_segtrans = Compose([AddChannel(),
+                                Binarize(),
+                                ToTensor()])
     else:
         val_imtrans = Compose([ScaleIntensity(), AddChannel(), Resize(spatial_size), ToTensor()])
-        val_segtrans = Compose([AddChannel(), Resize(spatial_size), Binarize(), ToTensor()])
+        val_segtrans = Compose([AddChannel(), Resize(spatial_size),
+                                Binarize(),
+                                ToTensor()])
     return val_imtrans, val_segtrans
 
 
@@ -173,3 +181,110 @@ def data_loader_checker_first(check_ds, set_name=''):
         img_batch.shape,
         seg_batch.shape))
     return img_batch, seg_batch
+
+# Augmentation params
+# hyper_params['use_augmentation_in_training'] = True
+# hyper_params['enable_Addblob'] = False
+# hyper_params['aug_prob'] = 0.1
+# hyper_params['aug_prob_rigid'] = 0.5
+# hyper_params['torchio_aug_prob'] = 0.1
+# hyper_params['RandHistogramShift_numcontrolpoints'] = (10, 15)
+# hyper_params['RandomBlur_std'] = (0.1, 0.5)
+# hyper_params['RandShiftIntensity_offset'] = 0.5
+# hyper_params['RandAdjustContrast_gamma'] = 0.5
+# hyper_params['RandomAffine_scales_range_frac'] = 0.3
+# hyper_params['RandomAffine_max_degree_rotation'] = 360
+# hyper_params['RandomAffine_max_degree_shear'] = 10
+# hyper_params['RandomAffine_translate_voxels_range'] = 20
+# hyper_params['RandomAffine_image_interpolation'] = 'nearest'
+# hyper_params['RandZoom_mode'] = 'nearest'
+# # hyper_params['RandomElastic_sigma_range'] = (0.01, 1)
+# # hyper_params['RandomElasticDeformation_numcontrolpoints'] = hyper_params['resample_dims'][0] // 8
+# # hyper_params['RandomElasticDeformation_maxdisplacement'] = 1.0
+# # hyper_params['RandomElasticDeformation_prob'] = 0.1
+# hyper_params['torchio_RandomMotion_num_transforms'] = 1
+# hyper_params['torchio_RandomGhosting_num_ghosts'] = (4, 10)
+# hyper_params['torchio_RandomSpike_intensity'] = (1, 3)
+# hyper_params['torchio_RandomBiasField_magnitude'] = 1
+# hyper_params['torchio_RandomNoise_std'] = (0.1, 0.2)
+# hyper_params['torchio_RandomFlip_axes'] = (0, 1, 2)
+# hyper_params['torchio_RandomFlip_per_axes_prob'] = 0.3
+
+
+# transforms_resize_to_tensor = [monai_trans.Resize(hyper_params['resample_dims']),
+#                                monai_trans.ToTensor()]
+# train_transforms = []
+# if hyper_params['use_augmentation_in_training']:
+#     rot_angle_in_rads = hyper_params['RandomAffine_max_degree_rotation'] * (2 * np.pi / 360)
+#     shear_angle_in_rads = hyper_params['RandomAffine_max_degree_shear'] * (2 * np.pi / 360)
+#
+#     # if hyper_params['enable_Addblob']:
+#     #     train_transforms += [customAddblob(hyper_params['aug_prob'])]
+#     train_transforms += [
+#         monai_trans.RandHistogramShift(num_control_points=hyper_params['RandHistogramShift_numcontrolpoints'],
+#                                        prob=hyper_params['aug_prob'])]
+#     train_transforms += [monai_trans.RandAffine(prob=hyper_params['aug_prob_rigid'],
+#                                                 rotate_range=rot_angle_in_rads,
+#                                                 shear_range=None,
+#                                                 translate_range=hyper_params['RandomAffine_translate_voxels_range'],
+#                                                 scale_range=None,
+#                                                 spatial_size=None,
+#                                                 padding_mode="border",
+#                                                 as_tensor_output=False)]
+#     train_transforms += [monai_trans.RandAffine(prob=hyper_params['aug_prob'],
+#                                                 rotate_range=None,
+#                                                 shear_range=shear_angle_in_rads,
+#                                                 translate_range=None,
+#                                                 scale_range=hyper_params['RandomAffine_scales_range_frac'],
+#                                                 spatial_size=None,
+#                                                 padding_mode="border",
+#                                                 as_tensor_output=False)]
+#     # train_transforms += [monai_trans.Rand3DElastic(sigma_range=hyper_params['RandomElastic_sigma_range'],
+#     #                                                 magnitude_range=(0, 1),
+#     #                                                 prob=hyper_params['aug_prob'],
+#     #                                                 rotate_range=(
+#     #                                                 rot_angle_in_rads, rot_angle_in_rads, rot_angle_in_rads),
+#     #                                                 shear_range=(
+#     #                                                 shear_angle_in_rads, shear_angle_in_rads, shear_angle_in_rads),
+#     #                                                 translate_range=hyper_params[
+#     #                                                     'RandomAffine_translate_voxels_range'],
+#     #                                                 scale_range=hyper_params['RandomAffine_scales_range_frac'],
+#     #                                                 spatial_size=None,
+#     #                                                 # padding_mode="reflection",
+#     #                                                 padding_mode="border",
+#     #                                                 # padding_mode="zeros",
+#     #                                                 as_tensor_output=False)]
+#     # train_transforms += [monai_trans.Rand3DElastic(sigma_range=(0, 0.01),
+#     #                                                magnitude_range=(0, 5),  # hyper_params['Rand3DElastic_magnitude_range']
+#     #                                                prob=1,
+#     #                                                rotate_range=None,
+#     #                                                shear_range=None,
+#     #                                                translate_range=None,
+#     #                                                scale_range=None,
+#     #                                                spatial_size=None,
+#     #                                                # padding_mode="reflection",
+#     #                                                padding_mode="border",
+#     #                                                # padding_mode="zeros",
+#     #                                                as_tensor_output=False)]
+#     train_transforms += [torchio_trans.RandomBlur(std=hyper_params['RandomBlur_std'],
+#                                                   p=hyper_params['aug_prob'])]
+#     train_transforms += [torchio_trans.RandomNoise(mean=0, std=hyper_params['torchio_RandomNoise_std'],
+#                                                    p=hyper_params['torchio_aug_prob'])]
+#     train_transforms += [torchio_trans.RandomFlip(axes=hyper_params['torchio_RandomFlip_axes'],
+#                                                   flip_probability=hyper_params['torchio_RandomFlip_per_axes_prob'],
+#                                                   p=hyper_params['torchio_aug_prob'])]
+#     train_transforms += [torchio_trans.RandomMotion(p=hyper_params['torchio_aug_prob'],
+#                                                     num_transforms=hyper_params['torchio_RandomMotion_num_transforms'])]
+#     train_transforms += [torchio_trans.RandomGhosting(p=hyper_params['torchio_aug_prob'],
+#                                                       num_ghosts=hyper_params['torchio_RandomGhosting_num_ghosts'])]
+#     train_transforms += [torchio_trans.RandomSpike(p=hyper_params['torchio_aug_prob'],
+#                                                    intensity=hyper_params['torchio_RandomSpike_intensity'])]
+#     train_transforms += [torchio_trans.RandomBiasField(p=hyper_params['torchio_aug_prob'],
+#                                                        coefficients=hyper_params['torchio_RandomBiasField_magnitude'])]
+#     train_transforms = [torchvis_trans.RandomOrder(train_transforms)]  # Randomise the transforms we've just defined
+#     train_transforms += [customIsotropicResampling(prob=hyper_params['aug_prob'],
+#                                                    resample_dims=hyper_params['resample_dims'])]
+# train_transforms += transforms_resize_to_tensor
+# train_transforms = monai_trans.Compose(train_transforms)
+# val_head_transforms = monai_trans.Compose(transforms_resize_to_tensor)
+# val_nonhead_transforms = monai_trans.Compose(transforms_resize_to_tensor)

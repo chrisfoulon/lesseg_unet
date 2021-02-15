@@ -143,7 +143,7 @@ def training_loop(img_path_list: Sequence,
                 metric_count = 0
                 img_count = 0
                 trash_count = 0
-                img_max_num = 50
+                img_max_num = 25
                 # val_images = None
                 # val_labels = None
                 # val_outputs = None
@@ -151,12 +151,14 @@ def training_loop(img_path_list: Sequence,
                 labels = None
                 outputs = None
                 # saver = NiftiSaver(output_dir=output_dir)
+                val_score_list = []
                 for val_data in val_loader:
                     inputs, labels = val_data[0].to(device), val_data[1].to(device)
                     outputs = model(inputs)
                     outputs = post_trans(outputs)
 
                     value, _ = dice_metric(y_pred=outputs, y=labels)
+                    val_score_list.append(value.item())
                     metric_count += len(value)
                     metric_sum += value.item() * len(value)
                     if best_metric > 0.7:
@@ -171,6 +173,14 @@ def training_loop(img_path_list: Sequence,
                                     inputs, labels, outputs, trash_val_images_dir, val_output_affine, trash_count)
                 metric = metric_sum / metric_count
                 metric_values.append(metric)
+                median = np.median(np.array(val_score_list))
+                std = np.std(np.array(val_score_list))
+                min_score = np.min(np.array(val_score_list))
+                max_score = np.max(np.array(val_score_list))
+                writer.add_scalar("Median score on the validation", median, epoch + 1)
+                writer.add_scalar("Standard deviation of dice score on the validation", std, epoch + 1)
+                writer.add_scalar("Minimum score on the validation", min_score, epoch + 1)
+                writer.add_scalar("Maximum score on the validation", max_score, epoch + 1)
                 if metric > best_metric:
                     best_metric = metric
                     best_metric_epoch = epoch + 1

@@ -22,11 +22,11 @@ def main():
                                     help='Root folder of the b1000 dataset')
     lesion_paths_group.add_argument('-lli', '--lesion_input_list', type=str,
                                     help='Text file containing the list of b1000')
-    parser.add_argument('-d', '--torch_device', default='cuda:0', type=str, help='Device type and number given to '
-                                                                                 'torch.device(), default "cuda:0"')
+    parser.add_argument('-d', '--torch_device', type=str, help='Device type and number given to'
+                                                               'torch.device()')
     parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
-    # parser.add_argument('-nw', '--num_workers', default=8, type=int, help='Number of torch workers')
-    # parser.add_argument('-ne', '--num_epochs', default=5, type=int, help='Number of epochs')
+    parser.add_argument('-nw', '--num_workers', default=4, type=int, help='Number of dataloader workers')
+    parser.add_argument('-ne', '--num_epochs', default=50, type=int, help='Number of epochs')
     args = parser.parse_args()
     # print MONAI config
     print_config()
@@ -65,7 +65,10 @@ def main():
         b1000_pref = None
         # b1000_pref = 'wodctH25_b1000'
 
-    training.training_loop(img_list, les_list, output_root, b1000_pref)
+    training.training_loop(img_list, les_list, output_root, b1000_pref,
+                           device=args.torch_device,
+                           epoch_num=args.num_epochs,
+                           dataloader_workers=args.num_workers)
 
 
 if __name__ == "__main__":
