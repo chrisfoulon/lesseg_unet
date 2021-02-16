@@ -46,3 +46,11 @@ def save_img_lbl_seg_to_nifti(input_tensor, label_tensor, seg_tensor, output_dir
     save_tensor_to_nifti(input_tensor, Path(output_dir, 'nib_input_{}.nii'.format(suffix)), val_output_affine)
     save_tensor_to_nifti(label_tensor, Path(output_dir, 'nib_label_{}.nii'.format(suffix)), val_output_affine)
     save_tensor_to_nifti(seg_tensor, Path(output_dir, 'nib_output_{}.nii'.format(suffix)), val_output_affine)
+
+
+def fsleyes_seg_comparison(img_folder, image_ind):
+    # fsleyes / home / tolhsadum / neuro_apps / data / lesseg_unet_output_first_good /${folder} / nib_in
+    # put_${i}.nii / home / tolhsadum / neuro_apps / data / lesseg_unet_output_first_good /${folder} / nib_label_${
+    # i}.nii / home / tolhsadum / neuro_apps / data / lesseg_unet_outp
+    # ut_first_good /${folder} / nib_output_${i}.nii
+    pass

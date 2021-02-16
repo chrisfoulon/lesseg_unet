@@ -17,7 +17,7 @@ from monai.transforms import (
 from monai.visualize import plot_2d_or_3d_image
 from monai.inferers import sliding_window_inference
 from torch.utils.tensorboard import SummaryWriter
-from lesseg_unet import data_loading, net, utils
+from lesseg_unet import data_loading, net, utils, transformations
 import nibabel as nib
 
 
@@ -40,8 +40,8 @@ def init_training_data(img_path_list: Sequence,
             val_img.append(img)
             val_seg.append(img_seg_dict[img])
     logging.info('Create transformations')
-    train_img_transforms, train_seg_transforms = data_loading.segmentation_train_transform(spatial_size=[96, 96, 96])
-    val_img_transforms, val_seg_transforms = data_loading.segmentation_val_transform(spatial_size=[96, 96, 96])
+    train_img_transforms, train_seg_transforms = transformations.segmentation_train_transform(spatial_size=[96, 96, 96])
+    val_img_transforms, val_seg_transforms = transformations.segmentation_val_transform(spatial_size=[96, 96, 96])
 
     # define dataset, data loader
     logging.info('Create training monai datasets')
