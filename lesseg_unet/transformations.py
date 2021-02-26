@@ -1,19 +1,33 @@
 from math import radians
 import logging
+from typing import Mapping, Dict, Hashable
 
 import numpy as np
+from monai.config import KeysCollection
+import torch
 from monai.transforms import (
+    MapTransform,
     Transform,
-    AddChannel,
+    AddChanneld,
+    LoadImaged,
     Compose,
-    RandRotate90,
-    RandFlip,
-    RandSpatialCrop,
-    ScaleIntensity,
-    ToTensor,
-    Resize,
-    RandAffine,
-    Rand3DElastic
+    RandRotate90d,
+    RandFlipd,
+    RandSpatialCropd,
+    ScaleIntensityd,
+    ScaleIntensityRanged,
+    ToTensord,
+    Resized,
+    RandAffined,
+    Rand3DElasticd,
+    RandDeformGrid,
+    Spacingd,
+    RandHistogramShiftd,
+    NormalizeIntensityd,
+    ThresholdIntensityd,
+    SplitChanneld,
+    SqueezeDimd,
+    CropForegroundd
 )
 from torchio.transforms import (
     RandomBlur,
@@ -25,110 +39,220 @@ from torchio.transforms import (
 )
 from torchvision.transforms import RandomOrder
 
+
 """
-Transformation classes
+Custom Transformation Classes
 """
 
 
 class Binarize(Transform):
     """
-    Sets every non-zero voxel to 1.0
-
+    Set every above threshold voxel to 1.0
     """
 
-    def __init__(self) -> None:
-        pass
+    def __init__(self, lower_threshold: float = 0) -> None:
+        self.lower_threshold = lower_threshold
 
     def __call__(self, img: np.ndarray) -> np.ndarray:
         """
         Apply the transform to `img`.
         """
-        return np.asarray(np.where(img != 0, 1, 0), dtype=img.dtype)
+        if isinstance(img, torch.Tensor):
+            print(img.size())
+            img = np.asarray(img[0, :, :, :].detach().numpy())
+        print('Woot')
+        print(type(img))
+        print(img.shape)
+        return np.asarray(np.where(img > self.lower_threshold, 1, 0), dtype=img.dtype)
+
+
+class Binarized(MapTransform):
+    """
+    Set every above threshold voxel to 1.0
+
+    """
+
+    def __init__(self, keys: KeysCollection, lower_threshold: float = 0) -> None:
+        super().__init__(keys)
+        self.lower_threshold = lower_threshold
+        self.binarize = Binarize(lower_threshold)
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        d = dict(data)
+        for idx, key in enumerate(self.keys):
+            d[key] = self.binarize(d[key])
+        return d
+
+
+class PrintDim(MapTransform):
+    """
+    Set every above threshold voxel to 1.0
+
+    """
+
+    def __init__(self, keys: KeysCollection) -> None:
+        super().__init__(keys)
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        d = dict(data)
+        for idx, key in enumerate(self.keys):
+            print(key)
+            print(type(d[key]))
+            if isinstance(d[key], np.ndarray):
+                print(d[key].shape)
+            else:
+                print(d[key].size())
+            print('end printdim')
+        return d
 
 
 """
 Transformation parameters
 """
-high_prob = 0.5
-low_prob = 0.1
+high_prob = 1
+low_prob = 1
 def_spatial_size = [96, 96, 96]
-def_RandAffine_dict = {'prob': low_prob,
-                       'rotate_range': radians(15),
-                       'shear_range': None,
-                       'translate_range': None,
-                       'scale_range': 0.3,
-                       'spatial_size': None,
-                       'padding_mode': 'border',
-                       'sas_tensor_output': False}
+# .74 aspect ratio? maybe change to 96x128x96 or crop to 64cube and increase the epoch number by a lot
+# TODO verify that random transformations are applied the same way on the image and the seg
+hyper_dict = {
+    'first_transform': {
+        'LoadImaged': {'keys': ['image', 'label'],
+                       'reader': 'nibabelreader'
+                       },
 
-
-randaffine_trans = RandAffine(**def_RandAffine_dict)
-resize_trans = Resize(def_spatial_size)
-
-def_Rand3DElastic_dict = {
-    'sigma_range': (0, 0.01),
-    'magnitude_range': (0, 5),  # hyper_params['Rand3DElastic_magnitude_range']
-    'prob': high_prob,
-    'rotate_range': None,
-    'shear_range': None,
-    'translate_range': None,
-    'scale_range': None,
-    'spatial_size': None,
-    # 'padding_mode': "reflection",
-    'padding_mode': "border",
-    # 'padding_mode': "zeros",
-    'as_tensor_output': False
+        'PrintDim': {'keys': ['image', 'label']},
+        'AddChanneld': {'keys': ['image', 'label']},
+        # 'Resized': {
+        #     'keys': ['image', 'label'],
+        #     'spatial_size': def_spatial_size},
+    },
+    'monai_transform': {
+        'PrintDim': {'keys': ['image', 'label']},
+        # 'RandHistogramShiftd': {
+        #     'keys': ['image'],
+        #     'num_control_points': (10, 15),
+        #     'prob': low_prob
+        # },
+        # TODO maybe 'Orientation': {} but it would interact with the flip,
+        # 'RandAffined': {
+        #     'keys': ['image', 'label'],
+        #     'prob': low_prob,
+        #     'rotate_range': radians(15),
+        #     'shear_range': None,
+        #     'translate_range': None,
+        #     'scale_range': 0.3,
+        #     'spatial_size': None,
+        #     'padding_mode': 'border',
+        #     'as_tensor_output': False
+        # },
+        # 'RandFlipd': {
+        #     'keys': ['image', 'label'],
+        #     'prob': 0.1,
+        #     'spatial_axis': 0
+        # },
+        # 'RandDeformGrid': {'keys': ['image', 'label']},
+        # 'Spacingd': {'keys': ['image', 'label']},
+        # 'Rand3DElasticd': {
+        #     'keys': ['image', 'label'],
+        #     'sigma_range': (0, 0.01),
+        #     'magnitude_range': (0, 5),  # hyper_params['Rand3DElastic_magnitude_range']
+        #     'prob': high_prob,
+        #     'rotate_range': None,
+        #     'shear_range': None,
+        #     'translate_range': None,
+        #     'scale_range': None,
+        #     'spatial_size': None,
+        #     # 'padding_mode': "reflection",
+        #     'padding_mode': "border",
+        #     # 'padding_mode': "zeros",
+        #     'as_tensor_output': False
+        # },
+        # 'SqueezeDimd': {'keys': ["image", "label"],
+        #                 'dim': 0},
+        'ToTensord': {'keys': ['image', 'label']},
+        # 'AddChanneld': {'keys': ['image', 'label']},
+    },
+    'torchio_transform': {
+        # 'ScaleIntensity': {}
+        'RandomNoise': {
+            'include': ['image'],
+            'mean': 0,
+            'std': (0.1, 0.2),
+            'p': low_prob
+        },
+        'RandomGhosting': {
+            'include': ['image'],
+            'p': low_prob,
+            'num_ghosts': (4, 10)
+        },
+        'RandomBlur': {
+            'include': ['image', 'label'],
+            'std': (0.1, 0.5),
+            'p': low_prob
+        },
+        'RandomBiasField': {
+            'include': ['image'],
+            'p': low_prob,
+            'coefficients': 1
+        },
+        'RandomMotion': {
+            'include': ['image', 'label'],
+            'p': low_prob,
+            'num_transforms': 1
+        },
+        'ToTensord': {'keys': ['image', 'label']},
+        # 'SqueezeDimd': {'keys': ["image", "label"],
+        #                 'dim': 0},
+    },
+    'labelonly_transform': {
+        # 'Binarized': {'keys': ['label']},
+        # 'AddChanneld': {'keys': ['label']},
+    },
+    'last_transform': {
+        'Resized': {
+            'keys': ['image', 'label'],
+            'spatial_size': def_spatial_size
+        },
+        'ToTensord': {'keys': ['image', 'label']},
+        # 'AddChanneld': {'keys': ['label']},
+        # 'NormalizeIntensityd': {'keys': ['image']},
+        'PrintDim': {'keys': ['image', 'label']},
+    }
 }
-
-rand3delastic_trans = Rand3DElastic(**def_Rand3DElastic_dict)
-
-rand_blur_std = (0.1, 0.5)
-train_transforms = RandomBlur(std=rand_blur_std, p=low_prob)
-randomNoise_std = (0.1, 0.2)
-RandomNoise(mean=0, std=randomNoise_std, p=low_prob)
-RandomMotion_num_transforms = 1
-RandomMotion(p=low_prob, num_transforms=RandomMotion_num_transforms)
-RandomGhosting_num_ghosts = (4, 10)
-RandomGhosting(p=low_prob, num_ghosts=RandomGhosting_num_ghosts)
-RandomSpike_intensity = (1, 3)
-RandomSpike(p=low_prob, intensity=RandomSpike_intensity)
-RandomBiasField_magnitude = 1
-RandomBiasField(p=low_prob, coefficients=RandomBiasField_magnitude)
-randomize_transformations = True
-#     train_transforms += [torchio_trans.RandomBlur(std=hyper_params['RandomBlur_std'],
-#                                                   p=hyper_params['aug_prob'])]
-#     train_transforms += [torchio_trans.RandomNoise(mean=0, std=hyper_params['torchio_RandomNoise_std'],
-#                                                    p=hyper_params['torchio_aug_prob'])]
-#     train_transforms += [torchio_trans.RandomFlip(axes=hyper_params['torchio_RandomFlip_axes'],
-#                                                   flip_probability=hyper_params['torchio_RandomFlip_per_axes_prob'],
-#                                                   p=hyper_params['torchio_aug_prob'])]
-#     train_transforms += [torchio_trans.RandomMotion(p=hyper_params['torchio_aug_prob'],
-#                                                     num_transforms=hyper_params['torchio_RandomMotion_num_transforms'])]
-#     train_transforms += [torchio_trans.RandomGhosting(p=hyper_params['torchio_aug_prob'],
-#                                                       num_ghosts=hyper_params['torchio_RandomGhosting_num_ghosts'])]
-#     train_transforms += [torchio_trans.RandomSpike(p=hyper_params['torchio_aug_prob'],
-#                                                    intensity=hyper_params['torchio_RandomSpike_intensity'])]
-#     train_transforms += [torchio_trans.RandomBiasField(p=hyper_params['torchio_aug_prob'],
-#                                                        coefficients=hyper_params['torchio_RandomBiasField_magnitude'])]
-#     train_transforms = [torchvis_trans.RandomOrder(train_transforms)]  # Randomise the transforms we've just defined
-#     train_transforms += [customIsotropicResampling(prob=hyper_params['aug_prob'],
-#                                                    resample_dims=hyper_params['resample_dims'])]
-
-first_transform = [AddChannel()]
-last_transform = [resize_trans, ToTensor()]
-seg_transform = [Binarize()]
-middle_trans = []
-if randomize_transformations:
-    middle_trans = RandomOrder(middle_trans)
-
-val_transform = [first_transform, last_transform]
-val_transform.insert(1, randaffine_trans)
-val_transform.insert(-1, randaffine_trans)
-train_transform = [first_transform, last_transform]
+# RandDeformGrid
+# Import all transforms from the dict
+for k in hyper_dict:
+    for name in hyper_dict[k]:
+        try:
+            eval(name)
+        except NameError:
+            raise ImportError('{} not imported'.format(name))
 
 
-class TransformList(list):
-    pass
+"""
+Helper functions
+"""
+
+
+def trans_from_dict(transform_name, transform_dict):
+    try:
+        return eval(transform_name)(**transform_dict)
+    except Exception as e:
+        print('Exception found with transform {}: {}'.format(transform_name, e))
+
+
+def trans_from_name(transform_name, hyper_param_dict):
+    for key in hyper_param_dict:
+        if transform_name in hyper_param_dict[key]:
+            return trans_from_dict(transform_name, hyper_param_dict[key])
+    raise ValueError('{} not found in the hyper_param_dict'.format(transform_name))
+
+
+def trans_list_from_dict(param_dict):
+    trans_list = []
+    for key in param_dict:
+        trans_list.append(trans_from_dict(key, param_dict[key]))
+    return trans_list
 
 
 """
@@ -136,47 +260,54 @@ Transformation compositions for the image segmentation
 """
 
 
-def segmentation_train_transform(spatial_size=None):
-    if spatial_size is None:
-        spatial_size = [96, 96, 96]
-    train_imtrans = Compose(
-        [
-            AddChannel(),
-            ScaleIntensity(),
-            # RandSpatialCrop(spatial_size, random_size=False),
-            # RandShiftIntensity(offsets, prob=0.1),
-            RandFlip(prob=0.1, spatial_axis=None),
-            Resize(spatial_size),
-            # RandRotate90(prob=0.5, spatial_axes=(0, 2)),
-            ToTensor(),
-        ]
+def segmentation_train_transformd():
+    train_transformd = Compose(
+        trans_list_from_dict(hyper_dict['first_transform']) +
+        trans_list_from_dict(hyper_dict['monai_transform']) +
+        # trans_list_from_dict(hyper_dict['torchio_transform']) +
+        trans_list_from_dict(hyper_dict['labelonly_transform']) +
+        trans_list_from_dict(hyper_dict['last_transform'])
     )
-    train_segtrans = Compose(
-        [
-            AddChannel(),
-            # RandSpatialCrop(spatial_size, random_size=False),
-            RandFlip(prob=0.1, spatial_axis=None),
-            Resize(spatial_size),
-            # RandRotate90(prob=0.5, spatial_axes=(0, 2)),
-            Binarize(),
-            ToTensor(),
-        ]
-    )
-    return train_imtrans, train_segtrans
+    return train_transformd
 
 
-def segmentation_val_transform(spatial_size=None):
-    if spatial_size is None:
-        val_imtrans = Compose([ScaleIntensity(), AddChannel(), ToTensor()])
-        val_segtrans = Compose([AddChannel(),
-                                Binarize(),
-                                ToTensor()])
-    else:
-        val_imtrans = Compose([ScaleIntensity(), AddChannel(), Resize(spatial_size), ToTensor()])
-        val_segtrans = Compose([AddChannel(), Resize(spatial_size),
-                                Binarize(),
-                                ToTensor()])
-    return val_imtrans, val_segtrans
+def segmentation_val_transformd():
+    val_transd = Compose(
+        trans_list_from_dict(hyper_dict['first_transform']) +
+        trans_list_from_dict(hyper_dict['labelonly_transform']) +
+        trans_list_from_dict(hyper_dict['last_transform'])
+    )
+    return val_transd
+
+# def segmentation_train_transform():
+#     train_imtrans = Compose(
+#         trans_list_from_dict(hyper_dict['first_transform']) +
+#         trans_list_from_dict(hyper_dict['intensity_transform']) +
+#         trans_list_from_dict(hyper_dict['shape_transform']) +
+#         trans_list_from_dict(hyper_dict['last_transform'])
+#     )
+#     train_segtrans = Compose(
+#         trans_list_from_dict(hyper_dict['first_transform']) +
+#         trans_list_from_dict(hyper_dict['shape_transform']) +
+#         trans_list_from_dict(hyper_dict['seg_transform']) +
+#         trans_list_from_dict(hyper_dict['last_transform'])
+#     )
+#     return train_imtrans, train_segtrans
+
+
+# def segmentation_val_transform(resize=True):
+#     val_imtrans = Compose(
+#         trans_list_from_dict(hyper_dict['first_transform']) +
+#         trans_list_from_dict(hyper_dict['shape_transform']) +
+#         trans_list_from_dict(hyper_dict['last_transform']) if resize else [trans_from_name('ToTensor', hyper_dict)]
+#     )
+#     val_segtrans = Compose(
+#         trans_list_from_dict(hyper_dict['first_transform']) +
+#         trans_list_from_dict(hyper_dict['shape_transform']) +
+#         # trans_list_from_dict(hyper_dict['seg_transform']) +
+#         trans_list_from_dict(hyper_dict['last_transform']) if resize else [trans_from_name('ToTensor', hyper_dict)]
+#     )
+#     return val_imtrans, val_segtrans
 
 # Augmentation params
 # hyper_params['use_augmentation_in_training'] = True

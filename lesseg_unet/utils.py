@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import Union
+import importlib
 
 from bcblib.tools.nifti_utils import is_nifti
 import nibabel as nib

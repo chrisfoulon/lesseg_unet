@@ -8,48 +8,34 @@ import numpy as np
 import monai
 import torch
 from monai.metrics import DiceMetric
-from monai.data import NiftiDataset, NiftiSaver
+from monai.data import Dataset
 from monai.transforms import (
     Activations,
     AsDiscrete,
     Compose,
 )
 from monai.visualize import plot_2d_or_3d_image
-from monai.inferers import sliding_window_inference
 from torch.utils.tensorboard import SummaryWriter
-from lesseg_unet import data_loading, net, utils, transformations
-import nibabel as nib
+from lesseg_unet import data_loading, net, utils, transformations, visualisation_utils
 
 
 def init_training_data(img_path_list: Sequence,
                        seg_path_list: Sequence,
                        img_pref: str = None,
-                       train_val_percentage: float = 75) -> Tuple[monai.data.NiftiDataset, monai.data.NiftiDataset]:
+                       train_val_percentage: float = 75) -> Tuple[monai.data.Dataset, monai.data.Dataset]:
     logging.info('Listing input files to be loaded')
-    img_seg_dict = data_loading.match_img_seg_by_names(img_path_list, seg_path_list, img_pref)
-    train_img = []
-    train_seg = []
-    val_img = []
-    val_seg = []
-    training_end_index = math.ceil(train_val_percentage / 100 * len(img_seg_dict))
-    for ind, img in enumerate(list(img_seg_dict.keys())):
-        if ind < training_end_index:
-            train_img.append(img)
-            train_seg.append(img_seg_dict[img])
-        else:
-            val_img.append(img)
-            val_seg.append(img_seg_dict[img])
+    train_files, val_files = data_loading.create_file_dict_lists(img_path_list, seg_path_list, img_pref,
+                                                                 train_val_percentage)
     logging.info('Create transformations')
-    train_img_transforms, train_seg_transforms = transformations.segmentation_train_transform(spatial_size=[96, 96, 96])
-    val_img_transforms, val_seg_transforms = transformations.segmentation_val_transform(spatial_size=[96, 96, 96])
-
+    train_img_transforms = transformations.segmentation_train_transformd()
+    val_img_transforms = transformations.segmentation_val_transformd()
     # define dataset, data loader
     logging.info('Create training monai datasets')
-    train_ds = NiftiDataset(train_img, train_seg, transform=train_img_transforms, seg_transform=train_seg_transforms)
+    train_ds = Dataset(train_files, transform=train_img_transforms)
 
     # define dataset, data loader
     logging.info('Create validation actual monai datasets')
-    val_ds = NiftiDataset(val_img, val_seg, transform=val_img_transforms, seg_transform=val_seg_transforms)
+    val_ds = Dataset(val_files, transform=val_img_transforms)
     # We check if both the training and validation dataloaders can be created and used without immediate errors
     logging.info('Checking data loading')
     data_loading.data_loader_checker_first(train_ds, 'training')
@@ -79,7 +65,19 @@ def training_loop(img_path_list: Sequence,
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
     loss_function = monai.losses.DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
-
+    print('check ok')
+    inputs, labels = next(iter(val_loader))
+    i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
+    l_data = labels[0, 0, :, :, :].cpu().detach().numpy()
+    if np.equal(i_data, l_data).all():
+        print('ok')
+    else:
+        print('not ok')
+    exit()
+    # utils.save_tensor_to_nifti(
+    #     inputs, Path('/home/tolhsadum/neuro_apps/data/', 'nib_input_{}.nii'.format('test')), val_output_affine)
+    # utils.save_tensor_to_nifti(
+    #     labels, Path('/home/tolhsadum/neuro_apps/data/', 'nib_label_{}.nii'.format('test')), val_output_affine)
     # ##################################################################################
     # # Code for restoring!
     # state_dict_fullpath = os.path.join(hyper_params['checkpoint_folder'], 'state_dictionary.pt')
