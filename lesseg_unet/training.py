@@ -64,6 +64,7 @@ def training_loop(img_path_list: Sequence,
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
     loss_function = monai.losses.DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
+    exit()
     # utils.save_tensor_to_nifti(
     #     inputs, Path('/home/tolhsadum/neuro_apps/data/', 'nib_input_{}.nii'.format('test')), val_output_affine)
     # utils.save_tensor_to_nifti(
@@ -110,11 +111,11 @@ def training_loop(img_path_list: Sequence,
         for batch_data in train_loader:
             step += 1
             inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
-            print('inputs size: {}'.format(inputs))
-            print('labels size: {}'.format(labels))
+            print('inputs size: {}'.format(inputs.size()))
+            print('labels size: {}'.format(labels.size()))
             optimizer.zero_grad()
             outputs = model(inputs)
-            print('outputs size: {}'.format(outputs))
+            print('outputs size: {}'.format(outputs.size()))
             loss = loss_function(outputs, labels)
             loss.backward()
             optimizer.step()

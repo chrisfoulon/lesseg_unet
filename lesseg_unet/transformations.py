@@ -61,9 +61,13 @@ class Binarize(Transform):
         """
         Apply the transform to `img`.
         """
+        s = str(img.shape)
         if isinstance(img, torch.Tensor):
             img = np.asarray(img[0, :, :, :].detach().numpy())
-        return np.asarray(np.where(img > self.lower_threshold, 1, 0), dtype=img.dtype)
+        output = np.asarray(np.where(img > self.lower_threshold, 1, 0), dtype=img.dtype)
+        s += '\n {}'.format(output.shape)
+        # print('Binarized ######\n{}\n#####'.format(s))
+        return output
 
 
 class Binarized(MapTransform):
@@ -90,24 +94,29 @@ class PrintDim(MapTransform):
 
     """
 
-    def __init__(self, keys: KeysCollection) -> None:
+    def __init__(self, keys: KeysCollection, msg: str = None) -> None:
         super().__init__(keys)
+        self.msg = msg
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        if self.msg:
+            s = self.msg + '\n'
+        else:
+            s = ''
         d = dict(data)
         for idx, key in enumerate(self.keys):
-            print(key)
-            print(type(d[key]))
+            s += 'key: {}\n'.format(key)
+            s += 'type key: {}\n'.format(type(d[key]))
             if isinstance(d[key], np.ndarray):
-                print(d[key].shape)
-                print(d[key].dtype)
-                print(d[key].dtype.byteorder)
+                s += 'shape: {}\n'.format(d[key].shape)
 
             else:
+                s += 'size: {}\n'.format(d[key].size())
                 print(d[key].size())
-                print(d[key].dtype)
+            s += 'dtype: {}\n'.format(d[key].dtype)
 
-            print('end printdim')
+        s += 'End printdim'
+        print('#######PRINTDIM#####\n{}\n#############'.format(s))
         return d
 
 
@@ -215,6 +224,7 @@ hyper_dict = {
         'Resized': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size},
+        # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'Fisrt resize'},
     },
     'monai_transform': {
         # 'ScaleIntensity': {}
@@ -292,14 +302,17 @@ hyper_dict = {
             'num_transforms': 1
         },
         'ToTensord': {'keys': ['image', 'label']},
+        # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'end torchio'},
         # 'SqueezeDimd': {'keys': ["image", "label"],
         #                 'dim': 0},
     },
     'labelonly_transform': {
+        'Binarized': {'keys': ['label']},
+        'ToTensord': {'keys': ['label']},
         # 'AddChanneld': {'keys': ['label']},
+        # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'after binarize'},
     },
     'last_transform': {
-        'Binarized': {'keys': ['label']},
         'Resized': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size
@@ -307,7 +320,6 @@ hyper_dict = {
         'ToTensord': {'keys': ['image', 'label']},
         # 'AddChanneld': {'keys': ['label']},
         # 'NormalizeIntensityd': {'keys': ['image']},
-        # 'PrintDim': {'keys': ['image', 'label']},
     }
 }
 
