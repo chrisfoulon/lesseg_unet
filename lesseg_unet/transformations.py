@@ -1,6 +1,6 @@
 from math import radians
 import logging
-from typing import Mapping, Dict, Hashable, Any, Optional, Callable
+from typing import Mapping, Dict, Hashable, Any, Optional, Callable, Union
 
 import numpy as np
 from monai.transforms.compose import Randomizable
@@ -57,14 +57,21 @@ class Binarize(Transform):
     def __init__(self, lower_threshold: float = 0) -> None:
         self.lower_threshold = lower_threshold
 
-    def __call__(self, img: np.ndarray) -> np.ndarray:
+    def __call__(self, img: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
         """
         Apply the transform to `img`.
         """
         s = str(img.shape)
+        tensor_shape = img.shape
         if isinstance(img, torch.Tensor):
             img = np.asarray(img[0, :, :, :].detach().numpy())
+        else:
+            img = np.asarray(img[0, :, :, :])
         output = np.asarray(np.where(img > self.lower_threshold, 1, 0), dtype=img.dtype)
+        if len(tensor_shape) == 4:
+            output = torch.from_numpy(output).unsqueeze(0)
+        if len(tensor_shape) == 5:
+            output = torch.from_numpy(output).unsqueeze(0).unsqueeze(0)
         s += '\n {}'.format(output.shape)
         # print('Binarized ######\n{}\n#####'.format(s))
         return output
@@ -272,6 +279,7 @@ hyper_dict = {
         #                 'dim': 0},
         'ToTensord': {'keys': ['image', 'label']},
         # 'AddChanneld': {'keys': ['image', 'label']},
+        # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'After MONAI'},
     },
     'torchio_transform': {
         # 'PrintDim': {'keys': ['image', 'label']},
@@ -302,13 +310,13 @@ hyper_dict = {
             'num_transforms': 1
         },
         'ToTensord': {'keys': ['image', 'label']},
-        # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'end torchio'},
+        # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'After TORCHIO'},
         # 'SqueezeDimd': {'keys': ["image", "label"],
         #                 'dim': 0},
     },
     'labelonly_transform': {
         'Binarized': {'keys': ['label']},
-        'ToTensord': {'keys': ['label']},
+        # 'ToTensord': {'keys': ['label']},
         # 'AddChanneld': {'keys': ['label']},
         # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'after binarize'},
     },
