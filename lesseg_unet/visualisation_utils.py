@@ -104,16 +104,15 @@ def plot_seg(img, label=None, seg=None, save_path=None):
         z = round(z)
     else:
         z = round(len(img[0, 0, :]) / 2)
-    fig = plt.figure()
-    plt.subplot(1,1,1).imshow(img[:, :, z], cmap='gray', interpolation='none')
+    # fig = plt.figure()
+    # plt.subplot(1,1,1).imshow(img[:, :, z], cmap='gray', interpolation='none')
     plt.imshow(img[:, :, z], cmap='gray', interpolation='none')
     if label is not None:
         plt.imshow(label[:, :, z], cmap='Reds', alpha=label[:, :, z], interpolation='none')
     if seg is not None:
         plt.imshow(seg[:, :, z], cmap='Blues', alpha=label[:, :, z]*.5, interpolation='none')
     if save_path is not None:
-        fig = plt.gcf()
-        fig.savefig(save_path)
+        plt.savefig(save_path)
     else:
         plt.show()
     return

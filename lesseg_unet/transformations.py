@@ -197,8 +197,8 @@ class RandTransformWrapper(Randomizable, MapTransform):
 """
 Transformation parameters
 """
-high_prob = 1
-low_prob = 1
+high_prob = 0.5
+low_prob = 0.1
 def_spatial_size = [96, 96, 96]
 # .74 aspect ratio? maybe change to 96x128x96 or crop to 64cube and increase the epoch number by a lot
 # TODO verify that random transformations are applied the same way on the image and the seg

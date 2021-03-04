@@ -109,7 +109,7 @@ def training_loop(img_path_list: Sequence,
         step = 0
         for batch_data in train_loader:
             step += 1
-            inputs, labels = batch_data[0].to(device), batch_data[1].to(device)
+            inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = loss_function(outputs, labels)
@@ -131,7 +131,7 @@ def training_loop(img_path_list: Sequence,
                 metric_count = 0
                 img_count = 0
                 trash_count = 0
-                img_max_num = 25
+                img_max_num = len(train_ds) + len(val_ds)
                 # val_images = None
                 # val_labels = None
                 # val_outputs = None
@@ -141,7 +141,7 @@ def training_loop(img_path_list: Sequence,
                 # saver = NiftiSaver(output_dir=output_dir)
                 val_score_list = []
                 for val_data in val_loader:
-                    inputs, labels = val_data[0].to(device), val_data[1].to(device)
+                    inputs, labels = val_data['image'].to(device), val_data['image'].to(device)
                     outputs = model(inputs)
                     outputs = post_trans(outputs)
 
@@ -152,11 +152,15 @@ def training_loop(img_path_list: Sequence,
                     if best_metric > 0.7:
                         if value.item() * len(value) > 0.7 and img_count < img_max_num:
                             img_count += 1
+                            utils.save_img_lbl_seg_to_png(
+                                inputs, labels, outputs, val_images_dir, 'validation_img{}'.format(img_count))
                             utils.save_img_lbl_seg_to_nifti(
                                 inputs, labels, outputs, val_images_dir, val_output_affine, img_count)
                         if value.item() * len(value) < 0.1:
                             trash_count += 1
                             if trash_count < img_max_num:
+                                utils.save_img_lbl_seg_to_png(
+                                    inputs, labels, outputs, trash_val_images_dir, 'trash_img{}'.format(trash_count))
                                 utils.save_img_lbl_seg_to_nifti(
                                     inputs, labels, outputs, trash_val_images_dir, val_output_affine, trash_count)
                 metric = metric_sum / metric_count
@@ -166,7 +170,7 @@ def training_loop(img_path_list: Sequence,
                 min_score = np.min(np.array(val_score_list))
                 max_score = np.max(np.array(val_score_list))
                 writer.add_scalar("Median score on the validation", median, epoch + 1)
-                writer.add_scalar("Standard deviation of dice score on the validation", std, epoch + 1)
+                # writer.add_scalar("Standard deviation of dice score on the validation", std, epoch + 1)
                 writer.add_scalar("Minimum score on the validation", min_score, epoch + 1)
                 writer.add_scalar("Maximum score on the validation", max_score, epoch + 1)
                 if metric > best_metric:

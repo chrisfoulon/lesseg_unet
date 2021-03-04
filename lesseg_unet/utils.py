@@ -4,6 +4,7 @@ from typing import Union
 import importlib
 
 from bcblib.tools.nifti_utils import is_nifti
+from lesseg_unet.visualisation_utils import plot_seg
 import nibabel as nib
 import torch
 
@@ -47,6 +48,13 @@ def save_img_lbl_seg_to_nifti(input_tensor, label_tensor, seg_tensor, output_dir
     save_tensor_to_nifti(input_tensor, Path(output_dir, 'nib_input_{}.nii'.format(suffix)), val_output_affine)
     save_tensor_to_nifti(label_tensor, Path(output_dir, 'nib_label_{}.nii'.format(suffix)), val_output_affine)
     save_tensor_to_nifti(seg_tensor, Path(output_dir, 'nib_output_{}.nii'.format(suffix)), val_output_affine)
+
+
+def save_img_lbl_seg_to_png(input_tensor, label_tensor, seg_tensor, output_dir, filename):
+    input_np = input_tensor[0, 0, :, :, :].cpu().detach().numpy()
+    label_np = label_tensor[0, 0, :, :, :].cpu().detach().numpy()
+    seg_np = seg_tensor[0, 0, :, :, :].cpu().detach().numpy()
+    plot_seg(input_np, label_np, seg_np, Path(output_dir, filename + '.png'))
 
 
 def fsleyes_seg_comparison(img_folder, image_ind):
