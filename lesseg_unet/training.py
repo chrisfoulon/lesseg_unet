@@ -110,8 +110,11 @@ def training_loop(img_path_list: Sequence,
         for batch_data in train_loader:
             step += 1
             inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
+            print('inputs size: {}'.format(inputs))
+            print('labels size: {}'.format(labels))
             optimizer.zero_grad()
             outputs = model(inputs)
+            print('outputs size: {}'.format(outputs))
             loss = loss_function(outputs, labels)
             loss.backward()
             optimizer.step()
