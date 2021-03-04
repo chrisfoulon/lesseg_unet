@@ -145,7 +145,7 @@ def training_loop(img_path_list: Sequence,
                 # saver = NiftiSaver(output_dir=output_dir)
                 val_score_list = []
                 for val_data in val_loader:
-                    inputs, labels = val_data['image'].to(device), val_data['image'].to(device)
+                    inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
                     outputs = model(inputs)
                     outputs = post_trans(outputs)
 
