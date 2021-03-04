@@ -1,6 +1,5 @@
 import os
 import logging
-import math
 from pathlib import Path
 from typing import Sequence, Tuple, Union
 import numpy as np
@@ -65,15 +64,6 @@ def training_loop(img_path_list: Sequence,
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
     loss_function = monai.losses.DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
-    print('check ok')
-    inputs, labels = next(iter(val_loader))
-    i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
-    l_data = labels[0, 0, :, :, :].cpu().detach().numpy()
-    if np.equal(i_data, l_data).all():
-        print('ok')
-    else:
-        print('not ok')
-    exit()
     # utils.save_tensor_to_nifti(
     #     inputs, Path('/home/tolhsadum/neuro_apps/data/', 'nib_input_{}.nii'.format('test')), val_output_affine)
     # utils.save_tensor_to_nifti(

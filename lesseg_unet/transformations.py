@@ -1,8 +1,9 @@
 from math import radians
 import logging
-from typing import Mapping, Dict, Hashable
+from typing import Mapping, Dict, Hashable, Any, Optional, Callable
 
 import numpy as np
+from monai.transforms.compose import Randomizable
 from monai.config import KeysCollection
 import torch
 from monai.transforms import (
@@ -27,8 +28,11 @@ from monai.transforms import (
     ThresholdIntensityd,
     SplitChanneld,
     SqueezeDimd,
-    CropForegroundd
+    CropForegroundd,
+    AsChannelFirstd
 )
+import torchio
+from torchio import Subject, ScalarImage
 from torchio.transforms import (
     RandomBlur,
     RandomNoise,
@@ -58,11 +62,7 @@ class Binarize(Transform):
         Apply the transform to `img`.
         """
         if isinstance(img, torch.Tensor):
-            print(img.size())
             img = np.asarray(img[0, :, :, :].detach().numpy())
-        print('Woot')
-        print(type(img))
-        print(img.shape)
         return np.asarray(np.where(img > self.lower_threshold, 1, 0), dtype=img.dtype)
 
 
@@ -100,9 +100,97 @@ class PrintDim(MapTransform):
             print(type(d[key]))
             if isinstance(d[key], np.ndarray):
                 print(d[key].shape)
+                print(d[key].dtype)
+                print(d[key].dtype.byteorder)
+
             else:
                 print(d[key].size())
+                print(d[key].dtype)
+
             print('end printdim')
+        return d
+
+
+class TorchIOWrapper(Randomizable, MapTransform):
+    """
+    Use torchio transformations in Monai and control which dictionary entries are transformed in synchrony!
+    trans: a torchio tranformation, e.g. RandomGhosting(p=1, num_ghosts=(4, 10))
+    keys: a list of keys to apply the trans to, e.g. keys = ["img"]
+    p: probability that this trans will be applied (to all the keys listed in 'keys')
+    """
+    def __init__(self, keys: KeysCollection, trans: Callable, p: float = 1) -> None:
+        super().__init__(keys)
+        self.keys = keys
+        self.trans = trans
+        self.prob = p
+        self._do_transform = False
+
+    def randomize(self, data: Optional[Any] = None) -> None:
+        self._do_transform = self.R.random() < self.prob
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        d = dict(data)
+        self.randomize()
+        if not self._do_transform:
+            return d
+        transformed = None
+        for idx, key in enumerate(self.keys):
+            subject = Subject(datum=ScalarImage(tensor=d[key]))
+            if transformed is None:
+                transformed = self.trans
+            else:
+                transformed = transformed.get_composed_history()
+            transformed = transformed(subject)
+            d[key] = transformed['datum'].data
+        return d
+
+
+class RandTransformWrapper(Randomizable, MapTransform):
+    """
+    Use torchio transformations in Monai and control which dictionary entries are transformed in synchrony!
+    trans: a torchio tranformation, e.g. RandomGhosting(p=1, num_ghosts=(4, 10))
+    keys: a list of keys to apply the trans to, e.g. keys = ["img"]
+    p: probability that this trans will be applied (to all the keys listed in 'keys')
+    """
+    def __init__(self, trans: Callable) -> None:
+        prob_key = None
+        keys_key = None
+        trans_dict = trans.__dict__
+        if 'probability' in trans_dict:
+            prob_key = 'probability'
+        if 'include' in trans_dict:
+            keys_key = 'include'
+        keys = getattr(trans, keys_key)
+        prob = 1
+        if prob_key is not None:
+            prob = getattr(trans, prob_key)
+            setattr(trans, prob_key, 1)
+        super().__init__(keys)
+        self.keys = keys
+        self.trans = trans
+        # Remove from the initial transformation
+        setattr(self.trans, keys_key, None)
+        self.prob = prob
+        self._do_transform = False
+
+    def randomize(self, data: Optional[Any] = None) -> None:
+        self._do_transform = self.R.random() < self.prob
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        d = dict(data)
+        self.randomize()
+        if not self._do_transform:
+            return d
+        transformed = None
+        for idx, key in enumerate(self.keys):
+            scalar_img = ScalarImage(tensor=d[key])
+            subject = Subject(datum=scalar_img)
+            if transformed is None:
+                transformed = self.trans
+            else:
+                transformed = transformed.get_composed_history()
+            transformed = transformed(subject)
+            d[key] = transformed['datum'].data
         return d
 
 
@@ -116,64 +204,67 @@ def_spatial_size = [96, 96, 96]
 # TODO verify that random transformations are applied the same way on the image and the seg
 hyper_dict = {
     'first_transform': {
-        'LoadImaged': {'keys': ['image', 'label'],
-                       'reader': 'nibabelreader'
+        'LoadImaged': {'keys': ['image', 'label']
                        },
-
-        'PrintDim': {'keys': ['image', 'label']},
         'AddChanneld': {'keys': ['image', 'label']},
-        # 'Resized': {
+        'Binarized': {'keys': ['label']},
+        # 'AsChannelFirstd': {
         #     'keys': ['image', 'label'],
-        #     'spatial_size': def_spatial_size},
+        #     'channel_dim': -1
+        # },
+        'Resized': {
+            'keys': ['image', 'label'],
+            'spatial_size': def_spatial_size},
     },
     'monai_transform': {
-        'PrintDim': {'keys': ['image', 'label']},
-        # 'RandHistogramShiftd': {
-        #     'keys': ['image'],
-        #     'num_control_points': (10, 15),
-        #     'prob': low_prob
-        # },
+        # 'ScaleIntensity': {}
+        # 'PrintDim': {'keys': ['image', 'label']},
+        'RandHistogramShiftd': {
+            'keys': ['image'],
+            'num_control_points': (10, 15),
+            'prob': low_prob
+        },
         # TODO maybe 'Orientation': {} but it would interact with the flip,
-        # 'RandAffined': {
-        #     'keys': ['image', 'label'],
-        #     'prob': low_prob,
-        #     'rotate_range': radians(15),
-        #     'shear_range': None,
-        #     'translate_range': None,
-        #     'scale_range': 0.3,
-        #     'spatial_size': None,
-        #     'padding_mode': 'border',
-        #     'as_tensor_output': False
-        # },
-        # 'RandFlipd': {
-        #     'keys': ['image', 'label'],
-        #     'prob': 0.1,
-        #     'spatial_axis': 0
-        # },
+        'RandAffined': {
+            'keys': ['image', 'label'],
+            'prob': low_prob,
+            'rotate_range': radians(15),
+            'shear_range': None,
+            'translate_range': None,
+            'scale_range': 0.3,
+            'spatial_size': None,
+            'padding_mode': 'border',
+            'as_tensor_output': False
+        },
+        'RandFlipd': {
+            'keys': ['image', 'label'],
+            'prob': low_prob,
+            'spatial_axis': 0
+        },
         # 'RandDeformGrid': {'keys': ['image', 'label']},
         # 'Spacingd': {'keys': ['image', 'label']},
-        # 'Rand3DElasticd': {
-        #     'keys': ['image', 'label'],
-        #     'sigma_range': (0, 0.01),
-        #     'magnitude_range': (0, 5),  # hyper_params['Rand3DElastic_magnitude_range']
-        #     'prob': high_prob,
-        #     'rotate_range': None,
-        #     'shear_range': None,
-        #     'translate_range': None,
-        #     'scale_range': None,
-        #     'spatial_size': None,
-        #     # 'padding_mode': "reflection",
-        #     'padding_mode': "border",
-        #     # 'padding_mode': "zeros",
-        #     'as_tensor_output': False
-        # },
+        'Rand3DElasticd': {
+            'keys': ['image', 'label'],
+            'sigma_range': (0, 0.01),
+            'magnitude_range': (0, 5),  # hyper_params['Rand3DElastic_magnitude_range']
+            'prob': high_prob,
+            'rotate_range': None,
+            'shear_range': None,
+            'translate_range': None,
+            'scale_range': None,
+            'spatial_size': None,
+            # 'padding_mode': "reflection",
+            'padding_mode': "border",
+            # 'padding_mode': "zeros",
+            'as_tensor_output': False
+        },
         # 'SqueezeDimd': {'keys': ["image", "label"],
         #                 'dim': 0},
         'ToTensord': {'keys': ['image', 'label']},
         # 'AddChanneld': {'keys': ['image', 'label']},
     },
     'torchio_transform': {
-        # 'ScaleIntensity': {}
+        # 'PrintDim': {'keys': ['image', 'label']},
         'RandomNoise': {
             'include': ['image'],
             'mean': 0,
@@ -205,10 +296,10 @@ hyper_dict = {
         #                 'dim': 0},
     },
     'labelonly_transform': {
-        # 'Binarized': {'keys': ['label']},
         # 'AddChanneld': {'keys': ['label']},
     },
     'last_transform': {
+        'Binarized': {'keys': ['label']},
         'Resized': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size
@@ -216,10 +307,10 @@ hyper_dict = {
         'ToTensord': {'keys': ['image', 'label']},
         # 'AddChanneld': {'keys': ['label']},
         # 'NormalizeIntensityd': {'keys': ['image']},
-        'PrintDim': {'keys': ['image', 'label']},
+        # 'PrintDim': {'keys': ['image', 'label']},
     }
 }
-# RandDeformGrid
+
 # Import all transforms from the dict
 for k in hyper_dict:
     for name in hyper_dict[k]:
@@ -227,7 +318,6 @@ for k in hyper_dict:
             eval(name)
         except NameError:
             raise ImportError('{} not imported'.format(name))
-
 
 """
 Helper functions
@@ -244,14 +334,21 @@ def trans_from_dict(transform_name, transform_dict):
 def trans_from_name(transform_name, hyper_param_dict):
     for key in hyper_param_dict:
         if transform_name in hyper_param_dict[key]:
-            return trans_from_dict(transform_name, hyper_param_dict[key])
+            if transform_name in dir(torchio.transforms):
+                return RandTransformWrapper(trans_from_dict(transform_name, hyper_param_dict[key]))
+            else:
+                return trans_from_dict(transform_name, hyper_param_dict[key])
     raise ValueError('{} not found in the hyper_param_dict'.format(transform_name))
 
 
 def trans_list_from_dict(param_dict):
     trans_list = []
-    for key in param_dict:
-        trans_list.append(trans_from_dict(key, param_dict[key]))
+    for transform_name in param_dict:
+        if transform_name in dir(torchio.transforms):
+            trans = RandTransformWrapper(trans_from_dict(transform_name, param_dict[transform_name]))
+        else:
+            trans = trans_from_dict(transform_name, param_dict[transform_name])
+        trans_list.append(trans)
     return trans_list
 
 
@@ -264,7 +361,7 @@ def segmentation_train_transformd():
     train_transformd = Compose(
         trans_list_from_dict(hyper_dict['first_transform']) +
         trans_list_from_dict(hyper_dict['monai_transform']) +
-        # trans_list_from_dict(hyper_dict['torchio_transform']) +
+        trans_list_from_dict(hyper_dict['torchio_transform']) +
         trans_list_from_dict(hyper_dict['labelonly_transform']) +
         trans_list_from_dict(hyper_dict['last_transform'])
     )

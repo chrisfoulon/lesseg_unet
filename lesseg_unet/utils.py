@@ -11,7 +11,7 @@ import torch
 def create_input_path_list_from_root(root_folder_path, recursive_search=False):
     root_folder_path = Path(root_folder_path)
     if not root_folder_path.is_dir():
-        raise ValueError(root_folder_path + ' does not exist or is not a directory')
+        raise ValueError('{} does not exist or is not a directory'.format(root_folder_path))
     input_path_list = []
     if not recursive_search:
         input_path_list = [p for p in root_folder_path.iterdir() if is_nifti(p)]
