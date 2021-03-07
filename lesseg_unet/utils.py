@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from typing import Union
-import importlib
+import json
 
 from bcblib.tools.nifti_utils import is_nifti
 from lesseg_unet.visualisation_utils import plot_seg
@@ -46,20 +46,31 @@ def save_tensor_to_nifti(tensor, output_path, val_output_affine):
 
 def save_img_lbl_seg_to_nifti(input_tensor, label_tensor, seg_tensor, output_dir, val_output_affine, suffix):
     save_tensor_to_nifti(input_tensor, Path(output_dir, 'nib_input_{}.nii'.format(suffix)), val_output_affine)
-    save_tensor_to_nifti(label_tensor, Path(output_dir, 'nib_label_{}.nii'.format(suffix)), val_output_affine)
-    save_tensor_to_nifti(seg_tensor, Path(output_dir, 'nib_output_{}.nii'.format(suffix)), val_output_affine)
+    if label_tensor is not None:
+        save_tensor_to_nifti(label_tensor, Path(output_dir, 'nib_label_{}.nii'.format(suffix)), val_output_affine)
+    if seg_tensor is not None:
+        save_tensor_to_nifti(seg_tensor, Path(output_dir, 'nib_output_{}.nii'.format(suffix)), val_output_affine)
 
 
-def save_img_lbl_seg_to_png(input_tensor, label_tensor, seg_tensor, output_dir, filename):
+def save_img_lbl_seg_to_png(input_tensor, output_dir, filename, label_tensor=None, seg_tensor=None,):
     input_np = input_tensor[0, 0, :, :, :].cpu().detach().numpy()
-    label_np = label_tensor[0, 0, :, :, :].cpu().detach().numpy()
-    seg_np = seg_tensor[0, 0, :, :, :].cpu().detach().numpy()
+    if label_tensor is not None:
+        label_np = label_tensor[0, 0, :, :, :].cpu().detach().numpy()
+    else:
+        label_np = None
+    if seg_tensor is not None:
+        seg_np = seg_tensor[0, 0, :, :, :].cpu().detach().numpy()
+    else:
+        seg_np = None
     plot_seg(input_np, label_np, seg_np, Path(output_dir, filename + '.png'))
 
 
-def fsleyes_seg_comparison(img_folder, image_ind):
-    # fsleyes / home / tolhsadum / neuro_apps / data / lesseg_unet_output_first_good /${folder} / nib_in
-    # put_${i}.nii / home / tolhsadum / neuro_apps / data / lesseg_unet_output_first_good /${folder} / nib_label_${
-    # i}.nii / home / tolhsadum / neuro_apps / data / lesseg_unet_outp
-    # ut_first_good /${folder} / nib_output_${i}.nii
-    pass
+def save_json_transform_dict(transform_dict, output_path):
+    with open(output_path, 'w') as json_fd:
+        json.dump(transform_dict, json_fd, indent=4)
+
+
+def load_json_transform_dict(json_path):
+    if not Path(json_path).is_file():
+        raise ValueError('{} is not an existing json file'.format(json_path))
+    return json.load(open(json_path, 'r'))

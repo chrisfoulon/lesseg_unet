@@ -213,8 +213,8 @@ class RandTransformWrapper(Randomizable, MapTransform):
 """
 Transformation parameters
 """
-high_prob = 0.5
-low_prob = 0.1
+high_prob = 1
+low_prob = 1
 def_spatial_size = [96, 96, 96]
 # .74 aspect ratio? maybe change to 96x128x96 or crop to 64cube and increase the epoch number by a lot
 # TODO verify that random transformations are applied the same way on the image and the seg
@@ -262,16 +262,16 @@ hyper_dict = {
         # 'Spacingd': {'keys': ['image', 'label']},
         'Rand3DElasticd': {
             'keys': ['image', 'label'],
-            'sigma_range': (0, 0.01),
-            'magnitude_range': (0, 5),  # hyper_params['Rand3DElastic_magnitude_range']
+            'sigma_range': (1, 3),
+            'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
             'prob': high_prob,
             'rotate_range': None,
             'shear_range': None,
             'translate_range': None,
             'scale_range': None,
             'spatial_size': None,
-            # 'padding_mode': "reflection",
-            'padding_mode': "border",
+            'padding_mode': "reflection",
+            # 'padding_mode': "border",
             # 'padding_mode': "zeros",
             'as_tensor_output': False
         },
@@ -286,7 +286,7 @@ hyper_dict = {
         'RandomNoise': {
             'include': ['image'],
             'mean': 0,
-            'std': (0.1, 0.2),
+            'std': (0.01, 0.1),
             'p': low_prob
         },
         'RandomGhosting': {
@@ -302,7 +302,7 @@ hyper_dict = {
         'RandomBiasField': {
             'include': ['image'],
             'p': low_prob,
-            'coefficients': 1
+            'coefficients': 0.5
         },
         'RandomMotion': {
             'include': ['image', 'label'],
@@ -315,12 +315,13 @@ hyper_dict = {
         #                 'dim': 0},
     },
     'labelonly_transform': {
-        'Binarized': {'keys': ['label']},
         # 'ToTensord': {'keys': ['label']},
         # 'AddChanneld': {'keys': ['label']},
         # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'after binarize'},
     },
     'last_transform': {
+        'Binarized': {'keys': ['label'],
+                      'lower_threshold': 0.5},
         'Resized': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size

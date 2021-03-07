@@ -22,6 +22,7 @@ def main():
                                     help='Root folder of the b1000 dataset')
     lesion_paths_group.add_argument('-lli', '--lesion_input_list', type=str,
                                     help='Text file containing the list of b1000')
+    parser.add_argument('-trs', '--transform_dict', type=str, help='file path to a json dictionary of transformations')
     parser.add_argument('-d', '--torch_device', type=str, help='Device type and number given to'
                                                                'torch.device()')
     parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
@@ -65,7 +66,13 @@ def main():
         b1000_pref = None
         # b1000_pref = 'wodctH25_b1000'
 
+    if args.transform_dict is not None:
+        transform_dict = utils.load_json_transform_dict(args.transform_dict)
+    else:
+        transform_dict = None
+
     training.training_loop(img_list, les_list, output_root, b1000_pref,
+                           transform_dict=transform_dict,
                            device=args.torch_device,
                            epoch_num=args.num_epochs,
                            dataloader_workers=args.num_workers)

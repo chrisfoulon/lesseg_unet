@@ -21,6 +21,7 @@ from lesseg_unet import data_loading, net, utils, transformations, visualisation
 def init_training_data(img_path_list: Sequence,
                        seg_path_list: Sequence,
                        img_pref: str = None,
+                       transform_dict=None,
                        train_val_percentage: float = 75) -> Tuple[monai.data.Dataset, monai.data.Dataset]:
     logging.info('Listing input files to be loaded')
     train_files, val_files = data_loading.create_file_dict_lists(img_path_list, seg_path_list, img_pref,
@@ -47,6 +48,7 @@ def training_loop(img_path_list: Sequence,
                   seg_path_list: Sequence,
                   output_dir: Union[str, bytes, os.PathLike],
                   img_pref: str = None,
+                  transform_dict=None,
                   device: str = None,
                   batch_size: int = 10,
                   epoch_num: int = 50,
@@ -56,7 +58,7 @@ def training_loop(img_path_list: Sequence,
     else:
         device = torch.device(device)
     val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
-    train_ds, val_ds = init_training_data(img_path_list, seg_path_list, img_pref)
+    train_ds, val_ds = init_training_data(img_path_list, seg_path_list, img_pref, transform_dict=None)
     train_loader = data_loading.create_training_data_loader(train_ds, batch_size, dataloader_workers)
     val_loader = data_loading.create_validation_data_loader(val_ds, dataloader_workers=dataloader_workers)
     model = net.create_unet_model(device, net.default_unet_hyper_params)
@@ -64,7 +66,22 @@ def training_loop(img_path_list: Sequence,
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
     loss_function = monai.losses.DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
+    print('check ok')
+    # for i in range(5):
+    #     data = next(iter(train_loader))
+    #     inputs, labels = data['image'], data['label']
+    #     # i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
+    #     # l_data = labels[0, 0, :, :, :].cpu().detach().numpy()
+    #     utils.save_img_lbl_seg_to_png(
+    #         inputs, '/home/tolhsadum/neuro_apps/data', 'validation_img_{}'.format(i), labels, None)
+    #     utils.save_img_lbl_seg_to_nifti(
+    #         inputs, labels, None, '/home/tolhsadum/neuro_apps/data', val_output_affine, i)
+    # if np.equal(i_data, l_data).all():
+    #     print('ok')
+    # else:
+    #     print('not ok')
     # exit()
+
     # utils.save_tensor_to_nifti(
     #     inputs, Path('/home/tolhsadum/neuro_apps/data/', 'nib_input_{}.nii'.format('test')), val_output_affine)
     # utils.save_tensor_to_nifti(
@@ -157,14 +174,14 @@ def training_loop(img_path_list: Sequence,
                         if value.item() * len(value) > 0.7 and img_count < img_max_num:
                             img_count += 1
                             utils.save_img_lbl_seg_to_png(
-                                inputs, labels, outputs, val_images_dir, 'validation_img{}'.format(img_count))
+                                inputs, val_images_dir, 'validation_img{}'.format(img_count), labels, outputs)
                             utils.save_img_lbl_seg_to_nifti(
                                 inputs, labels, outputs, val_images_dir, val_output_affine, img_count)
                         if value.item() * len(value) < 0.1:
                             trash_count += 1
                             if trash_count < img_max_num:
                                 utils.save_img_lbl_seg_to_png(
-                                    inputs, labels, outputs, trash_val_images_dir, 'trash_img{}'.format(trash_count))
+                                    inputs, trash_val_images_dir, 'trash_img{}'.format(trash_count), labels, outputs)
                                 utils.save_img_lbl_seg_to_nifti(
                                     inputs, labels, outputs, trash_val_images_dir, val_output_affine, trash_count)
                 metric = metric_sum / metric_count

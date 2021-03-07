@@ -112,7 +112,7 @@ def plot_seg(img, label=None, seg=None, save_path=None):
     if seg is not None:
         plt.imshow(seg[:, :, z], cmap='Blues', alpha=label[:, :, z]*.5, interpolation='none')
     if save_path is not None:
-        plt.savefig(save_path)
+        plt.savefig(str(save_path))
     else:
         plt.show()
     return
