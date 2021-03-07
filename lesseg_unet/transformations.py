@@ -213,8 +213,9 @@ class RandTransformWrapper(Randomizable, MapTransform):
 """
 Transformation parameters
 """
-high_prob = 1
-low_prob = 1
+high_prob = .2
+low_prob = .1
+tiny_prob = 0.05
 def_spatial_size = [96, 96, 96]
 # .74 aspect ratio? maybe change to 96x128x96 or crop to 64cube and increase the epoch number by a lot
 # TODO verify that random transformations are applied the same way on the image and the seg
@@ -244,8 +245,8 @@ hyper_dict = {
         # TODO maybe 'Orientation': {} but it would interact with the flip,
         'RandAffined': {
             'keys': ['image', 'label'],
-            'prob': low_prob,
-            'rotate_range': radians(15),
+            'prob': high_prob,
+            'rotate_range': radians(5),
             'shear_range': None,
             'translate_range': None,
             'scale_range': 0.3,
@@ -255,7 +256,7 @@ hyper_dict = {
         },
         'RandFlipd': {
             'keys': ['image', 'label'],
-            'prob': low_prob,
+            'prob': high_prob,
             'spatial_axis': 0
         },
         # 'RandDeformGrid': {'keys': ['image', 'label']},
@@ -264,7 +265,7 @@ hyper_dict = {
             'keys': ['image', 'label'],
             'sigma_range': (1, 3),
             'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
-            'prob': high_prob,
+            'prob': low_prob,
             'rotate_range': None,
             'shear_range': None,
             'translate_range': None,
@@ -291,7 +292,7 @@ hyper_dict = {
         },
         'RandomGhosting': {
             'include': ['image'],
-            'p': low_prob,
+            'p': tiny_prob,
             'num_ghosts': (4, 10)
         },
         'RandomBlur': {
@@ -301,12 +302,12 @@ hyper_dict = {
         },
         'RandomBiasField': {
             'include': ['image'],
-            'p': low_prob,
+            'p': tiny_prob,
             'coefficients': 0.5
         },
         'RandomMotion': {
             'include': ['image', 'label'],
-            'p': low_prob,
+            'p': tiny_prob,
             'num_transforms': 1
         },
         'ToTensord': {'keys': ['image', 'label']},
