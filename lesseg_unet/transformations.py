@@ -224,14 +224,15 @@ hyper_dict = {
         'LoadImaged': {'keys': ['image', 'label']
                        },
         'AddChanneld': {'keys': ['image', 'label']},
-        'Binarized': {'keys': ['label']},
         # 'AsChannelFirstd': {
         #     'keys': ['image', 'label'],
         #     'channel_dim': -1
         # },
         'Resized': {
             'keys': ['image', 'label'],
-            'spatial_size': def_spatial_size},
+            'spatial_size': def_spatial_size,
+            'mode': 'nearest'},
+        'Binarized': {'keys': ['label'], 'lower_threshold': 0.5},
         # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'Fisrt resize'},
     },
     'monai_transform': {
@@ -256,7 +257,7 @@ hyper_dict = {
         },
         'RandFlipd': {
             'keys': ['image', 'label'],
-            'prob': high_prob,
+            'prob': low_prob,
             'spatial_axis': 0
         },
         # 'RandDeformGrid': {'keys': ['image', 'label']},
@@ -265,7 +266,7 @@ hyper_dict = {
             'keys': ['image', 'label'],
             'sigma_range': (1, 3),
             'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
-            'prob': low_prob,
+            'prob': tiny_prob,
             'rotate_range': None,
             'shear_range': None,
             'translate_range': None,
@@ -325,10 +326,11 @@ hyper_dict = {
                       'lower_threshold': 0.5},
         'Resized': {
             'keys': ['image', 'label'],
-            'spatial_size': def_spatial_size
+            'spatial_size': def_spatial_size,
+            'mode': 'nearest'
         },
         'ToTensord': {'keys': ['image', 'label']},
-        # 'AddChanneld': {'keys': ['label']},
+        # 'AddChanneld': {'keys': ['image']},
         # 'NormalizeIntensityd': {'keys': ['image']},
     }
 }
