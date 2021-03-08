@@ -233,7 +233,7 @@ hyper_dict = {
             'spatial_size': def_spatial_size,
             'mode': 'nearest'},
         'Binarized': {'keys': ['label'], 'lower_threshold': 0.5},
-        'PrintDim': {'keys': ['image', 'label'], 'msg': 'Fisrt resize'},
+        # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'Fisrt resize'},
     },
     'monai_transform': {
         # 'ScaleIntensity': {}
@@ -312,7 +312,7 @@ hyper_dict = {
             'num_transforms': 1
         },
         'ToTensord': {'keys': ['image', 'label']},
-        'PrintDim': {'keys': ['image', 'label'], 'msg': 'After TORCHIO'},
+        # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'After TORCHIO'},
         # 'SqueezeDimd': {'keys': ["image", "label"],
         #                 'dim': 0},
     },
