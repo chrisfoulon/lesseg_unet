@@ -233,7 +233,7 @@ hyper_dict = {
             'spatial_size': def_spatial_size,
             'mode': 'nearest'},
         'Binarized': {'keys': ['label'], 'lower_threshold': 0.5},
-        # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'Fisrt resize'},
+        'PrintDim': {'keys': ['image', 'label'], 'msg': 'Fisrt resize'},
     },
     'monai_transform': {
         # 'ScaleIntensity': {}
@@ -312,7 +312,7 @@ hyper_dict = {
             'num_transforms': 1
         },
         'ToTensord': {'keys': ['image', 'label']},
-        # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'After TORCHIO'},
+        'PrintDim': {'keys': ['image', 'label'], 'msg': 'After TORCHIO'},
         # 'SqueezeDimd': {'keys': ["image", "label"],
         #                 'dim': 0},
     },
@@ -329,9 +329,13 @@ hyper_dict = {
             'spatial_size': def_spatial_size,
             'mode': 'nearest'
         },
-        'ToTensord': {'keys': ['image', 'label']},
+        # 'ToTensord': {'keys': ['image', 'label']},
+
+        # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'after binarize and resize'},
         # 'AddChanneld': {'keys': ['image']},
-        # 'NormalizeIntensityd': {'keys': ['image']},
+        # 'SqueezeDimd': {'keys': ["image", "label"],
+        #                 'dim': 0},
+        'NormalizeIntensityd': {'keys': ['image']},
     }
 }
 
@@ -386,7 +390,7 @@ def segmentation_train_transformd():
         trans_list_from_dict(hyper_dict['first_transform']) +
         trans_list_from_dict(hyper_dict['monai_transform']) +
         trans_list_from_dict(hyper_dict['torchio_transform']) +
-        trans_list_from_dict(hyper_dict['labelonly_transform']) +
+        # trans_list_from_dict(hyper_dict['labelonly_transform']) +
         trans_list_from_dict(hyper_dict['last_transform'])
     )
     return train_transformd
@@ -395,7 +399,7 @@ def segmentation_train_transformd():
 def segmentation_val_transformd():
     val_transd = Compose(
         trans_list_from_dict(hyper_dict['first_transform']) +
-        trans_list_from_dict(hyper_dict['labelonly_transform']) +
+        # trans_list_from_dict(hyper_dict['labelonly_transform']) +
         trans_list_from_dict(hyper_dict['last_transform'])
     )
     return val_transd
