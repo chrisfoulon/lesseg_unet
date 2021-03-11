@@ -7,6 +7,7 @@ from monai.config import print_config
 from lesseg_unet import utils, training
 from lesseg_unet.data import transform_dicts
 from bcblib.tools.nifti_utils import file_to_list
+import lesseg_unet.data.transform_dicts as tr_dicts
 
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 
@@ -68,7 +69,15 @@ def main():
         # b1000_pref = 'wodctH25_b1000'
 
     if args.transform_dict is not None:
-        transform_dict = utils.load_json_transform_dict(args.transform_dict)
+        td = args.transform_dict
+        if Path(td).is_file():
+            transform_dict = utils.load_json_transform_dict(args.transform_dict)
+        else:
+            if td in dir(tr_dicts):
+                transform_dict = getattr(tr_dicts, td)
+            else:
+                raise ValueError('{} is not an existing dict file or is not '
+                                 'in lesseg_unet/data/transform_dicts.py'.format(args.transform_dict))
     else:
         print('Using default transformation dictionary')
         transform_dict = transform_dicts.minimal_hyper_dict

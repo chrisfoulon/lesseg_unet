@@ -3,8 +3,9 @@ import shutil
 import logging
 from pathlib import Path
 from typing import Sequence, Tuple, Union
-import numpy as np
 
+import pandas as pd
+import numpy as np
 import monai
 import torch
 from monai.metrics import DiceMetric
@@ -107,11 +108,14 @@ def training_loop(img_path_list: Sequence,
     # ##################################################################################
 
     # start a typical PyTorch training
-    val_interval = 2
+    val_interval = 1
     best_metric = -1
     best_metric_epoch = -1
     epoch_loss_values = list()
     metric_values = list()
+    """
+    Measure tracking init
+    """
     writer = SummaryWriter(log_dir=str(output_dir))
     val_images_dir = Path(output_dir, 'val_images')
     if not val_images_dir.is_dir():
@@ -125,10 +129,22 @@ def training_loop(img_path_list: Sequence,
     best_trash_images_dir = Path(output_dir, 'best_epoch_val_images')
     if not best_trash_images_dir.is_dir():
         best_trash_images_dir.mkdir(exist_ok=True)
+    perf_measure_names = ['avg_train_loss',
+                          'val_mean_dice',
+                          'val_median_dice',
+                          'val_std_dice',
+                          'trash_img_nb',
+                          'val_min_dice',
+                          'val_max_dice',
+                          'val_best_mean_dice']
+    df = pd.DataFrame(columns=perf_measure_names)
     batches_per_epoch = len(train_loader)
+    """
+    Training loop
+    """
     for epoch in range(epoch_num):
-        print("-" * 10)
-        print(f"epoch {epoch + 1}/{epoch_num}")
+        print('-' * 10)
+        print(f'epoch {epoch + 1}/{epoch_num}')
         model.train()
         epoch_loss = 0
         step = 0
@@ -144,18 +160,21 @@ def training_loop(img_path_list: Sequence,
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
-            print(f"{step}/{batches_per_epoch}, train_loss: {loss.item():.4f}")
-            writer.add_scalar("train_loss", loss.item(), batches_per_epoch * epoch + step)
+            print(f'{step}/{batches_per_epoch}, train_loss: {loss.item():.4f}')
+            writer.add_scalar('train_loss', loss.item(), batches_per_epoch * epoch + step)
 
         epoch_loss /= step
         epoch_loss_values.append(epoch_loss)
-        print(f"epoch {epoch + 1} average loss: {epoch_loss:.4f}")
+        print(f'epoch {epoch + 1} average loss: {epoch_loss:.4f}')
 
-        # if (epoch + 1) % val_interval == 0:
-        if (epoch + 1) % val_interval == 1:
-            for f in val_images_dir:
+        # if (epoch + 1) % val_interval == 1:
+        """
+        Validation loop
+        """
+        if (epoch + 1) % val_interval == 0:
+            for f in val_images_dir.iterdir():
                 os.remove(f)
-            for f in trash_val_images_dir:
+            for f in trash_val_images_dir.iterdir():
                 os.remove(f)
             model.eval()
             with torch.no_grad():
@@ -164,9 +183,9 @@ def training_loop(img_path_list: Sequence,
                 img_count = 0
                 trash_count = 0
                 img_max_num = len(train_ds) + len(val_ds)
-                inputs = None
-                labels = None
-                outputs = None
+                # inputs = None
+                # labels = None
+                # outputs = None
                 # saver = NiftiSaver(output_dir=output_dir)
                 val_score_list = []
                 for val_data in val_loader:
@@ -198,27 +217,38 @@ def training_loop(img_path_list: Sequence,
                 std = np.std(np.array(val_score_list))
                 min_score = np.min(np.array(val_score_list))
                 max_score = np.max(np.array(val_score_list))
-                writer.add_scalar("val_mean_dice", metric, epoch + 1)
-                writer.add_scalar("val_median_dice", median, epoch + 1)
-                writer.add_scalar("trash images (Dice < 0.1)", trash_count, epoch + 1)
-                # writer.add_scalar("Standard deviation of dice score on the validation", std, epoch + 1)
-                writer.add_scalar("val_min_dice", min_score, epoch + 1)
-                writer.add_scalar("val_max_dic", max_score, epoch + 1)
+                writer.add_scalar('val_mean_dice', metric, epoch + 1)
+                writer.add_scalar('val_median_dice', median, epoch + 1)
+                writer.add_scalar('trash_img_nb', trash_count, epoch + 1)
+                writer.add_scalar('val_min_dice', min_score, epoch + 1)
+                writer.add_scalar('val_max_dice', max_score, epoch + 1)
+                writer.add_scalar('val_std_dice', std, epoch + 1)
+                df.loc[0] = pd.Series({
+                    'avg_train_loss': epoch_loss,
+                    'val_mean_dice': metric,
+                    'val_median_dice': median,
+                    'val_std_dice': std,
+                    'trash_img_nb': trash_count,
+                    'val_min_dice': min_score,
+                    'val_max_dice': max_score,
+                    'val_best_mean_dice': 0
+                })
                 if metric > best_metric:
                     best_metric = metric
                     best_metric_epoch = epoch + 1
                     torch.save(model.state_dict(),
                                Path(output_dir,
-                                    "best_metric_model_segmentation3d_array_epo_{}.pth".format(best_metric_epoch)))
-                    print("saved new best metric model")
-                    writer.add_scalar("val_best_mean_dice", metric, epoch + 1)
-                    for f in best_val_images_dir:
+                                    'best_metric_model_segmentation3d_array_epo_{}.pth'.format(best_metric_epoch)))
+                    print('saved new best metric model')
+                    writer.add_scalar('val_best_mean_dice', metric, epoch + 1)
+                    df.at[epoch + 1, 'val_best_mean_dice'] = metric
+                    for f in best_val_images_dir.iterdir():
                         os.remove(f)
-                    for f in best_trash_images_dir:
+                    for f in best_trash_images_dir.iterdir():
                         os.remove(f)
-                    for f in val_images_dir:
+                    for f in val_images_dir.iterdir():
                         shutil.copy(f, best_val_images_dir)
-                    for f in trash_val_images_dir:
+                    for f in trash_val_images_dir.iterdir():
                         shutil.copy(f, best_trash_images_dir)
                     # plot the last model output as GIF image in TensorBoard with the corresponding image and label
                     # plot_2d_or_3d_image(val_images, epoch + 1, writer, index=0, tag="image")
@@ -228,12 +258,13 @@ def training_loop(img_path_list: Sequence,
                     # plot_2d_or_3d_image(labels, epoch + 1, writer, index=0, tag="label")
                     # plot_2d_or_3d_image(outputs, epoch + 1, writer, index=0, tag="output")
                 print(
-                    "current epoch: {} current mean dice: {:.4f} with {} "
-                    "trash images best mean dice: {:.4f} at epoch {}".format(
+                    'current epoch: {} current mean dice: {:.4f} with {} '
+                    'trash images best mean dice: {:.4f} at epoch {}'.format(
                         epoch + 1, metric, trash_count, best_metric, best_metric_epoch
                     )
                 )
 
                 utils.save_checkpoint(model, epoch + 1, optimizer, output_dir)
-    print(f"train completed, best_metric: {best_metric:.4f} at epoch: {best_metric_epoch}")
+    df.to_csv(Path(output_dir, 'perf_measures.csv'), columns=perf_measure_names)
+    print(f'train completed, best_metric: {best_metric:.4f} at epoch: {best_metric_epoch}')
     writer.close()
