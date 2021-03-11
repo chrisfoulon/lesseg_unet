@@ -2,6 +2,7 @@ import logging
 import sys
 import argparse
 from pathlib import Path
+import os
 
 from monai.config import print_config
 from lesseg_unet import utils, training
@@ -37,8 +38,9 @@ def main():
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
     # Gather input data and setup based on script arguments
     output_root = Path(args.output)
+    os.makedirs(output_root, exist_ok=True)
     if not output_root.is_dir():
-        raise ValueError('{} is not an existing directory'.format(output_root))
+        raise ValueError('{} is not an existing directory and could not be created'.format(output_root))
     logging.info('loading input dwi path list')
     if args.input_path is not None:
         img_list = utils.create_input_path_list_from_root(args.input_path)
