@@ -39,6 +39,10 @@ def save_checkpoint(model, epoch, optimizer, output_folder):
     return
 
 
+def load_checkpoint(checkpoint_path):
+    return
+
+
 def save_tensor_to_nifti(tensor, output_path, val_output_affine):
     np_tensor = tensor[0, 0, :, :, :].cpu().detach().numpy()
     nib.save(nib.Nifti1Image(np_tensor, val_output_affine), output_path)

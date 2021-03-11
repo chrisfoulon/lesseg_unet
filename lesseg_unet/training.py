@@ -202,17 +202,17 @@ def training_loop(img_path_list: Sequence,
                         if value.item() * len(value) > 0.7:
                             print('Saving good image #{}'.format(img_count))
                             img_count += 1
-                            utils.save_img_lbl_seg_to_png(
-                                inputs, val_images_dir, 'validation_img_{}'.format(img_count), labels, outputs)
                             if img_count < num_nifti_save:
+                                utils.save_img_lbl_seg_to_png(
+                                    inputs, val_images_dir, 'validation_img_{}'.format(img_count), labels, outputs)
                                 utils.save_img_lbl_seg_to_nifti(
                                     inputs, labels, outputs, val_images_dir, val_output_affine, img_count)
                         if value.item() * len(value) < 0.1:
                             trash_count += 1
                             print('Saving trash image #{}'.format(trash_count))
-                            utils.save_img_lbl_seg_to_png(
-                                inputs, trash_val_images_dir, 'trash_img_{}'.format(trash_count), labels, outputs)
                             if trash_count < num_nifti_save:
+                                utils.save_img_lbl_seg_to_png(
+                                    inputs, trash_val_images_dir, 'trash_img_{}'.format(trash_count), labels, outputs)
                                 utils.save_img_lbl_seg_to_nifti(
                                     inputs, labels, outputs, trash_val_images_dir, val_output_affine, trash_count)
                 metric = metric_sum / metric_count
