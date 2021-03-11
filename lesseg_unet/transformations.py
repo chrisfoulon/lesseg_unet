@@ -29,7 +29,9 @@ from monai.transforms import (
     SplitChanneld,
     SqueezeDimd,
     CropForegroundd,
-    AsChannelFirstd
+    AsChannelFirstd,
+    RandSpatialCropd,
+    RandCropByPosNegLabeld
 )
 import torchio
 from torchio import Subject, ScalarImage
@@ -42,7 +44,6 @@ from torchio.transforms import (
     RandomBiasField,
 )
 from torchvision.transforms import RandomOrder
-
 
 """
 Custom Transformation Classes
@@ -216,35 +217,48 @@ Transformation parameters
 high_prob = .2
 low_prob = .1
 tiny_prob = 0.05
-def_spatial_size = [96, 96, 96]
+# high_prob = 1
+# low_prob = 1
+# tiny_prob = 1
+def_spatial_size = [96, 128, 96]
+
+# def_spatial_size = [96, 96, 96]
+min_small_crop_size = [int(0.95 * d) for d in def_spatial_size]
+
 # .74 aspect ratio? maybe change to 96x128x96 or crop to 64cube and increase the epoch number by a lot
 # TODO verify that random transformations are applied the same way on the image and the seg
 hyper_dict = {
-    'first_transform': {
-        'LoadImaged': {'keys': ['image', 'label']
-                       },
-        'AddChanneld': {'keys': ['image', 'label']},
-        # 'AsChannelFirstd': {
+    'first_transform': [
+        {'LoadImaged': {'keys': ['image', 'label']}},
+        {'AddChanneld': {'keys': ['image', 'label']}},
+        # {'AsChannelFirstd': {
         #     'keys': ['image', 'label'],
-        #     'channel_dim': -1
+        #     'channel_dim': -1}
         # },
-        'Resized': {
+        {'Resized': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size,
-            'mode': 'nearest'},
-        'Binarized': {'keys': ['label'], 'lower_threshold': 0.5},
-        # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'Fisrt resize'},
-    },
-    'monai_transform': {
-        # 'ScaleIntensity': {}
-        # 'PrintDim': {'keys': ['image', 'label']},
-        'RandHistogramShiftd': {
+            'mode': 'nearest'}
+         },
+        {'NormalizeIntensityd': {'keys': ['image']}},
+        {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'Fisrt resize'}},
+    ],
+    'monai_transform': [
+        # {'ScaleIntensity': {}}
+        # {'PrintDim': {'keys': ['image', 'label']}},
+        {'RandSpatialCropd': {'keys': ['image', 'label'],
+                              'roi_size': min_small_crop_size,
+                              'random_center': True,
+                              'random_size': False}
+         },
+        {'RandHistogramShiftd': {
             'keys': ['image'],
             'num_control_points': (10, 15),
-            'prob': low_prob
-        },
+            'prob': low_prob}
+         },
         # TODO maybe 'Orientation': {} but it would interact with the flip,
-        'RandAffined': {
+        {'RandAffined': {
             'keys': ['image', 'label'],
             'prob': high_prob,
             'rotate_range': radians(5),
@@ -253,16 +267,21 @@ hyper_dict = {
             'scale_range': 0.3,
             'spatial_size': None,
             'padding_mode': 'border',
-            'as_tensor_output': False
-        },
-        'RandFlipd': {
-            'keys': ['image', 'label'],
-            'prob': low_prob,
-            'spatial_axis': 0
-        },
-        # 'RandDeformGrid': {'keys': ['image', 'label']},
-        # 'Spacingd': {'keys': ['image', 'label']},
-        'Rand3DElasticd': {
+            'as_tensor_output': False}
+         },
+        # TODO check
+        # {'RandFlipd': {
+        #     'keys': ['image', 'label'],
+        #     'prob': low_prob,
+        #     'spatial_axis': 0}
+        # },
+        # {'RandDeformGrid':
+        #     {'keys': ['image', 'label']}
+        # },
+        # {'Spacingd':
+        #     {'keys': ['image', 'label']}
+        # },
+        {'Rand3DElasticd': {
             'keys': ['image', 'label'],
             'sigma_range': (1, 3),
             'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
@@ -275,109 +294,140 @@ hyper_dict = {
             'padding_mode': "reflection",
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
-            'as_tensor_output': False
-        },
-        # 'SqueezeDimd': {'keys': ["image", "label"],
-        #                 'dim': 0},
-        'ToTensord': {'keys': ['image', 'label']},
+            'as_tensor_output': False}
+         },
+        # {'SqueezeDimd':
+        #     {'keys': ["image", "label"],
+        #      'dim': 0}
+        # },
+        {'ToTensord': {'keys': ['image', 'label']}},
         # 'AddChanneld': {'keys': ['image', 'label']},
         # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'After MONAI'},
-    },
-    'torchio_transform': {
+    ],
+    'torchio_transform': [
         # 'PrintDim': {'keys': ['image', 'label']},
-        'RandomNoise': {
+        {'RandomNoise': {
             'include': ['image'],
             'mean': 0,
             'std': (0.01, 0.1),
-            'p': low_prob
-        },
-        'RandomGhosting': {
-            'include': ['image'],
-            'p': tiny_prob,
-            'num_ghosts': (4, 10)
-        },
-        'RandomBlur': {
+            'p': low_prob}
+         },
+        # 'RandomGhosting': {
+        #     'include': ['image'],
+        #     'p': tiny_prob,
+        #     'num_ghosts': (4, 10)
+        # },
+        {'RandomBlur': {
             'include': ['image', 'label'],
             'std': (0.1, 0.5),
-            'p': low_prob
-        },
-        'RandomBiasField': {
+            'p': low_prob}
+         },
+        {'RandomBiasField': {
             'include': ['image'],
             'p': tiny_prob,
-            'coefficients': 0.5
-        },
-        'RandomMotion': {
+            'coefficients': 0.5}
+         },
+        {'RandomMotion': {
             'include': ['image', 'label'],
             'p': tiny_prob,
-            'num_transforms': 1
-        },
-        'ToTensord': {'keys': ['image', 'label']},
-        # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'After TORCHIO'},
-        # 'SqueezeDimd': {'keys': ["image", "label"],
-        #                 'dim': 0},
-    },
-    'labelonly_transform': {
-        # 'ToTensord': {'keys': ['label']},
-        # 'AddChanneld': {'keys': ['label']},
-        # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'after binarize'},
-    },
-    'last_transform': {
-        'Binarized': {'keys': ['label'],
-                      'lower_threshold': 0.5},
-        'Resized': {
+            'num_transforms': 1}
+         },
+        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'After TORCHIO'}},
+        # {'SqueezeDimd': {'keys': ["image", "label"],
+        #                 'dim': 0}},
+    ],
+    'labelonly_transform': [
+        # {'ToTensord': {'keys': ['label']}},
+        # {'AddChanneld': {'keys': ['label']}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'after binarize'}},
+    ],
+    'last_transform': [
+        {'Binarized': {
+            'keys': ['label'],
+            'lower_threshold': 0.5}
+         },
+        {'Resized': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size,
-            'mode': 'nearest'
-        },
+            'mode': 'nearest'}
+         },
         # 'ToTensord': {'keys': ['image', 'label']},
 
         # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'after binarize and resize'},
         # 'AddChanneld': {'keys': ['image']},
         # 'SqueezeDimd': {'keys': ["image", "label"],
         #                 'dim': 0},
-        'NormalizeIntensityd': {'keys': ['image']},
-    }
+        {'NormalizeIntensityd': {'keys': ['image']}},
+    ]
 }
 
-# Import all transforms from the dict
-for k in hyper_dict:
-    for name in hyper_dict[k]:
-        try:
-            eval(name)
-        except NameError:
-            raise ImportError('{} not imported'.format(name))
+# TODO Import all transforms from the dict
+
+
+def check_imports(hyper_param_dict):
+    # The main dict
+    for k in hyper_param_dict:
+        # Each dict in the sublist
+        for d in hyper_param_dict[k]:
+            # Each Transformation name in the sublist
+            for name in d:
+                try:
+                    eval(name)
+                except NameError:
+                    raise ImportError('{} not imported'.format(name))
+
+
+def check_hyper_param_dict_shape(hyper_param_dict, print_list=True):
+    if print_list:
+        print('######\nList of transformations used:')
+    # The main dict
+    for k in hyper_param_dict:
+        # each sublist (like first_transform or monai_transform)
+        if print_list:
+            print(k)
+        if not isinstance(hyper_param_dict[k], list):
+            raise ValueError('Hyper param dict values must be lists')
+        # Each dict in the sublist
+        for d in hyper_param_dict[k]:
+            if not isinstance(d, dict):
+                raise ValueError('Hyper param dict lists must be dicts')
+            if len(d) > 1:
+                raise ValueError('Transformation dicts must be singletons (1 dict 1 transformation)')
+            # The transformation in d
+            for name in d:
+                if not isinstance(d[name], dict):
+                    raise ValueError('Transformation dict parameters must be dict (e.g. {keys: ["image", "label"]')
+                if print_list:
+                    print('\t{}'.format(name))
+
 
 """
 Helper functions
 """
 
 
-def trans_from_dict(transform_name, transform_dict):
-    try:
-        return eval(transform_name)(**transform_dict)
-    except Exception as e:
-        print('Exception found with transform {}: {}'.format(transform_name, e))
-
-
-def trans_from_name(transform_name, hyper_param_dict):
-    for key in hyper_param_dict:
-        if transform_name in hyper_param_dict[key]:
+def trans_from_dict(transform_dict: dict):
+    for transform_name in transform_dict:
+        try:
             if transform_name in dir(torchio.transforms):
-                return RandTransformWrapper(trans_from_dict(transform_name, hyper_param_dict[key]))
+                return RandTransformWrapper(eval(transform_name)(**transform_dict[transform_name]))
             else:
-                return trans_from_dict(transform_name, hyper_param_dict[key])
-    raise ValueError('{} not found in the hyper_param_dict'.format(transform_name))
+                return eval(transform_name)(**transform_dict[transform_name])
+        except Exception as e:
+            print('Exception found with transform {}: {}'.format(transform_name, e))
 
 
-def trans_list_from_dict(param_dict):
+def trans_list_from_list(param_list):
     trans_list = []
-    for transform_name in param_dict:
-        if transform_name in dir(torchio.transforms):
-            trans = RandTransformWrapper(trans_from_dict(transform_name, param_dict[transform_name]))
-        else:
-            trans = trans_from_dict(transform_name, param_dict[transform_name])
-        trans_list.append(trans)
+    for transform in param_list:
+        trans_list.append(trans_from_dict(transform))
     return trans_list
+
+
+def trans_list_from_dict(hyper_param_dict):
+    for k in hyper_param_dict:
+        trans_list_from_list(hyper_param_dict[k])
 
 
 """
@@ -385,22 +435,29 @@ Transformation compositions for the image segmentation
 """
 
 
-def segmentation_train_transformd():
+def segmentation_train_transformd(hyper_param_dict=None):
+    if hyper_param_dict is None:
+        hyper_param_dict = hyper_dict
+    check_imports(hyper_param_dict)
+    check_hyper_param_dict_shape(hyper_param_dict)
+    compose_list = []
+    for d_list_name in hyper_param_dict:
+        trs = trans_list_from_list(hyper_param_dict[d_list_name])
+        if trs is not None:
+            compose_list += trs
     train_transformd = Compose(
-        trans_list_from_dict(hyper_dict['first_transform']) +
-        trans_list_from_dict(hyper_dict['monai_transform']) +
-        trans_list_from_dict(hyper_dict['torchio_transform']) +
-        # trans_list_from_dict(hyper_dict['labelonly_transform']) +
-        trans_list_from_dict(hyper_dict['last_transform'])
+        compose_list
     )
     return train_transformd
 
 
-def segmentation_val_transformd():
+def segmentation_val_transformd(hyper_param_dict=None):
+    if hyper_param_dict is None:
+        hyper_param_dict = hyper_dict
     val_transd = Compose(
-        trans_list_from_dict(hyper_dict['first_transform']) +
+        trans_list_from_list(hyper_param_dict['first_transform']) +
         # trans_list_from_dict(hyper_dict['labelonly_transform']) +
-        trans_list_from_dict(hyper_dict['last_transform'])
+        trans_list_from_list(hyper_param_dict['last_transform'])
     )
     return val_transd
 

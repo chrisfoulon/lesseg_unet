@@ -1,4 +1,5 @@
 import os
+import shutil
 import logging
 from pathlib import Path
 from typing import Sequence, Tuple, Union
@@ -15,7 +16,7 @@ from monai.transforms import (
 )
 from monai.visualize import plot_2d_or_3d_image
 from torch.utils.tensorboard import SummaryWriter
-from lesseg_unet import data_loading, net, utils, transformations, visualisation_utils
+from lesseg_unet import data_loading, net, utils, transformations
 
 
 def init_training_data(img_path_list: Sequence,
@@ -27,8 +28,8 @@ def init_training_data(img_path_list: Sequence,
     train_files, val_files = data_loading.create_file_dict_lists(img_path_list, seg_path_list, img_pref,
                                                                  train_val_percentage)
     logging.info('Create transformations')
-    train_img_transforms = transformations.segmentation_train_transformd()
-    val_img_transforms = transformations.segmentation_val_transformd()
+    train_img_transforms = transformations.segmentation_train_transformd(transform_dict)
+    val_img_transforms = transformations.segmentation_val_transformd(transform_dict)
     # define dataset, data loader
     logging.info('Create training monai datasets')
     train_ds = Dataset(train_files, transform=train_img_transforms)
@@ -58,7 +59,7 @@ def training_loop(img_path_list: Sequence,
     else:
         device = torch.device(device)
     val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
-    train_ds, val_ds = init_training_data(img_path_list, seg_path_list, img_pref, transform_dict=None)
+    train_ds, val_ds = init_training_data(img_path_list, seg_path_list, img_pref, transform_dict=transform_dict)
     train_loader = data_loading.create_training_data_loader(train_ds, batch_size, dataloader_workers)
     val_loader = data_loading.create_validation_data_loader(val_ds, dataloader_workers=dataloader_workers)
     model = net.create_unet_model(device, net.default_unet_hyper_params)
@@ -76,10 +77,10 @@ def training_loop(img_path_list: Sequence,
     #         inputs, '/home/tolhsadum/neuro_apps/data', 'validation_img_{}'.format(i), labels, None)
     #     utils.save_img_lbl_seg_to_nifti(
     #         inputs, labels, None, '/home/tolhsadum/neuro_apps/data', val_output_affine, i)
-    # if np.equal(i_data, l_data).all():
-    #     print('ok')
-    # else:
-    #     print('not ok')
+    # # if np.equal(i_data, l_data).all():
+    # #     print('ok')
+    # # else:
+    # #     print('not ok')
     # exit()
 
     # utils.save_tensor_to_nifti(
@@ -118,6 +119,12 @@ def training_loop(img_path_list: Sequence,
     trash_val_images_dir = Path(output_dir, 'trash_val_images')
     if not trash_val_images_dir.is_dir():
         trash_val_images_dir.mkdir(exist_ok=True)
+    best_val_images_dir = Path(output_dir, 'best_epoch_val_images')
+    if not best_val_images_dir.is_dir():
+        best_val_images_dir.mkdir(exist_ok=True)
+    best_trash_images_dir = Path(output_dir, 'best_epoch_val_images')
+    if not best_trash_images_dir.is_dir():
+        best_trash_images_dir.mkdir(exist_ok=True)
     batches_per_epoch = len(train_loader)
     for epoch in range(epoch_num):
         print("-" * 10)
@@ -128,11 +135,11 @@ def training_loop(img_path_list: Sequence,
         for batch_data in train_loader:
             step += 1
             inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
-            print('inputs size: {}'.format(inputs.size()))
-            print('labels size: {}'.format(labels.size()))
+            # print('inputs size: {}'.format(inputs.size()))
+            # print('labels size: {}'.format(labels.size()))
             optimizer.zero_grad()
             outputs = model(inputs)
-            print('outputs size: {}'.format(outputs.size()))
+            # print('outputs size: {}'.format(outputs.size()))
             loss = loss_function(outputs, labels)
             loss.backward()
             optimizer.step()
@@ -146,6 +153,10 @@ def training_loop(img_path_list: Sequence,
 
         # if (epoch + 1) % val_interval == 0:
         if (epoch + 1) % val_interval == 1:
+            for f in val_images_dir:
+                os.remove(f)
+            for f in trash_val_images_dir:
+                os.remove(f)
             model.eval()
             with torch.no_grad():
                 metric_sum = 0.0
@@ -153,9 +164,6 @@ def training_loop(img_path_list: Sequence,
                 img_count = 0
                 trash_count = 0
                 img_max_num = len(train_ds) + len(val_ds)
-                # val_images = None
-                # val_labels = None
-                # val_outputs = None
                 inputs = None
                 labels = None
                 outputs = None
@@ -174,14 +182,14 @@ def training_loop(img_path_list: Sequence,
                         if value.item() * len(value) > 0.7 and img_count < img_max_num:
                             img_count += 1
                             utils.save_img_lbl_seg_to_png(
-                                inputs, val_images_dir, 'validation_img{}'.format(img_count), labels, outputs)
+                                inputs, val_images_dir, 'validation_img_{}'.format(img_count), labels, outputs)
                             utils.save_img_lbl_seg_to_nifti(
                                 inputs, labels, outputs, val_images_dir, val_output_affine, img_count)
                         if value.item() * len(value) < 0.1:
                             trash_count += 1
                             if trash_count < img_max_num:
                                 utils.save_img_lbl_seg_to_png(
-                                    inputs, trash_val_images_dir, 'trash_img{}'.format(trash_count), labels, outputs)
+                                    inputs, trash_val_images_dir, 'trash_img_{}'.format(trash_count), labels, outputs)
                                 utils.save_img_lbl_seg_to_nifti(
                                     inputs, labels, outputs, trash_val_images_dir, val_output_affine, trash_count)
                 metric = metric_sum / metric_count
@@ -190,10 +198,12 @@ def training_loop(img_path_list: Sequence,
                 std = np.std(np.array(val_score_list))
                 min_score = np.min(np.array(val_score_list))
                 max_score = np.max(np.array(val_score_list))
-                writer.add_scalar("Median score on the validation", median, epoch + 1)
+                writer.add_scalar("val_mean_dice", metric, epoch + 1)
+                writer.add_scalar("val_median_dice", median, epoch + 1)
+                writer.add_scalar("trash images (Dice < 0.1)", trash_count, epoch + 1)
                 # writer.add_scalar("Standard deviation of dice score on the validation", std, epoch + 1)
-                writer.add_scalar("Minimum score on the validation", min_score, epoch + 1)
-                writer.add_scalar("Maximum score on the validation", max_score, epoch + 1)
+                writer.add_scalar("val_min_dice", min_score, epoch + 1)
+                writer.add_scalar("val_max_dic", max_score, epoch + 1)
                 if metric > best_metric:
                     best_metric = metric
                     best_metric_epoch = epoch + 1
@@ -201,15 +211,22 @@ def training_loop(img_path_list: Sequence,
                                Path(output_dir,
                                     "best_metric_model_segmentation3d_array_epo_{}.pth".format(best_metric_epoch)))
                     print("saved new best metric model")
-                    writer.add_scalar("val_mean_dice", metric, epoch + 1)
-                    writer.add_scalar("trash images (Dice < 0.1)", trash_count, epoch + 1)
+                    writer.add_scalar("val_best_mean_dice", metric, epoch + 1)
+                    for f in best_val_images_dir:
+                        os.remove(f)
+                    for f in best_trash_images_dir:
+                        os.remove(f)
+                    for f in val_images_dir:
+                        shutil.copy(f, best_val_images_dir)
+                    for f in trash_val_images_dir:
+                        shutil.copy(f, best_trash_images_dir)
                     # plot the last model output as GIF image in TensorBoard with the corresponding image and label
                     # plot_2d_or_3d_image(val_images, epoch + 1, writer, index=0, tag="image")
                     # plot_2d_or_3d_image(val_labels, epoch + 1, writer, index=0, tag="label")
                     # plot_2d_or_3d_image(val_outputs, epoch + 1, writer, index=0, tag="output")
-                    plot_2d_or_3d_image(inputs, epoch + 1, writer, index=0, tag="image")
-                    plot_2d_or_3d_image(labels, epoch + 1, writer, index=0, tag="label")
-                    plot_2d_or_3d_image(outputs, epoch + 1, writer, index=0, tag="output")
+                    # plot_2d_or_3d_image(inputs, epoch + 1, writer, index=0, tag="image")
+                    # plot_2d_or_3d_image(labels, epoch + 1, writer, index=0, tag="label")
+                    # plot_2d_or_3d_image(outputs, epoch + 1, writer, index=0, tag="output")
                 print(
                     "current epoch: {} current mean dice: {:.4f} with {} "
                     "trash images best mean dice: {:.4f} at epoch {}".format(

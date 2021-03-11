@@ -116,26 +116,3 @@ def plot_seg(img, label=None, seg=None, save_path=None):
     else:
         plt.show()
     return
-
-# l_img = lambda x: '/home/tolhsadum/neuro_apps/data/lesseg_unet_output/val_images/nib_input_{}.nii'.format(x)
-# l_label = lambda x: '/home/tolhsadum/neuro_apps/data/lesseg_unet_output/val_images/nib_label_{}.nii'.format(x)
-# l_seg = lambda x: '/home/tolhsadum/neuro_apps/data/lesseg_unet_output/val_images/nib_output_{}.nii'.format(x)
-# # plot_seg(nib.load(l_img(2)).get_fdata(), nib.load(l_label(2)).get_fdata(), nib.load(l_seg(2)).get_fdata())
-# plot_seg(nib.load(l_img(2)).get_fdata(), nib.load(l_label(2)).get_fdata(), nib.load(l_seg(2)).get_fdata(), '/home/tolhsadum/neuro_apps/data/fig.pdf')
-def nil_plot_img(img, label=None, seg=None):
-    smap = None
-    if label is not None:
-        smap = nib.load(label)
-    if seg is not None:
-        if label is not None:
-            stack = np.stack((smap.get_fdata(), nib.load(seg).get_fdata()), axis=3)
-            smap = nib.Nifti1Image(stack, smap.affine)
-        else:
-            smap = nib.load(seg)
-    if smap:
-        display = plotting.plot_prob_atlas(smap, img, colorbar=True)
-    else:
-        display = plotting.plot_anat(img)
-
-    plotting.show()
-    return

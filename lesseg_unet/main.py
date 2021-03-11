@@ -5,6 +5,7 @@ from pathlib import Path
 
 from monai.config import print_config
 from lesseg_unet import utils, training
+from lesseg_unet.data import transform_dicts
 from bcblib.tools.nifti_utils import file_to_list
 
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
@@ -69,7 +70,8 @@ def main():
     if args.transform_dict is not None:
         transform_dict = utils.load_json_transform_dict(args.transform_dict)
     else:
-        transform_dict = None
+        print('Using default transformation dictionary')
+        transform_dict = transform_dicts.minimal_hyper_dict
 
     training.training_loop(img_list, les_list, output_root, b1000_pref,
                            transform_dict=transform_dict,
