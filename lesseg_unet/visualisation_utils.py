@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from nilearn import plotting
 import nibabel as nib
+from scipy.ndimage import center_of_mass
 
 
 def open_tensorboard_page(log_dir, port='8008', new_browser_window=False):
@@ -100,7 +101,9 @@ def plot_seg(img, label=None, seg=None, save_path=None):
     if seg is not None and np.isnan(np.sum(seg)):
         seg = np.nan_to_num(seg)
     if label is not None:
-        _, _, z = plotting.find_xyz_cut_coords(nib.Nifti1Image(label, np.eye(4)), activation_threshold=1)
+        _, _, z = center_of_mass(label)
+        # nilearn doesn't to work here -__-"
+        # _, _, z = plotting.find_xyz_cut_coords(nib.Nifti1Image(label, np.eye(4)), activation_threshold=1)
         z = round(z)
     else:
         z = round(len(img[0, 0, :]) / 2)

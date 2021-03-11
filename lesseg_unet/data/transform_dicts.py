@@ -187,15 +187,15 @@ minimal_hyper_dict = {
     ],
     'labelonly_transform': [],
     'last_transform': [
-        {'Binarized': {
-            'keys': ['label'],
-            'lower_threshold': 0.5
-        }},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'Last binarized'}},
         {'Resized': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size,
-            # 'mode': 'nearest'
+            'mode': 'nearest'
+        }},
+        {'Binarized': {
+            'keys': ['label'],
+            'lower_threshold': 0.5
         }},
         {'NormalizeIntensityd': {'keys': ['image']}},
     ]

@@ -54,7 +54,8 @@ def training_loop(img_path_list: Sequence,
                   device: str = None,
                   batch_size: int = 10,
                   epoch_num: int = 50,
-                  dataloader_workers: int = 4):
+                  dataloader_workers: int = 4,
+                  num_nifti_save=25):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -69,7 +70,7 @@ def training_loop(img_path_list: Sequence,
     loss_function = monai.losses.DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
     print('check ok')
-    # for i in range(5):
+    # for i in range(25):
     #     data = next(iter(train_loader))
     #     inputs, labels = data['image'], data['label']
     #     # i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
@@ -182,7 +183,7 @@ def training_loop(img_path_list: Sequence,
                 metric_count = 0
                 img_count = 0
                 trash_count = 0
-                img_max_num = len(train_ds) + len(val_ds)
+                # img_max_num = len(train_ds) + len(val_ds)
                 # inputs = None
                 # labels = None
                 # outputs = None
@@ -198,17 +199,20 @@ def training_loop(img_path_list: Sequence,
                     metric_count += len(value)
                     metric_sum += value.item() * len(value)
                     if best_metric > 0.7:
-                        if value.item() * len(value) > 0.7 and img_count < img_max_num:
+                        if value.item() * len(value) > 0.7:
+                            print('Saving good image #{}'.format(img_count))
                             img_count += 1
                             utils.save_img_lbl_seg_to_png(
                                 inputs, val_images_dir, 'validation_img_{}'.format(img_count), labels, outputs)
-                            utils.save_img_lbl_seg_to_nifti(
-                                inputs, labels, outputs, val_images_dir, val_output_affine, img_count)
+                            if img_count < num_nifti_save:
+                                utils.save_img_lbl_seg_to_nifti(
+                                    inputs, labels, outputs, val_images_dir, val_output_affine, img_count)
                         if value.item() * len(value) < 0.1:
                             trash_count += 1
-                            if trash_count < img_max_num:
-                                utils.save_img_lbl_seg_to_png(
-                                    inputs, trash_val_images_dir, 'trash_img_{}'.format(trash_count), labels, outputs)
+                            print('Saving trash image #{}'.format(trash_count))
+                            utils.save_img_lbl_seg_to_png(
+                                inputs, trash_val_images_dir, 'trash_img_{}'.format(trash_count), labels, outputs)
+                            if trash_count < num_nifti_save:
                                 utils.save_img_lbl_seg_to_nifti(
                                     inputs, labels, outputs, trash_val_images_dir, val_output_affine, trash_count)
                 metric = metric_sum / metric_count
@@ -242,6 +246,7 @@ def training_loop(img_path_list: Sequence,
                     print('saved new best metric model')
                     writer.add_scalar('val_best_mean_dice', metric, epoch + 1)
                     df.at[epoch + 1, 'val_best_mean_dice'] = metric
+                    print('Replacing best images')
                     for f in best_val_images_dir.iterdir():
                         os.remove(f)
                     for f in best_trash_images_dir.iterdir():
