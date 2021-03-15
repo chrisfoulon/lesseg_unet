@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 
 from monai.config import print_config
-from lesseg_unet import utils, training
+from lesseg_unet import utils, training, segmentation
 from lesseg_unet.data import transform_dicts
 from bcblib.tools.nifti_utils import file_to_list
 import lesseg_unet.data.transform_dicts as tr_dicts
@@ -15,7 +15,7 @@ import lesseg_unet.data.transform_dicts as tr_dicts
 
 def main():
     # Script arguments
-    parser = argparse.ArgumentParser(description='Monai unet')
+    parser = argparse.ArgumentParser(description='Monai unet training')
     parser.add_argument('-o', '--output', type=str, help='output folder')
     nifti_paths_group = parser.add_mutually_exclusive_group(required=True)
     nifti_paths_group.add_argument('-p', '--input_path', type=str, help='Root folder of the b1000 dataset')
@@ -26,6 +26,7 @@ def main():
     lesion_paths_group.add_argument('-lli', '--lesion_input_list', type=str,
                                     help='Text file containing the list of b1000')
     parser.add_argument('-trs', '--transform_dict', type=str, help='file path to a json dictionary of transformations')
+    parser.add_argument('-pt', '--checkpoint', type=str, help='file path to a torch checkpoint file')
     parser.add_argument('-d', '--torch_device', type=str, help='Device type and number given to'
                                                                'torch.device()')
     parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
@@ -85,13 +86,21 @@ def main():
     else:
         print('Using default transformation dictionary')
         transform_dict = transform_dicts.minimal_hyper_dict
-
-    training.training_loop(img_list, les_list, output_root, b1000_pref,
-                           transform_dict=transform_dict,
-                           device=args.torch_device,
-                           epoch_num=args.num_epochs,
-                           dataloader_workers=args.num_workers,
-                           num_nifti_save=args.num_nifti_save)
+    if args.checkpoint is None:
+        training.training_loop(img_list, les_list, output_root, b1000_pref,
+                               transform_dict=transform_dict,
+                               device=args.torch_device,
+                               epoch_num=args.num_epochs,
+                               dataloader_workers=args.num_workers,
+                               num_nifti_save=args.num_nifti_save)
+    else:
+        segmentation.validation_loop(img_list, les_list,
+                                     output_root,
+                                     args.checkpoint,
+                                     b1000_pref,
+                                     transform_dict=transform_dict,
+                                     device=args.torch_device,
+                                     dataloader_workers=args.num_workers)
 
 
 if __name__ == "__main__":

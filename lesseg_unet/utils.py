@@ -5,6 +5,7 @@ import json
 
 from bcblib.tools.nifti_utils import is_nifti
 from lesseg_unet.visualisation_utils import plot_seg
+from lesseg_unet.net import create_unet_model
 import nibabel as nib
 import torch
 
@@ -27,20 +28,25 @@ def nifti_affine_from_dataset(nifti_path: Union[str, bytes, os.PathLike]):
     return nib.load(nifti_path).affine
 
 
-def save_checkpoint(model, epoch, optimizer, output_folder):
+def save_checkpoint(model, epoch, optimizer, output_folder, filename=None):
     state = {'epoch': epoch,
              'state_dict': model.state_dict(),
              'optim_dict': optimizer.state_dict(),
              }
-    torch.save(state, Path(output_folder, 'state_dictionary_{}.pt'.format(epoch)))
-    # utils.save_checkpoint(state,
-    #                       is_best=is_best,  # True if this is the model with best metrics
-    #                       checkpoint=model_dir)  # path to folder
+    if filename is None:
+        torch.save(state, Path(output_folder, 'state_dictionary_{}.pt'.format(epoch)))
+    else:
+        torch.save(state, Path(output_folder, filename))
     return
 
 
-def load_checkpoint(checkpoint_path):
-    return
+def load_eval_from_checkpoint(checkpoint_path, device):
+    checkpoint = torch.load(checkpoint_path)
+    model = create_unet_model(device)
+    model.load_state_dict(checkpoint)
+    model.eval()
+    # bottom_up_graph.model.load_state_dict(checkpoint['bottom_up_graph_state_dict'])
+    return model
 
 
 def save_tensor_to_nifti(tensor, output_path, val_output_affine):
@@ -56,6 +62,7 @@ def save_img_lbl_seg_to_nifti(input_tensor, label_tensor, seg_tensor, output_dir
         save_tensor_to_nifti(seg_tensor, Path(output_dir, 'nib_output_{}.nii'.format(suffix)), val_output_affine)
 
 
+# TODO add a check for the type and allow numpy arrays as param to avoid loading from GPU every time
 def save_img_lbl_seg_to_png(input_tensor, output_dir, filename, label_tensor=None, seg_tensor=None,):
     input_np = input_tensor[0, 0, :, :, :].cpu().detach().numpy()
     if label_tensor is not None:

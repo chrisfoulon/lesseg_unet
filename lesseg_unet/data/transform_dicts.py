@@ -10,7 +10,6 @@ def_spatial_size = [96, 128, 96]
 
 # def_spatial_size = [96, 96, 96]
 min_small_crop_size = [int(0.95 * d) for d in def_spatial_size]
-
 full_hyper_dict = {
     'first_transform': [
         {'LoadImaged': {'keys': ['image', 'label']}},

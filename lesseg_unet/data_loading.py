@@ -2,12 +2,13 @@ import math
 import logging
 from pathlib import Path
 from typing import Sequence, Tuple
-import numpy as np
 
 import torch
 import monai
 from monai.data import list_data_collate
 from torch.utils.data import DataLoader
+from monai.data import Dataset
+from lesseg_unet import transformations
 
 
 def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
@@ -71,3 +72,31 @@ def data_loader_checker_first(check_ds, set_name=''):
         img_batch.shape,
         seg_batch.shape))
     return img_batch, seg_batch
+
+
+def init_training_data(img_path_list: Sequence,
+                       seg_path_list: Sequence,
+                       img_pref: str = None,
+                       transform_dict=None,
+                       train_val_percentage: float = 75) -> Tuple[monai.data.Dataset, monai.data.Dataset]:
+    logging.info('Listing input files to be loaded')
+    train_files, val_files = create_file_dict_lists(img_path_list, seg_path_list, img_pref,
+                                                    train_val_percentage)
+    logging.info('Create transformations')
+    train_img_transforms = transformations.segmentation_train_transformd(transform_dict)
+    val_img_transforms = transformations.segmentation_val_transformd(transform_dict)
+    # define dataset, data loader
+    logging.info('Create training monai datasets')
+    train_ds = Dataset(train_files, transform=train_img_transforms)
+
+    # define dataset, data loader
+    logging.info('Create validation actual monai datasets')
+    val_ds = Dataset(val_files, transform=val_img_transforms)
+    # We check if both the training and validation dataloaders can be created and used without immediate errors
+    logging.info('Checking data loading')
+    if train_val_percentage:
+        data_loader_checker_first(train_ds, 'training')
+    if train_val_percentage != 100:
+        data_loader_checker_first(val_ds, 'validation')
+    logging.info('Init training done.')
+    return train_ds, val_ds
