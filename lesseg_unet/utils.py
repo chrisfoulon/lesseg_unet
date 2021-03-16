@@ -43,7 +43,7 @@ def save_checkpoint(model, epoch, optimizer, output_folder, filename=None):
 def load_eval_from_checkpoint(checkpoint_path, device):
     checkpoint = torch.load(checkpoint_path)
     model = create_unet_model(device)
-    model.load_state_dict(checkpoint)
+    model.load_state_dict(checkpoint['state_dict'])
     model.eval()
     # bottom_up_graph.model.load_state_dict(checkpoint['bottom_up_graph_state_dict'])
     return model
