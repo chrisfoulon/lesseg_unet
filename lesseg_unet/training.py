@@ -27,14 +27,16 @@ def training_loop(img_path_list: Sequence,
                   batch_size: int = 10,
                   epoch_num: int = 50,
                   dataloader_workers: int = 4,
-                  num_nifti_save=25):
+                  num_nifti_save=25,
+                  train_val_percentage=75):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
     val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
     train_ds, val_ds = data_loading.init_training_data(img_path_list, seg_path_list, img_pref,
-                                                       transform_dict=transform_dict, train_val_percentage=75)
+                                                       transform_dict=transform_dict,
+                                                       train_val_percentage=train_val_percentage)
     train_loader = data_loading.create_training_data_loader(train_ds, batch_size, dataloader_workers)
     val_loader = data_loading.create_validation_data_loader(val_ds, dataloader_workers=dataloader_workers)
     model = net.create_unet_model(device, net.default_unet_hyper_params)

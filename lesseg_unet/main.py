@@ -32,6 +32,7 @@ def main():
     parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
     parser.add_argument('-nw', '--num_workers', default=4, type=int, help='Number of dataloader workers')
     parser.add_argument('-ne', '--num_epochs', default=50, type=int, help='Number of epochs')
+    parser.add_argument('-tv', '--train_val', type=int, help='Training / validation percentage cut')
     parser.add_argument('-ns', '--num_nifti_save', default=25, type=int, help='Number of niftis saved '
                                                                               'during validation')
     args = parser.parse_args()
@@ -86,6 +87,8 @@ def main():
     else:
         print('Using default transformation dictionary')
         transform_dict = transform_dicts.minimal_hyper_dict
+    if args.train_val is not None:
+        train_val_percentage = args.train_val
     if args.checkpoint is None:
         training.training_loop(img_list, les_list, output_root, b1000_pref,
                                transform_dict=transform_dict,
@@ -100,7 +103,8 @@ def main():
                                      b1000_pref,
                                      transform_dict=transform_dict,
                                      device=args.torch_device,
-                                     dataloader_workers=args.num_workers)
+                                     dataloader_workers=args.num_workers,
+                                     train_val_percentage=train_val_percentage)
 
 
 if __name__ == "__main__":

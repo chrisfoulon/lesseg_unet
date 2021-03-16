@@ -25,14 +25,16 @@ def validation_loop(img_path_list: Sequence,
                     batch_size: int = 10,
                     dataloader_workers: int = 4,
                     # num_nifti_save: int = -1,
-                    bad_dice_treshold: float = 0.1):
+                    bad_dice_treshold: float = 0.1,
+                    train_val_percentage=0):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
     val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
     _, val_ds = data_loading.init_training_data(img_path_list, seg_path_list, img_pref,
-                                                transform_dict=transform_dict, train_val_percentage=0)
+                                                transform_dict=transform_dict,
+                                                train_val_percentage=train_val_percentage)
     val_loader = data_loading.create_validation_data_loader(val_ds, dataloader_workers=dataloader_workers)
 
     model = utils.load_eval_from_checkpoint(checkpoint_path, device)
