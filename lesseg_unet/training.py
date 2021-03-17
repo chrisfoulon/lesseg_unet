@@ -177,7 +177,7 @@ def training_loop(img_path_list: Sequence,
                     outputs = post_trans(outputs)
                     loss = loss_function(outputs, labels[:, :1, :, :, :])
                     loss_list.append(loss.item())
-                    value, _ = dice_metric(y_pred=outputs, y=labels)
+                    value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
                     print(f'{step}/{batches_per_epoch}, val_loss: {loss.item():.4f}')
                     writer.add_scalar('val_loss', loss.item(), epoch + 1)
                     val_score_list.append(value.item())
