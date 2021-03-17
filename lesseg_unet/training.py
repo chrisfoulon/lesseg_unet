@@ -179,6 +179,7 @@ def training_loop(img_path_list: Sequence,
                     outputs = model(inputs)
                     outputs = post_trans(outputs)
                     loss = loss_function(outputs, labels[:, :1, :, :, :])
+                    loss.backward()
                     loss_list.append(loss.item())
                     value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
                     print(f'{step}/{val_batches_per_epoch}, val_loss: {loss.item():.4f}')
@@ -186,6 +187,10 @@ def training_loop(img_path_list: Sequence,
                     val_score_list.append(value.item())
                     metric_count += len(value)
                     metric_sum += value.item() * len(value)
+                    if value.item() > val_save_thr:
+                        img_count += 1
+                    else:
+                        trash_count += 1
                     # if best_metric > val_save_thr:
                     #     if value.item() * len(value) > val_save_thr:
                     #         img_count += 1
@@ -239,16 +244,16 @@ def training_loop(img_path_list: Sequence,
                     print('saved new best metric model')
                     writer.add_scalar('val_best_mean_dice', metric, epoch + 1)
                     df.at[epoch + 1, 'val_best_mean_dice'] = metric
-                    if best_metric > val_save_thr:
-                        print('Replacing best images')
-                        for f in best_val_images_dir.iterdir():
-                            os.remove(f)
-                        for f in best_trash_images_dir.iterdir():
-                            os.remove(f)
-                        for f in val_images_dir.iterdir():
-                            shutil.copy(f, best_val_images_dir)
-                        for f in trash_val_images_dir.iterdir():
-                            shutil.copy(f, best_trash_images_dir)
+                    # if best_metric > val_save_thr:
+                    #     print('Replacing best images')
+                    #     for f in best_val_images_dir.iterdir():
+                    #         os.remove(f)
+                    #     for f in best_trash_images_dir.iterdir():
+                    #         os.remove(f)
+                    #     for f in val_images_dir.iterdir():
+                    #         shutil.copy(f, best_val_images_dir)
+                    #     for f in trash_val_images_dir.iterdir():
+                    #         shutil.copy(f, best_trash_images_dir)
                     # plot the last model output as GIF image in TensorBoard with the corresponding image and label
                     # plot_2d_or_3d_image(val_images, epoch + 1, writer, index=0, tag="image")
                     # plot_2d_or_3d_image(val_labels, epoch + 1, writer, index=0, tag="label")
