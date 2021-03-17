@@ -179,7 +179,7 @@ def training_loop(img_path_list: Sequence,
                     outputs = model(inputs)
                     outputs = post_trans(outputs)
                     loss = loss_function(outputs, labels[:, :1, :, :, :])
-                    loss.backward()
+                    # loss.backward()
                     loss_list.append(loss.item())
                     value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
                     print(f'{step}/{val_batches_per_epoch}, val_loss: {loss.item():.4f}')
