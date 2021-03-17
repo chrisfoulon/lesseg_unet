@@ -97,27 +97,28 @@ class Binarized(MapTransform):
 
 
 class CoordConv(Transform):
-    def __init__(self) -> None:
-        return
+    def __init__(self, gradients: np.ndarray = None) -> None:
+        self.gradients = gradients
 
     def __call__(self, img: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
         # if isinstance(img, torch.Tensor):
         #     img = np.asarray(img[0, :, :, :].detach().numpy())
         # else:
         #     img = np.asarray(img[0, :, :, :])
-        x_grad = np.zeros_like(img)
-        y_grad = np.zeros_like(img)
-        z_grad = np.zeros_like(img)
-        # print(x_grad.shape)
-        for k in range(img.shape[1]):
-            x_grad[0, k, :, :] = k
-        for k in range(img.shape[2]):
-            y_grad[0, :, k, :] = k
-        for k in range(img.shape[3]):
-            z_grad[0, :, :, k] = k
-        # output = torch.Tensor(img).unsqueeze(0)
-        img = np.concatenate((img, x_grad, y_grad, z_grad), 0)
-        # np.concatenate((img, x_grad, y_grad z_grad), axis=1)
+        if self.gradients is None:
+            x_grad = np.zeros_like(img)
+            y_grad = np.zeros_like(img)
+            z_grad = np.zeros_like(img)
+            # print(x_grad.shape)
+            for k in range(img.shape[1]):
+                x_grad[0, k, :, :] = k
+            for k in range(img.shape[2]):
+                y_grad[0, :, k, :] = k
+            for k in range(img.shape[3]):
+                z_grad[0, :, :, k] = k
+            img = np.concatenate((img, x_grad, y_grad, z_grad), 0)
+        else:
+            img = np.concatenate((img, self.gradients), 0)
         return torch.Tensor(img)
 
 
@@ -125,9 +126,9 @@ class CoordConvd(MapTransform):
     """
     """
 
-    def __init__(self, keys: KeysCollection) -> None:
+    def __init__(self, keys: KeysCollection, gradients: np.ndarray = None) -> None:
         super().__init__(keys)
-        self.coord_conv = CoordConv()
+        self.coord_conv = CoordConv(gradients)
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d = dict(data)
@@ -470,14 +471,61 @@ def trans_list_from_dict(hyper_param_dict):
         trans_list_from_list(hyper_param_dict[k])
 
 
+def find_param_from_hyper_dict(hyper_param_dict, param_name, transform_list_name=None, transform_name=None):
+    for list_name in hyper_param_dict:
+        if transform_list_name is not None and list_name == transform_list_name:
+            for d in hyper_param_dict[list_name]:
+                for t in d:
+                    if transform_name is not None and t == transform_name:
+                        if param_name in d[t]:
+                            return d[t][param_name]
+                    if transform_name is None:
+                        if param_name in d[t]:
+                            return d[t][param_name]
+        if transform_list_name is None:
+            for d in hyper_param_dict[list_name]:
+                for t in d:
+                    if transform_name is not None and t == transform_name:
+                        if param_name in d[t]:
+                            return d[t][param_name]
+                    if transform_name is None:
+                        if param_name in d[t]:
+                            return d[t][param_name]
+    return None
+
+
 """
 Transformation compositions for the image segmentation
 """
 
 
+def setup_coord_conv(hyper_param_dict):
+    spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size', 'last_transform')
+    if spatial_size is None:
+        spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size')
+    x_grad = np.expand_dims(np.zeros(spatial_size), 0)
+    y_grad = np.expand_dims(np.zeros(spatial_size), 0)
+    z_grad = np.expand_dims(np.zeros(spatial_size), 0)
+    for k in range(spatial_size[0]):
+        x_grad[0, k, :, :] = k
+    for k in range(spatial_size[1]):
+        y_grad[0, :, k, :] = k
+    for k in range(spatial_size[2]):
+        z_grad[0, :, :, k] = k
+    gradients = np.concatenate((x_grad, y_grad, z_grad), 0)
+    for k in hyper_param_dict:
+        # Each dict in the sublist
+        for d in hyper_param_dict[k]:
+            # Each Transformation name in the sublist
+            for name in d:
+                if name == 'CoordConvd' or name == 'CoordConv':
+                    d[name]['gradients'] = gradients
+
+
 def segmentation_train_transformd(hyper_param_dict=None):
     if hyper_param_dict is None:
         hyper_param_dict = hyper_dict
+    setup_coord_conv(hyper_param_dict)
     check_imports(hyper_param_dict)
     check_hyper_param_dict_shape(hyper_param_dict)
     compose_list = []
@@ -485,10 +533,10 @@ def segmentation_train_transformd(hyper_param_dict=None):
         trs = trans_list_from_list(hyper_param_dict[d_list_name])
         if trs is not None:
             compose_list += trs
-    train_transformd = Compose(
+    train_transd = Compose(
         compose_list
     )
-    return train_transformd
+    return train_transd
 
 
 def segmentation_val_transformd(hyper_param_dict=None):
@@ -496,144 +544,7 @@ def segmentation_val_transformd(hyper_param_dict=None):
         hyper_param_dict = hyper_dict
     val_transd = Compose(
         trans_list_from_list(hyper_param_dict['first_transform']) +
-        # trans_list_from_dict(hyper_dict['labelonly_transform']) +
+        # trans_list_from_list(hyper_dict['labelonly_transform']) +
         trans_list_from_list(hyper_param_dict['last_transform'])
     )
     return val_transd
-
-# def segmentation_train_transform():
-#     train_imtrans = Compose(
-#         trans_list_from_dict(hyper_dict['first_transform']) +
-#         trans_list_from_dict(hyper_dict['intensity_transform']) +
-#         trans_list_from_dict(hyper_dict['shape_transform']) +
-#         trans_list_from_dict(hyper_dict['last_transform'])
-#     )
-#     train_segtrans = Compose(
-#         trans_list_from_dict(hyper_dict['first_transform']) +
-#         trans_list_from_dict(hyper_dict['shape_transform']) +
-#         trans_list_from_dict(hyper_dict['seg_transform']) +
-#         trans_list_from_dict(hyper_dict['last_transform'])
-#     )
-#     return train_imtrans, train_segtrans
-
-
-# def segmentation_val_transform(resize=True):
-#     val_imtrans = Compose(
-#         trans_list_from_dict(hyper_dict['first_transform']) +
-#         trans_list_from_dict(hyper_dict['shape_transform']) +
-#         trans_list_from_dict(hyper_dict['last_transform']) if resize else [trans_from_name('ToTensor', hyper_dict)]
-#     )
-#     val_segtrans = Compose(
-#         trans_list_from_dict(hyper_dict['first_transform']) +
-#         trans_list_from_dict(hyper_dict['shape_transform']) +
-#         # trans_list_from_dict(hyper_dict['seg_transform']) +
-#         trans_list_from_dict(hyper_dict['last_transform']) if resize else [trans_from_name('ToTensor', hyper_dict)]
-#     )
-#     return val_imtrans, val_segtrans
-
-# Augmentation params
-# hyper_params['use_augmentation_in_training'] = True
-# hyper_params['enable_Addblob'] = False
-# hyper_params['aug_prob'] = 0.1
-# hyper_params['aug_prob_rigid'] = 0.5
-# hyper_params['torchio_aug_prob'] = 0.1
-# hyper_params['RandHistogramShift_numcontrolpoints'] = (10, 15)
-# hyper_params['RandomBlur_std'] = (0.1, 0.5)
-# hyper_params['RandShiftIntensity_offset'] = 0.5
-# hyper_params['RandAdjustContrast_gamma'] = 0.5
-# hyper_params['RandomAffine_scales_range_frac'] = 0.3
-# hyper_params['RandomAffine_max_degree_rotation'] = 360
-# hyper_params['RandomAffine_max_degree_shear'] = 10
-# hyper_params['RandomAffine_translate_voxels_range'] = 20
-# hyper_params['RandomAffine_image_interpolation'] = 'nearest'
-# hyper_params['RandZoom_mode'] = 'nearest'
-# # hyper_params['RandomElastic_sigma_range'] = (0.01, 1)
-# # hyper_params['RandomElasticDeformation_numcontrolpoints'] = hyper_params['resample_dims'][0] // 8
-# # hyper_params['RandomElasticDeformation_maxdisplacement'] = 1.0
-# # hyper_params['RandomElasticDeformation_prob'] = 0.1
-# hyper_params['torchio_RandomMotion_num_transforms'] = 1
-# hyper_params['torchio_RandomGhosting_num_ghosts'] = (4, 10)
-# hyper_params['torchio_RandomSpike_intensity'] = (1, 3)
-# hyper_params['torchio_RandomBiasField_magnitude'] = 1
-# hyper_params['torchio_RandomNoise_std'] = (0.1, 0.2)
-# hyper_params['torchio_RandomFlip_axes'] = (0, 1, 2)
-# hyper_params['torchio_RandomFlip_per_axes_prob'] = 0.3
-
-
-# transforms_resize_to_tensor = [monai_trans.Resize(hyper_params['resample_dims']),
-#                                monai_trans.ToTensor()]
-# train_transforms = []
-# if hyper_params['use_augmentation_in_training']:
-#     rot_angle_in_rads = hyper_params['RandomAffine_max_degree_rotation'] * (2 * np.pi / 360)
-#     shear_angle_in_rads = hyper_params['RandomAffine_max_degree_shear'] * (2 * np.pi / 360)
-#
-#     # if hyper_params['enable_Addblob']:
-#     #     train_transforms += [customAddblob(hyper_params['aug_prob'])]
-#     train_transforms += [
-#         monai_trans.RandHistogramShift(num_control_points=hyper_params['RandHistogramShift_numcontrolpoints'],
-#                                        prob=hyper_params['aug_prob'])]
-#     train_transforms += [monai_trans.RandAffine(prob=hyper_params['aug_prob_rigid'],
-#                                                 rotate_range=rot_angle_in_rads,
-#                                                 shear_range=None,
-#                                                 translate_range=hyper_params['RandomAffine_translate_voxels_range'],
-#                                                 scale_range=None,
-#                                                 spatial_size=None,
-#                                                 padding_mode="border",
-#                                                 as_tensor_output=False)]
-#     train_transforms += [monai_trans.RandAffine(prob=hyper_params['aug_prob'],
-#                                                 rotate_range=None,
-#                                                 shear_range=shear_angle_in_rads,
-#                                                 translate_range=None,
-#                                                 scale_range=hyper_params['RandomAffine_scales_range_frac'],
-#                                                 spatial_size=None,
-#                                                 padding_mode="border",
-#                                                 as_tensor_output=False)]
-#     # train_transforms += [monai_trans.Rand3DElastic(sigma_range=hyper_params['RandomElastic_sigma_range'],
-#     #                                                 magnitude_range=(0, 1),
-#     #                                                 prob=hyper_params['aug_prob'],
-#     #                                                 rotate_range=(
-#     #                                                 rot_angle_in_rads, rot_angle_in_rads, rot_angle_in_rads),
-#     #                                                 shear_range=(
-#     #                                                 shear_angle_in_rads, shear_angle_in_rads, shear_angle_in_rads),
-#     #                                                 translate_range=hyper_params[
-#     #                                                     'RandomAffine_translate_voxels_range'],
-#     #                                                 scale_range=hyper_params['RandomAffine_scales_range_frac'],
-#     #                                                 spatial_size=None,
-#     #                                                 # padding_mode="reflection",
-#     #                                                 padding_mode="border",
-#     #                                                 # padding_mode="zeros",
-#     #                                                 as_tensor_output=False)]
-#     # train_transforms += [monai_trans.Rand3DElastic(sigma_range=(0, 0.01),
-#     #                                                magnitude_range=(0, 5),  # hyper_params['Rand3DElastic_magnitude_range']
-#     #                                                prob=1,
-#     #                                                rotate_range=None,
-#     #                                                shear_range=None,
-#     #                                                translate_range=None,
-#     #                                                scale_range=None,
-#     #                                                spatial_size=None,
-#     #                                                # padding_mode="reflection",
-#     #                                                padding_mode="border",
-#     #                                                # padding_mode="zeros",
-#     #                                                as_tensor_output=False)]
-#     train_transforms += [torchio_trans.RandomBlur(std=hyper_params['RandomBlur_std'],
-#                                                   p=hyper_params['aug_prob'])]
-#     train_transforms += [torchio_trans.RandomNoise(mean=0, std=hyper_params['torchio_RandomNoise_std'],
-#                                                    p=hyper_params['torchio_aug_prob'])]
-#     train_transforms += [torchio_trans.RandomFlip(axes=hyper_params['torchio_RandomFlip_axes'],
-#                                                   flip_probability=hyper_params['torchio_RandomFlip_per_axes_prob'],
-#                                                   p=hyper_params['torchio_aug_prob'])]
-#     train_transforms += [torchio_trans.RandomMotion(p=hyper_params['torchio_aug_prob'],
-#                                                     num_transforms=hyper_params['torchio_RandomMotion_num_transforms'])]
-#     train_transforms += [torchio_trans.RandomGhosting(p=hyper_params['torchio_aug_prob'],
-#                                                       num_ghosts=hyper_params['torchio_RandomGhosting_num_ghosts'])]
-#     train_transforms += [torchio_trans.RandomSpike(p=hyper_params['torchio_aug_prob'],
-#                                                    intensity=hyper_params['torchio_RandomSpike_intensity'])]
-#     train_transforms += [torchio_trans.RandomBiasField(p=hyper_params['torchio_aug_prob'],
-#                                                        coefficients=hyper_params['torchio_RandomBiasField_magnitude'])]
-#     train_transforms = [torchvis_trans.RandomOrder(train_transforms)]  # Randomise the transforms we've just defined
-#     train_transforms += [customIsotropicResampling(prob=hyper_params['aug_prob'],
-#                                                    resample_dims=hyper_params['resample_dims'])]
-# train_transforms += transforms_resize_to_tensor
-# train_transforms = monai_trans.Compose(train_transforms)
-# val_head_transforms = monai_trans.Compose(transforms_resize_to_tensor)
-# val_nonhead_transforms = monai_trans.Compose(transforms_resize_to_tensor)
