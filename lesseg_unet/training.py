@@ -15,7 +15,7 @@ from monai.transforms import (
     Compose,
 )
 from torch.utils.tensorboard import SummaryWriter
-from lesseg_unet import net, utils, data_loading
+from lesseg_unet import net, utils, data_loading, transformations
 
 
 def training_loop(img_path_list: Sequence,
@@ -39,7 +39,12 @@ def training_loop(img_path_list: Sequence,
                                                        train_val_percentage=train_val_percentage)
     train_loader = data_loading.create_training_data_loader(train_ds, batch_size, dataloader_workers)
     val_loader = data_loading.create_validation_data_loader(val_ds, dataloader_workers=dataloader_workers)
-    model = net.create_unet_model(device, net.default_unet_hyper_params)
+    model_param_dict = net.default_unet_hyper_params
+    # checking is CoordConv is used and change the input channel dimension
+    for t in val_ds.transform.transforms:
+        if isinstance(t, transformations.CoordConvd):
+            model_param_dict['in_channels'] = 4
+    model = net.create_unet_model(device, model_param_dict)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
     loss_function = monai.losses.DiceLoss(sigmoid=True)
@@ -165,12 +170,16 @@ def training_loop(img_path_list: Sequence,
                 # outputs = None
                 # saver = NiftiSaver(output_dir=output_dir)
                 val_score_list = []
+                loss_list = []
                 for val_data in val_loader:
                     inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
                     outputs = model(inputs)
                     outputs = post_trans(outputs)
-
+                    loss = loss_function(outputs, labels)
+                    loss_list.append(loss.item())
+                    writer.add_scalar('val_loss', metric, epoch + 1)
                     value, _ = dice_metric(y_pred=outputs, y=labels)
+                    print(f'{step}/{batches_per_epoch}, val_loss: {loss.item():.4f}')
                     val_score_list.append(value.item())
                     metric_count += len(value)
                     metric_sum += value.item() * len(value)
@@ -193,18 +202,21 @@ def training_loop(img_path_list: Sequence,
                     #                 inputs, labels, outputs, trash_val_images_dir, val_output_affine, trash_count)
                 metric = metric_sum / metric_count
                 metric_values.append(metric)
+                val_mean_loss = np.mean(loss_list)
                 median = np.median(np.array(val_score_list))
                 std = np.std(np.array(val_score_list))
                 min_score = np.min(np.array(val_score_list))
                 max_score = np.max(np.array(val_score_list))
+                writer.add_scalar('val_mean_loss', val_mean_loss, epoch + 1)
                 writer.add_scalar('val_mean_dice', metric, epoch + 1)
                 writer.add_scalar('val_median_dice', median, epoch + 1)
                 writer.add_scalar('trash_img_nb', trash_count, epoch + 1)
                 writer.add_scalar('val_min_dice', min_score, epoch + 1)
                 writer.add_scalar('val_max_dice', max_score, epoch + 1)
                 writer.add_scalar('val_std_dice', std, epoch + 1)
-                df.loc[0] = pd.Series({
+                df.loc[epoch + 1] = pd.Series({
                     'avg_train_loss': epoch_loss,
+                    'val_mean_loss': val_mean_loss,
                     'val_mean_dice': metric,
                     'val_median_dice': median,
                     'val_std_dice': std,

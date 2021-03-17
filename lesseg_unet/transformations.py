@@ -71,8 +71,8 @@ class Binarize(Transform):
         output = np.asarray(np.where(img > self.lower_threshold, 1, 0), dtype=img.dtype)
         if len(tensor_shape) == 4:
             output = torch.from_numpy(output).unsqueeze(0)
-        if len(tensor_shape) == 5:
-            output = torch.from_numpy(output).unsqueeze(0).unsqueeze(0)
+        # if len(tensor_shape) == 5:
+        #     output = torch.from_numpy(output).unsqueeze(0).unsqueeze(0)
         s += '\n {}'.format(output.shape)
         # print('Binarized ######\n{}\n#####'.format(s))
         return output
@@ -93,6 +93,46 @@ class Binarized(MapTransform):
         d = dict(data)
         for idx, key in enumerate(self.keys):
             d[key] = self.binarize(d[key])
+        return d
+
+
+class CoordConv(Transform):
+    def __init__(self) -> None:
+        return
+
+    def __call__(self, img: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
+        # if isinstance(img, torch.Tensor):
+        #     img = np.asarray(img[0, :, :, :].detach().numpy())
+        # else:
+        #     img = np.asarray(img[0, :, :, :])
+        x_grad = np.zeros_like(img)
+        y_grad = np.zeros_like(img)
+        z_grad = np.zeros_like(img)
+        # print(x_grad.shape)
+        for k in range(img.shape[1]):
+            x_grad[0, k, :, :] = k
+        for k in range(img.shape[2]):
+            y_grad[0, :, k, :] = k
+        for k in range(img.shape[3]):
+            z_grad[0, :, :, k] = k
+        # output = torch.Tensor(img).unsqueeze(0)
+        img = np.concatenate((img, x_grad, y_grad, z_grad), 0)
+        # np.concatenate((img, x_grad, y_grad z_grad), axis=1)
+        return torch.Tensor(img)
+
+
+class CoordConvd(MapTransform):
+    """
+    """
+
+    def __init__(self, keys: KeysCollection) -> None:
+        super().__init__(keys)
+        self.coord_conv = CoordConv()
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        d = dict(data)
+        for idx, key in enumerate(self.keys):
+            d[key] = self.coord_conv(d[key])
         return d
 
 
