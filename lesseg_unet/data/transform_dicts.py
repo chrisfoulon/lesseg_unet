@@ -200,7 +200,6 @@ minimal_hyper_dict = {
             'lower_threshold': 0.5
         }},
         {'NormalizeIntensityd': {'keys': ['image']}},
-        {'CoordConvd': {'keys': ['image', 'label']}},
     ]
 }
 
