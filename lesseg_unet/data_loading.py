@@ -67,8 +67,9 @@ def data_loader_checker_first(check_ds, set_name=''):
                               collate_fn=list_data_collate)
     first_dict = monai.utils.misc.first(check_loader)
     img_batch, seg_batch = first_dict['image'], first_dict['label']
-    logging.info('First {} loader batch size: images {}, lesions {}'.format(
+    logging.info('First {} loader (total size: {}) batch size: images {}, lesions {}'.format(
         set_name,
+        len(check_ds),
         img_batch.shape,
         seg_batch.shape))
     return img_batch, seg_batch

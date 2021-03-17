@@ -121,6 +121,7 @@ def training_loop(img_path_list: Sequence,
                           'val_best_mean_dice']
     df = pd.DataFrame(columns=perf_measure_names)
     batches_per_epoch = len(train_loader)
+    val_batches_per_epoch = len(val_loader)
     """
     Training loop
     """
@@ -171,14 +172,16 @@ def training_loop(img_path_list: Sequence,
                 # saver = NiftiSaver(output_dir=output_dir)
                 val_score_list = []
                 loss_list = []
+                step = 0
                 for val_data in val_loader:
+                    step += 1
                     inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
                     outputs = model(inputs)
                     outputs = post_trans(outputs)
                     loss = loss_function(outputs, labels[:, :1, :, :, :])
                     loss_list.append(loss.item())
                     value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
-                    print(f'{step}/{batches_per_epoch}, val_loss: {loss.item():.4f}')
+                    print(f'{step}/{val_batches_per_epoch}, val_loss: {loss.item():.4f}')
                     writer.add_scalar('val_loss', loss.item(), epoch + 1)
                     val_score_list.append(value.item())
                     metric_count += len(value)
