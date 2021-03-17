@@ -1,5 +1,5 @@
 from math import radians
-
+from copy import deepcopy
 high_prob = .2
 low_prob = .1
 tiny_prob = 0.05
@@ -145,6 +145,9 @@ full_hyper_dict = {
     ]
 }
 
+full_hyper_dict_cc = deepcopy(full_hyper_dict)
+full_hyper_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
+
 
 minimal_hyper_dict = {
     'first_transform': [
@@ -200,3 +203,6 @@ minimal_hyper_dict = {
         {'CoordConvd': {'keys': ['image', 'label']}},
     ]
 }
+
+minimal_hyper_dict_cc = deepcopy(minimal_hyper_dict)
+minimal_hyper_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
