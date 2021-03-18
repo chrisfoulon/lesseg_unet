@@ -8,6 +8,7 @@ from lesseg_unet.visualisation_utils import plot_seg
 from lesseg_unet.net import create_unet_model
 import nibabel as nib
 import torch
+import numpy as np
 
 
 def create_input_path_list_from_root(root_folder_path, recursive_search=False):
@@ -49,30 +50,44 @@ def load_eval_from_checkpoint(checkpoint_path, device):
     return model
 
 
-def save_tensor_to_nifti(tensor, output_path, val_output_affine):
-    np_tensor = tensor[0, 0, :, :, :].cpu().detach().numpy()
-    nib.save(nib.Nifti1Image(np_tensor, val_output_affine), output_path)
+def save_tensor_to_nifti(image: Union[np.ndarray, torch.Tensor],
+                         output_path: Union[str, bytes, os.PathLike],
+                         val_output_affine: np.ndarray) -> None:
+    if isinstance(image, torch.Tensor):
+        image_np = image[0, 0, :, :, :].cpu().detach().numpy()
+    else:
+        image_np = image
+    nib.save(nib.Nifti1Image(image_np, val_output_affine), output_path)
 
 
-def save_img_lbl_seg_to_nifti(input_tensor, label_tensor, seg_tensor, output_dir, val_output_affine, suffix):
-    save_tensor_to_nifti(input_tensor, Path(output_dir, 'nib_input_{}.nii'.format(suffix)), val_output_affine)
-    if label_tensor is not None:
-        save_tensor_to_nifti(label_tensor, Path(output_dir, 'nib_label_{}.nii'.format(suffix)), val_output_affine)
-    if seg_tensor is not None:
-        save_tensor_to_nifti(seg_tensor, Path(output_dir, 'nib_output_{}.nii'.format(suffix)), val_output_affine)
+def save_img_lbl_seg_to_nifti(image: Union[np.ndarray, torch.Tensor],
+                              label: Union[np.ndarray, torch.Tensor],
+                              seg: Union[np.ndarray, torch.Tensor],
+                              output_dir: Union[str, bytes, os.PathLike],
+                              val_output_affine: np.ndarray,
+                              suffix: str) -> None:
+    save_tensor_to_nifti(image, Path(output_dir, 'nib_input_{}.nii'.format(suffix)), val_output_affine)
+    if label is not None:
+        save_tensor_to_nifti(label, Path(output_dir, 'nib_label_{}.nii'.format(suffix)), val_output_affine)
+    if seg is not None:
+        save_tensor_to_nifti(seg, Path(output_dir, 'nib_output_{}.nii'.format(suffix)), val_output_affine)
 
 
 # TODO add a check for the type and allow numpy arrays as param to avoid loading from GPU every time
-def save_img_lbl_seg_to_png(input_tensor, output_dir, filename, label_tensor=None, seg_tensor=None,):
-    input_np = input_tensor[0, 0, :, :, :].cpu().detach().numpy()
-    if label_tensor is not None:
-        label_np = label_tensor[0, 0, :, :, :].cpu().detach().numpy()
-    else:
-        label_np = None
-    if seg_tensor is not None:
-        seg_np = seg_tensor[0, 0, :, :, :].cpu().detach().numpy()
-    else:
-        seg_np = None
+def save_img_lbl_seg_to_png(image: Union[np.ndarray, torch.Tensor],
+                            output_dir: Union[str, bytes, os.PathLike],
+                            filename: str,
+                            label: Union[np.ndarray, torch.Tensor] = None,
+                            seg: Union[np.ndarray, torch.Tensor] = None) -> None:
+    input_np = image
+    if isinstance(image, torch.Tensor):
+        input_np = image[0, 0, :, :, :].cpu().detach().numpy()
+    label_np = label
+    if isinstance(label, torch.Tensor):
+        label_np = label[0, 0, :, :, :].cpu().detach().numpy()
+    seg_np = seg
+    if isinstance(seg, torch.Tensor):
+        seg_np = seg[0, 0, :, :, :].cpu().detach().numpy()
     plot_seg(input_np, label_np, seg_np, Path(output_dir, filename + '.png'))
 
 

@@ -90,14 +90,14 @@ def validation_loop(img_path_list: Sequence,
                 utils.save_img_lbl_seg_to_png(
                     inputs, val_images_dir, 'validation_img_{}'.format(img_count), labels, outputs)
                 utils.save_img_lbl_seg_to_nifti(
-                    inputs, labels, outputs, val_images_dir, val_output_affine, img_count)
+                    inputs, labels, outputs, val_images_dir, val_output_affine, str(img_count))
             if value.item() * len(value) < bad_dice_treshold:
                 trash_count += 1
                 print('Saving trash image #{}'.format(trash_count))
                 utils.save_img_lbl_seg_to_png(
                     inputs, trash_val_images_dir, 'trash_img_{}'.format(trash_count), labels, outputs)
                 utils.save_img_lbl_seg_to_nifti(
-                    inputs, labels, outputs, trash_val_images_dir, val_output_affine, trash_count)
+                    inputs, labels, outputs, trash_val_images_dir, val_output_affine, str(trash_count))
         metric = metric_sum / metric_count
         metric_values.append(metric)
         median = np.median(np.array(val_score_list))

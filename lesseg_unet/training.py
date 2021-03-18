@@ -48,6 +48,7 @@ def training_loop(img_path_list: Sequence,
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
     loss_function = monai.losses.DiceLoss(sigmoid=True)
+    val_loss_function = monai.losses.DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
     print('check ok')
     # for i in range(25):
@@ -94,7 +95,7 @@ def training_loop(img_path_list: Sequence,
     best_metric_epoch = -1
     epoch_loss_values = list()
     metric_values = list()
-    val_save_thr = 1
+    val_save_thr = 0.7
     """
     Measure tracking init
     """
@@ -178,12 +179,12 @@ def training_loop(img_path_list: Sequence,
                     inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
                     outputs = model(inputs)
                     outputs = post_trans(outputs)
-                    loss = loss_function(outputs, labels[:, :1, :, :, :])
+                    loss = val_loss_function(outputs, labels[:, :1, :, :, :])
                     # loss.backward()
                     loss_list.append(loss.item())
                     value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
                     print(f'{step}/{val_batches_per_epoch}, val_loss: {loss.item():.4f}')
-                    writer.add_scalar('val_loss', loss.item(), epoch + 1)
+                    writer.add_scalar('val_loss', loss.item(), val_batches_per_epoch * epoch + step)
                     val_score_list.append(value.item())
                     metric_count += len(value)
                     metric_sum += value.item() * len(value)
