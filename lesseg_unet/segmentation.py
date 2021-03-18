@@ -22,8 +22,8 @@ def validation_loop(img_path_list: Sequence,
                     img_pref: str = None,
                     transform_dict: dict = None,
                     device: str = None,
-                    batch_size: int = 10,
-                    dataloader_workers: int = 4,
+                    batch_size: int = 1,
+                    dataloader_workers: int = 8,
                     # num_nifti_save: int = -1,
                     bad_dice_treshold: float = 0.1,
                     train_val_percentage=0):
@@ -35,19 +35,20 @@ def validation_loop(img_path_list: Sequence,
     _, val_ds = data_loading.init_training_data(img_path_list, seg_path_list, img_pref,
                                                 transform_dict=transform_dict,
                                                 train_val_percentage=train_val_percentage)
-    val_loader = data_loading.create_validation_data_loader(val_ds, dataloader_workers=dataloader_workers)
+    val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
+                                                            dataloader_workers=dataloader_workers)
 
     model = utils.load_eval_from_checkpoint(checkpoint_path, device)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
 
     # start a typical PyTorch training
-    val_interval = 1
-    best_metric = -1
-    best_metric_epoch = -1
-    epoch_loss_values = list()
+    # val_interval = 1
+    # best_metric = -1
+    # best_metric_epoch = -1
+    # epoch_loss_values = list()
     metric_values = list()
-    val_save_thr = 0.7
+    # val_save_thr = 0.7
     """
     Measure tracking init
     """
@@ -79,25 +80,27 @@ def validation_loop(img_path_list: Sequence,
             inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
             outputs = model(inputs)
             outputs = post_trans(outputs)
-
+            inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy()
+            labels_np = labels[0, 0, :, :, :].cpu().detach().numpy()
+            outputs_np = outputs[0, 0, :, :, :].cpu().detach().numpy()
             value, _ = dice_metric(y_pred=outputs, y=labels)
             val_score_list.append(value.item())
             metric_count += len(value)
             metric_sum += value.item() * len(value)
-            if value.item() * len(value) > val_save_thr:
-                img_count += 1
-                print('Saving good image #{}'.format(img_count))
-                utils.save_img_lbl_seg_to_png(
-                    inputs, val_images_dir, 'validation_img_{}'.format(img_count), labels, outputs)
-                utils.save_img_lbl_seg_to_nifti(
-                    inputs, labels, outputs, val_images_dir, val_output_affine, str(img_count))
-            if value.item() * len(value) < bad_dice_treshold:
+            if value.item() < bad_dice_treshold:
                 trash_count += 1
                 print('Saving trash image #{}'.format(trash_count))
                 utils.save_img_lbl_seg_to_png(
-                    inputs, trash_val_images_dir, 'trash_img_{}'.format(trash_count), labels, outputs)
+                    inputs_np, trash_val_images_dir, 'trash_img_{}'.format(trash_count), labels_np, outputs_np)
                 utils.save_img_lbl_seg_to_nifti(
-                    inputs, labels, outputs, trash_val_images_dir, val_output_affine, str(trash_count))
+                    inputs_np, labels_np, outputs_np, trash_val_images_dir, val_output_affine, str(trash_count))
+            else:
+                img_count += 1
+                print('Saving good image #{}'.format(img_count))
+                utils.save_img_lbl_seg_to_png(
+                    inputs_np, val_images_dir, 'validation_img_{}'.format(img_count), labels_np, outputs_np)
+                utils.save_img_lbl_seg_to_nifti(
+                    inputs_np, labels_np, outputs_np, val_images_dir, val_output_affine, str(img_count))
         metric = metric_sum / metric_count
         metric_values.append(metric)
         median = np.median(np.array(val_score_list))
