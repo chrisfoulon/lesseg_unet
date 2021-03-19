@@ -33,7 +33,7 @@ def training_loop(img_path_list: Sequence,
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
-    val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
+    # val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
     train_ds, val_ds = data_loading.init_training_data(img_path_list, seg_path_list, img_pref,
                                                        transform_dict=transform_dict,
                                                        train_val_percentage=train_val_percentage)

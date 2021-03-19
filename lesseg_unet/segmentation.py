@@ -83,7 +83,7 @@ def validation_loop(img_path_list: Sequence,
             inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy()
             labels_np = labels[0, 0, :, :, :].cpu().detach().numpy()
             outputs_np = outputs[0, 0, :, :, :].cpu().detach().numpy()
-            value, _ = dice_metric(y_pred=outputs, y=labels)
+            value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
             val_score_list.append(value.item())
             metric_count += len(value)
             metric_sum += value.item() * len(value)
