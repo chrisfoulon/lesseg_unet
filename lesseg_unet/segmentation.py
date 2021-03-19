@@ -5,8 +5,7 @@ from typing import Sequence, Union
 import numpy as np
 import pandas as pd
 import torch
-from lesseg_unet import data_loading, utils
-import monai
+from lesseg_unet import data_loading, utils, net, transformations
 from monai.metrics import DiceMetric
 from monai.transforms import (
     Activations,
@@ -37,8 +36,11 @@ def validation_loop(img_path_list: Sequence,
                                                 train_val_percentage=train_val_percentage)
     val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
                                                             dataloader_workers=dataloader_workers)
-
-    model = utils.load_eval_from_checkpoint(checkpoint_path, device)
+    unet_hyper_params = net.default_unet_hyper_params
+    for t in val_ds.transform.transforms:
+        if isinstance(t, transformations.CoordConvd):
+            unet_hyper_params = net.coord_conv_unet_hyper_params
+    model = utils.load_eval_from_checkpoint(checkpoint_path, device, unet_hyper_params)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
 

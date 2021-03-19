@@ -1,4 +1,5 @@
 import logging
+from copy import deepcopy
 
 import monai
 import torch
@@ -12,6 +13,9 @@ default_unet_hyper_params = {
         'strides': (2, 2, 2, 2),
         'num_res_units': 2
     }
+
+coord_conv_unet_hyper_params = deepcopy(default_unet_hyper_params)
+coord_conv_unet_hyper_params['in_channels'] = 4
 
 
 def create_unet_model(device: torch.device,

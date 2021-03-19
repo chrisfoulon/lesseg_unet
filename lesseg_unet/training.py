@@ -39,12 +39,12 @@ def training_loop(img_path_list: Sequence,
                                                        train_val_percentage=train_val_percentage)
     train_loader = data_loading.create_training_data_loader(train_ds, batch_size, dataloader_workers)
     val_loader = data_loading.create_validation_data_loader(val_ds, dataloader_workers=dataloader_workers)
-    model_param_dict = net.default_unet_hyper_params
     # checking is CoordConv is used and change the input channel dimension
+    unet_hyper_params = net.default_unet_hyper_params
     for t in val_ds.transform.transforms:
         if isinstance(t, transformations.CoordConvd):
-            model_param_dict['in_channels'] = 4
-    model = net.create_unet_model(device, model_param_dict)
+            unet_hyper_params = net.coord_conv_unet_hyper_params
+    model = net.create_unet_model(device, unet_hyper_params)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
     loss_function = monai.losses.DiceLoss(sigmoid=True)
