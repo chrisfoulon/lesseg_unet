@@ -51,15 +51,19 @@ def training_loop(img_path_list: Sequence,
     val_loss_function = monai.losses.DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
     print('check ok')
+    # it = iter(val_loader)
     # for i in range(25):
-    #     data = next(iter(train_loader))
+    #     input_data = val_ds[i]['image']
+    #     data = next(it)
     #     inputs, labels = data['image'], data['label']
+    #     i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
+    #     print(np.all(input_data == i_data))
     #     # i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
     #     # l_data = labels[0, 0, :, :, :].cpu().detach().numpy()
-    #     utils.save_img_lbl_seg_to_png(
-    #         inputs, '/home/tolhsadum/neuro_apps/data', 'validation_img_{}'.format(i), labels, None)
-    #     utils.save_img_lbl_seg_to_nifti(
-    #         inputs, labels, None, '/home/tolhsadum/neuro_apps/data', val_output_affine, i)
+    #     # utils.save_img_lbl_seg_to_png(
+    #     #     inputs, '/home/tolhsadum/neuro_apps/data', 'validation_img_{}'.format(i), labels, None)
+    #     # utils.save_img_lbl_seg_to_nifti(
+    #     #     inputs, labels, None, '/home/tolhsadum/neuro_apps/data', val_output_affine, i)
     # # if np.equal(i_data, l_data).all():
     # #     print('ok')
     # # else:
