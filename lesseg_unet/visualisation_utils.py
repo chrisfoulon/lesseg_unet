@@ -1,12 +1,13 @@
 import webbrowser
 import subprocess
 from pathlib import Path
+import re
 
 import numpy as np
 import matplotlib.pyplot as plt
-from nilearn import plotting
-import nibabel as nib
 from scipy.ndimage import center_of_mass
+from bcblib.tools.nifti_utils import is_nifti
+from bcblib.tools.visualisation import mricron_display
 
 
 def open_tensorboard_page(log_dir, port='8008', new_browser_window=False):
@@ -119,3 +120,26 @@ def plot_seg(img, label=None, seg=None, save_path=None):
     else:
         plt.show()
     return
+
+
+def display_one_output(output_dir, number):
+    f_list = [p for p in Path(output_dir).iterdir() if is_nifti(p) and re.search(f'_{number}.nii', p.name)]
+    image = None
+    label = None
+    seg = None
+    for f in f_list:
+        if 'input' in f.name:
+            image = f
+        if 'label' in f.name:
+            label = f
+        if 'output' in f.name:
+            seg = f
+    if image is None:
+        raise ValueError('input image not found')
+    images = [image]
+    if label is not None:
+        images.append(label)
+    if seg is not None:
+        images.append(seg)
+    mricron_options = '-b', '50', '-x'
+    mricron_display(images, *mricron_options)

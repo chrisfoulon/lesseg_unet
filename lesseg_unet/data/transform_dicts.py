@@ -157,18 +157,22 @@ minimal_hyper_dict = {
         #     'keys': ['image', 'label'],
         #     'channel_dim': -1}
         # },
-        {'Resized': {
+        # {'Resized': {
+        #     'keys': ['image', 'label'],
+        #     'spatial_size': def_spatial_size,
+        #     # 'mode': 'nearest'
+        # }},
+        {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
-            'spatial_size': def_spatial_size,
-            # 'mode': 'nearest'
-        }},
+            'spatial_size': def_spatial_size}
+         },
         # {'NormalizeIntensityd': {'keys': ['image']}},
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'First resize'}},
     ],
     'monai_transform': [
 
-        {'ScaleIntensityd': {'keys': "image"}},
+        # {'ScaleIntensityd': {'keys': "image"}},
 
         {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'Fisrt monai'}},
@@ -190,11 +194,15 @@ minimal_hyper_dict = {
     'labelonly_transform': [],
     'last_transform': [
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'Last binarized'}},
-        {'Resized': {
+        # {'Resized': {
+        #     'keys': ['image', 'label'],
+        #     'spatial_size': def_spatial_size,
+        #     'mode': 'nearest'
+        # }},
+        {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
-            'spatial_size': def_spatial_size,
-            'mode': 'nearest'
-        }},
+            'spatial_size': def_spatial_size}
+         },
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.5

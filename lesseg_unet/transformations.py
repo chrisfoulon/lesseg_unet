@@ -31,7 +31,8 @@ from monai.transforms import (
     CropForegroundd,
     AsChannelFirstd,
     RandSpatialCropd,
-    RandCropByPosNegLabeld
+    RandCropByPosNegLabeld,
+    ResizeWithPadOrCropd
 )
 import torchio
 from torchio import Subject, ScalarImage
