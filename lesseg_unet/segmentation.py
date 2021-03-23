@@ -58,11 +58,13 @@ def validation_loop(img_path_list: Sequence,
     trash_val_images_dir = Path(output_dir, 'trash_val_images')
     if not val_images_dir.is_dir():
         val_images_dir.mkdir(exist_ok=True)
+    for f in val_images_dir.iterdir():
+        os.remove(f)
     if seg_path_list is not None:
         if not trash_val_images_dir.is_dir():
             trash_val_images_dir.mkdir(exist_ok=True)
-    for f in val_images_dir.iterdir():
-        os.remove(f)
+        for f in trash_val_images_dir.iterdir():
+            os.remove(f)
     perf_measure_names = ['val_mean_dice',
                           'val_median_dice',
                           'val_std_dice',
@@ -80,6 +82,7 @@ def validation_loop(img_path_list: Sequence,
         val_score_list = []
         for val_data in val_loader:
             inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
+            input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
             outputs = model(inputs)
             outputs = post_trans(outputs)
             inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy()
@@ -93,16 +96,20 @@ def validation_loop(img_path_list: Sequence,
                 trash_count += 1
                 print('Saving trash image #{}'.format(trash_count))
                 utils.save_img_lbl_seg_to_png(
-                    inputs_np, trash_val_images_dir, 'trash_img_{}'.format(trash_count), labels_np, outputs_np)
+                    inputs_np, trash_val_images_dir,
+                    '{}_trash_img_{}'.format(input_filename, trash_count), labels_np, outputs_np)
                 utils.save_img_lbl_seg_to_nifti(
-                    inputs_np, labels_np, outputs_np, trash_val_images_dir, val_output_affine, str(trash_count))
+                    inputs_np, labels_np, outputs_np, trash_val_images_dir, val_output_affine,
+                    str(input_filename) + str(trash_count))
             else:
                 img_count += 1
                 print('Saving good image #{}'.format(img_count))
                 utils.save_img_lbl_seg_to_png(
-                    inputs_np, val_images_dir, 'validation_img_{}'.format(img_count), labels_np, outputs_np)
+                    inputs_np, val_images_dir,
+                    '{}_validation_img_{}'.format(input_filename, img_count), labels_np, outputs_np)
                 utils.save_img_lbl_seg_to_nifti(
-                    inputs_np, labels_np, outputs_np, val_images_dir, val_output_affine, str(img_count))
+                    inputs_np, labels_np, outputs_np, val_images_dir, val_output_affine,
+                    str(input_filename) + str(img_count))
         metric = metric_sum / metric_count
         metric_values.append(metric)
         median = np.median(np.array(val_score_list))

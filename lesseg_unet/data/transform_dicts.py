@@ -222,7 +222,7 @@ minimal_hyper_dict = {
 minimal_hyper_dict_cc = deepcopy(minimal_hyper_dict)
 minimal_hyper_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
 
-# TODO ResizeWithPadOrCropd can be used to come back to original size
+# TODO ResizeWithPadOrCropd doesn't preserve the input exactly, need to find a way to inverse
 test_crop = {
     'first_transform': [
         {'LoadImaged': {'keys': ['image', 'label']}},

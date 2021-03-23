@@ -51,25 +51,29 @@ def training_loop(img_path_list: Sequence,
     val_loss_function = monai.losses.DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
     print('check ok')
-    it = iter(val_loader)
-    for i in range(25):
-        input_data = val_ds[i]['image']
-        print(val_ds[i].keys())
-        data = next(it)
-        inputs, labels = data['image'], data['label']
-        i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
-        print(np.all(input_data == i_data))
-        # i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
-        # l_data = labels[0, 0, :, :, :].cpu().detach().numpy()
-        # utils.save_img_lbl_seg_to_png(
-        #     inputs, '/home/tolhsadum/neuro_apps/data', 'validation_img_{}'.format(i), labels, None)
-        # utils.save_img_lbl_seg_to_nifti(
-        #     inputs, labels, None, '/home/tolhsadum/neuro_apps/data', val_output_affine, i)
-    # if np.equal(i_data, l_data).all():
-    #     print('ok')
-    # else:
-    #     print('not ok')
-    exit()
+    # it = iter(val_loader)
+    # import nibabel as nib
+    # for i in range(25):
+    #     # input_data = val_ds[i]['image']
+    #     print(val_ds[i]['image_meta_dict']['filename_or_obj'])
+    #     raw_data = nib.load(val_ds[i]['image_meta_dict']['filename_or_obj']).get_fdata()
+    #     data = next(it)
+    #     inputs, labels = data['image'], data['label']
+    #     i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
+    #     nib.save(nib.Nifti1Image(i_data, nib.load(val_ds[i]['image_meta_dict']['filename_or_obj']).affine),
+    #              filename=f'/home/tolhsadum/neuro_apps/data/toto_{i}.nii')
+    #     print(np.all(i_data == raw_data))
+    #     # i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
+    #     # l_data = labels[0, 0, :, :, :].cpu().detach().numpy()
+    #     # utils.save_img_lbl_seg_to_png(
+    #     #     inputs, '/home/tolhsadum/neuro_apps/data', 'validation_img_{}'.format(i), labels, None)
+    #     # utils.save_img_lbl_seg_to_nifti(
+    #     #     inputs, labels, None, '/home/tolhsadum/neuro_apps/data', val_output_affine, i)
+    # # if np.equal(i_data, l_data).all():
+    # #     print('ok')
+    # # else:
+    # #     print('not ok')
+    # exit()
 
     # utils.save_tensor_to_nifti(
     #     inputs, Path('/home/tolhsadum/neuro_apps/data/', 'nib_input_{}.nii'.format('test')), val_output_affine)
