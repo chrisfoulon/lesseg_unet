@@ -92,7 +92,7 @@ def init_training_data(img_path_list: Sequence,
 
     # define dataset, data loader
     logging.info('Create validation actual monai datasets')
-    val_ds = Dataset(val_files, transform=val_img_transforms)
+    val_ds = ImageDataset(val_files, transform=val_img_transforms, )
     # We check if both the training and validation dataloaders can be created and used without immediate errors
     logging.info('Checking data loading')
     if train_val_percentage:
