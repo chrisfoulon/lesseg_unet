@@ -100,7 +100,7 @@ def validation_loop(img_path_list: Sequence,
                     '{}_trash_img_{}'.format(input_filename, trash_count), labels_np, outputs_np)
                 utils.save_img_lbl_seg_to_nifti(
                     inputs_np, labels_np, outputs_np, trash_val_images_dir, val_output_affine,
-                    str(input_filename) + str(trash_count))
+                    '{}_{}'.format(str(input_filename), str(trash_count)))
             else:
                 img_count += 1
                 print('Saving good image #{}'.format(img_count))
@@ -109,7 +109,7 @@ def validation_loop(img_path_list: Sequence,
                     '{}_validation_img_{}'.format(input_filename, img_count), labels_np, outputs_np)
                 utils.save_img_lbl_seg_to_nifti(
                     inputs_np, labels_np, outputs_np, val_images_dir, val_output_affine,
-                    str(input_filename) + str(img_count))
+                    '{}_{}'.format(str(input_filename), str(img_count)))
         metric = metric_sum / metric_count
         metric_values.append(metric)
         median = np.median(np.array(val_score_list))

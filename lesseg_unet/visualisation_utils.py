@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 
 import numpy as np
+import nibabel as nib
 import matplotlib.pyplot as plt
 from scipy.ndimage import center_of_mass
 from bcblib.tools.nifti_utils import is_nifti
@@ -123,23 +124,26 @@ def plot_seg(img, label=None, seg=None, save_path=None):
 
 
 def display_one_output(output_dir, number):
-    f_list = [p for p in Path(output_dir).iterdir() if is_nifti(p) and re.search(f'_{number}.nii', p.name)]
+    f_list = [p for p in Path(output_dir).iterdir() if is_nifti(p) and re.search(r'_{}.nii'.format(number), p.name)]
+    print(f_list)
     image = None
-    label = None
-    seg = None
+    img_opt = []
+    label_opt = []
+    seg_opt = []
     for f in f_list:
         if 'input' in f.name:
             image = f
+            data = nib.load(image).get_fdata()
+            img_opt = ['-x', '-c', '-0',
+                       '-l', '{:.4f}'.format(np.min(data)), '-h', '{:.4f}'.format(np.max(data)), '-b', '60']
+            # img_opt = ['-x', '-c', '-0', '-l', '0', '-h', '1000', '-b', '60']
         if 'label' in f.name:
             label = f
+            label_opt = ['-o', str(label), '-c', '-1', '-t', '-1']
         if 'output' in f.name:
             seg = f
+            seg_opt = ['-o', str(seg), '-c', '-3', '-t', '-1']
     if image is None:
         raise ValueError('input image not found')
-    images = [image]
-    if label is not None:
-        images.append(label)
-    if seg is not None:
-        images.append(seg)
-    mricron_options = '-b', '50', '-x'
-    mricron_display(images, *mricron_options)
+    mricron_options = img_opt + label_opt + seg_opt
+    mricron_display(str(image), mricron_options)
