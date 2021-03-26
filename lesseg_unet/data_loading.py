@@ -78,7 +78,7 @@ def data_loader_checker_first(check_ds, set_name=''):
 def init_training_data(img_path_list: Sequence,
                        seg_path_list: Sequence,
                        img_pref: str = None,
-                       transform_dict=None,
+                       transform_dict: dict = None,
                        train_val_percentage: float = 75) -> Tuple[monai.data.Dataset, monai.data.Dataset]:
     logging.info('Listing input files to be loaded')
     train_files, val_files = create_file_dict_lists(img_path_list, seg_path_list, img_pref,
@@ -101,3 +101,17 @@ def init_training_data(img_path_list: Sequence,
         data_loader_checker_first(val_ds, 'validation')
     logging.info('Init training done.')
     return train_ds, val_ds
+
+
+def init_segmentation(img_path_list: Sequence,
+                      img_pref: str = None,
+                      transform_dict: dict = None):
+    if img_pref is None:
+        img_pref = ''
+    logging.info('Listing input files to be loaded')
+    image_list = [{'image': str(img)} for img in img_path_list if img_pref in img]
+    logging.info('Create transformations')
+    val_img_transforms = transformations.segmentation_transformd(transform_dict)
+    logging.info('Create monai dataset')
+    train_ds = Dataset(image_list, transform=val_img_transforms)
+    return train_ds

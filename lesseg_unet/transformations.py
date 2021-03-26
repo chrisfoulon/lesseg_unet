@@ -1,5 +1,6 @@
 from math import radians
 import logging
+from copy import deepcopy
 from typing import Mapping, Dict, Hashable, Any, Optional, Callable, Union
 
 import numpy as np
@@ -549,3 +550,27 @@ def segmentation_val_transformd(hyper_param_dict=None):
         trans_list_from_list(hyper_param_dict['last_transform'])
     )
     return val_transd
+
+
+def segmentation_transformd(hyper_param_dict=None):
+    if hyper_param_dict is None:
+        hyper_param_dict = hyper_dict
+    seg_tr_dict = {}
+    for li in hyper_param_dict:
+        seg_tr_dict[li] = []
+        for di in hyper_param_dict[li]:
+            for tr in di:
+                if 'image' not in di[tr]['keys']:
+                    continue
+                if 'label' in di[tr]['keys']:
+                    new_tr = deepcopy(di)
+                    new_tr[tr]['keys'] = ['image']
+                    seg_tr_dict[li].append(new_tr)
+                else:
+                    seg_tr_dict[li].append(di)
+    hyper_param_dict = seg_tr_dict
+    seg_transd = Compose(
+        trans_list_from_list(hyper_param_dict['first_transform']) +
+        trans_list_from_list(hyper_param_dict['last_transform'])
+    )
+    return seg_transd

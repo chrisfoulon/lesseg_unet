@@ -73,7 +73,6 @@ def save_img_lbl_seg_to_nifti(image: Union[np.ndarray, torch.Tensor],
         save_tensor_to_nifti(seg, Path(output_dir, 'nib_output_{}.nii'.format(suffix)), val_output_affine)
 
 
-# TODO add a check for the type and allow numpy arrays as param to avoid loading from GPU every time
 def save_img_lbl_seg_to_png(image: Union[np.ndarray, torch.Tensor],
                             output_dir: Union[str, bytes, os.PathLike],
                             filename: str,

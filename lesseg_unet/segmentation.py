@@ -14,6 +14,48 @@ from monai.transforms import (
 )
 
 
+def segmentation_loop(img_path_list: Sequence,
+                    output_dir: Union[str, bytes, os.PathLike],
+                    checkpoint_path: Union[str, bytes, os.PathLike],
+                    img_pref: str = None,
+                    transform_dict: dict = None,
+                    device: str = None,
+                    batch_size: int = 10,
+                    dataloader_workers: int = 8):
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        device = torch.device(device)
+    val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
+    val_ds = transformations.segmentation_transformd()
+    val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
+                                                            dataloader_workers=dataloader_workers)
+    unet_hyper_params = net.default_unet_hyper_params
+    for t in val_ds.transform.transforms:
+        if isinstance(t, transformations.CoordConvd):
+            unet_hyper_params = net.coord_conv_unet_hyper_params
+    model = utils.load_eval_from_checkpoint(checkpoint_path, device, unet_hyper_params)
+    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
+    model.eval()
+    img_count = 0
+    with torch.no_grad():
+        for val_data in val_loader:
+            img_count += 1
+            inputs = val_data['image'].to(device)
+            input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
+            outputs = model(inputs)
+            outputs = post_trans(outputs)
+            inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy()
+            outputs_np = outputs[0, 0, :, :, :].cpu().detach().numpy()
+            utils.save_img_lbl_seg_to_png(
+                inputs_np, output_dir,
+                '{}_trash_img_{}'.format(input_filename, img_count), outputs_np)
+            tmp = None
+            utils.save_img_lbl_seg_to_nifti(
+                inputs_np, tmp, outputs_np, output_dir, val_output_affine,
+                '{}_{}'.format(str(input_filename), str(img_count)))
+
+
 def validation_loop(img_path_list: Sequence,
                     seg_path_list: Sequence,
                     output_dir: Union[str, bytes, os.PathLike],
@@ -31,6 +73,7 @@ def validation_loop(img_path_list: Sequence,
     else:
         device = torch.device(device)
     val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
+
     _, val_ds = data_loading.init_training_data(img_path_list, seg_path_list, img_pref,
                                                 transform_dict=transform_dict,
                                                 train_val_percentage=train_val_percentage)
@@ -60,11 +103,10 @@ def validation_loop(img_path_list: Sequence,
         val_images_dir.mkdir(exist_ok=True)
     for f in val_images_dir.iterdir():
         os.remove(f)
-    if seg_path_list is not None:
-        if not trash_val_images_dir.is_dir():
-            trash_val_images_dir.mkdir(exist_ok=True)
-        for f in trash_val_images_dir.iterdir():
-            os.remove(f)
+    if not trash_val_images_dir.is_dir():
+        trash_val_images_dir.mkdir(exist_ok=True)
+    for f in trash_val_images_dir.iterdir():
+        os.remove(f)
     perf_measure_names = ['val_mean_dice',
                           'val_median_dice',
                           'val_std_dice',
