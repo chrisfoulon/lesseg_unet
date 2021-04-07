@@ -20,7 +20,7 @@ def main():
     nifti_paths_group = parser.add_mutually_exclusive_group(required=True)
     nifti_paths_group.add_argument('-p', '--input_path', type=str, help='Root folder of the b1000 dataset')
     nifti_paths_group.add_argument('-li', '--input_list', type=str, help='Text file containing the list of b1000')
-    lesion_paths_group = parser.add_mutually_exclusive_group(required=True)
+    lesion_paths_group = parser.add_mutually_exclusive_group(required=False)
     lesion_paths_group.add_argument('-lp', '--lesion_input_path', type=str,
                                     help='Root folder of the b1000 dataset')
     lesion_paths_group.add_argument('-lli', '--lesion_input_list', type=str,
@@ -61,9 +61,11 @@ def main():
         if args.lesion_input_path == args.output:
             raise ValueError("The output directory CANNOT be the input directory")
     # So args.lesion_input_list is not None
-    else:
+    elif args.lesion_input_list is not None:
         les_list = file_to_list(args.lesion_input_list)
-    if args.output in les_list:
+    else:
+        les_list = None
+    if les_list is not None and args.output in les_list:
         raise ValueError("The output directory CANNOT be one of the input directories")
 
     # match the lesion labels with the images
@@ -87,24 +89,40 @@ def main():
     else:
         print('Using default transformation dictionary')
         transform_dict = transform_dicts.minimal_hyper_dict
+
+    train_val_percentage = None
     if args.train_val is not None:
         train_val_percentage = args.train_val
     if args.checkpoint is None:
+        if train_val_percentage is None:
+            train_val_percentage = 75
         training.training_loop(img_list, les_list, output_root, b1000_pref,
                                transform_dict=transform_dict,
                                device=args.torch_device,
                                epoch_num=args.num_epochs,
                                dataloader_workers=args.num_workers,
-                               num_nifti_save=args.num_nifti_save)
+                               num_nifti_save=args.num_nifti_save,
+                               train_val_percentage=train_val_percentage)
     else:
-        segmentation.validation_loop(img_list, les_list,
-                                     output_root,
-                                     args.checkpoint,
-                                     b1000_pref,
-                                     transform_dict=transform_dict,
-                                     device=args.torch_device,
-                                     dataloader_workers=args.num_workers,
-                                     train_val_percentage=train_val_percentage)
+        if train_val_percentage is None:
+            train_val_percentage = 0
+        if les_list is None:
+            segmentation.segmentation_loop(img_list,
+                                           output_root,
+                                           args.checkpoint,
+                                           b1000_pref,
+                                           transform_dict=transform_dict,
+                                           device=args.torch_device,
+                                           dataloader_workers=args.num_workers)
+        else:
+            segmentation.validation_loop(img_list, les_list,
+                                         output_root,
+                                         args.checkpoint,
+                                         b1000_pref,
+                                         transform_dict=transform_dict,
+                                         device=args.torch_device,
+                                         dataloader_workers=args.num_workers,
+                                         train_val_percentage=train_val_percentage)
 
 
 if __name__ == "__main__":

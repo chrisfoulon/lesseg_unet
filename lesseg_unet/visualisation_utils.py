@@ -106,7 +106,10 @@ def plot_seg(img, label=None, seg=None, save_path=None):
         _, _, z = center_of_mass(label)
         # nilearn doesn't to work here -__-"
         # _, _, z = plotting.find_xyz_cut_coords(nib.Nifti1Image(label, np.eye(4)), activation_threshold=1)
-        z = round(z)
+        if not np.isnan(z):
+            z = round(z)
+        else:
+            z = round(len(img[0, 0, :]) / 2)
     else:
         z = round(len(img[0, 0, :]) / 2)
     # fig = plt.figure()
@@ -146,4 +149,10 @@ def display_one_output(output_dir, number):
     if image is None:
         raise ValueError('input image not found')
     mricron_options = img_opt + label_opt + seg_opt
-    mricron_display(str(image), mricron_options)
+    mricron_command = ['mricron', str(image)] + mricron_options
+    print('Mricron command: "{}"'.format(mricron_command))
+    process = subprocess.run(mricron_command,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE,
+                             universal_newlines=True)
+    return process

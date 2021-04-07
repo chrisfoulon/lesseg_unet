@@ -555,16 +555,22 @@ def segmentation_val_transformd(hyper_param_dict=None):
 def segmentation_transformd(hyper_param_dict=None):
     if hyper_param_dict is None:
         hyper_param_dict = hyper_dict
+    setup_coord_conv(hyper_param_dict)
+    check_imports(hyper_param_dict)
+    check_hyper_param_dict_shape(hyper_param_dict)
     seg_tr_dict = {}
     for li in hyper_param_dict:
         seg_tr_dict[li] = []
         for di in hyper_param_dict[li]:
             for tr in di:
-                if 'image' not in di[tr]['keys']:
+                keys_key = 'keys'
+                if 'keys' not in di[tr]:
+                    keys_key = 'include'
+                if 'image' not in di[tr][keys_key]:
                     continue
-                if 'label' in di[tr]['keys']:
+                if 'label' in di[tr][keys_key]:
                     new_tr = deepcopy(di)
-                    new_tr[tr]['keys'] = ['image']
+                    new_tr[tr][keys_key] = ['image']
                     seg_tr_dict[li].append(new_tr)
                 else:
                     seg_tr_dict[li].append(di)

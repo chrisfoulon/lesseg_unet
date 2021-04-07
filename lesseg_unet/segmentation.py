@@ -15,19 +15,19 @@ from monai.transforms import (
 
 
 def segmentation_loop(img_path_list: Sequence,
-                    output_dir: Union[str, bytes, os.PathLike],
-                    checkpoint_path: Union[str, bytes, os.PathLike],
-                    img_pref: str = None,
-                    transform_dict: dict = None,
-                    device: str = None,
-                    batch_size: int = 10,
-                    dataloader_workers: int = 8):
+                      output_dir: Union[str, bytes, os.PathLike],
+                      checkpoint_path: Union[str, bytes, os.PathLike],
+                      img_pref: str = None,
+                      transform_dict: dict = None,
+                      device: str = None,
+                      batch_size: int = 1,
+                      dataloader_workers: int = 8):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
     val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
-    val_ds = transformations.segmentation_transformd()
+    val_ds = data_loading.init_segmentation(img_path_list, img_pref, transform_dict)
     val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
                                                             dataloader_workers=dataloader_workers)
     unet_hyper_params = net.default_unet_hyper_params
@@ -49,7 +49,7 @@ def segmentation_loop(img_path_list: Sequence,
             outputs_np = outputs[0, 0, :, :, :].cpu().detach().numpy()
             utils.save_img_lbl_seg_to_png(
                 inputs_np, output_dir,
-                '{}_trash_img_{}'.format(input_filename, img_count), outputs_np)
+                '{}_segmentation_{}'.format(input_filename, img_count), outputs_np)
             tmp = None
             utils.save_img_lbl_seg_to_nifti(
                 inputs_np, tmp, outputs_np, output_dir, val_output_affine,
