@@ -3,12 +3,17 @@ from pathlib import Path
 from typing import Union
 import json
 
-from bcblib.tools.nifti_utils import is_nifti
+from bcblib.tools.nifti_utils import is_nifti, centre_of_mass_difference
 from lesseg_unet.visualisation_utils import plot_seg
 from lesseg_unet.net import create_unet_model
 import nibabel as nib
 import torch
 import numpy as np
+
+
+validation_input_pref = 'nib_input_'
+validation_label_pref = 'nib_label_'
+validation_output_pref = 'nib_output_'
 
 
 def create_input_path_list_from_root(root_folder_path, recursive_search=False):
@@ -99,3 +104,47 @@ def load_json_transform_dict(json_path):
     if not Path(json_path).is_file():
         raise ValueError('{} is not an existing json file'.format(json_path))
     return json.load(open(json_path, 'r'))
+
+
+def get_output_paths(output_dir, img_num, split_string='_segmentation_', reference_centre_of_mass=None):
+    if not isinstance(output_dir, list):
+        file_list = [f for f in Path(output_dir).iterdir()]
+    else:
+        file_list = output_dir
+    output_images = [f for f in file_list if '.png' in f.name
+                     and str(img_num) == f.name.split('.png')[0].split('_')[-1]]
+    if len(output_images) == 0:
+        raise ValueError(f'Cannot find png image number {img_num} in {output_dir}')
+    if split_string is not None and split_string != '':
+        fname = output_images[0].name.split(split_string)[0] + f'_{img_num}'
+    else:
+        fname = output_images[0].name.split('.png')[0]
+    img_dict = {'png': str(output_images[0])}
+    match = [f for f in file_list if fname in f.name and f != output_images[0]]
+    for m in match:
+        if validation_input_pref in m.name:
+            img_dict['input'] = str(m)
+        if validation_label_pref in m.name:
+            img_dict['label'] = str(m)
+        if validation_output_pref in m.name:
+            img_dict['output'] = str(m)
+    if reference_centre_of_mass is not None:
+        # print(f'Calculating {img_dict["input"]} centre of mass')
+        centre = centre_of_mass_difference(img_dict['input'], reference_centre_of_mass)
+        # print('Input centre of mass distance from reference: {}'.format(centre))
+        img_dict['centre'] = str(centre)
+    if not output_images:
+        return None
+    return img_dict
+
+
+def create_output_dict(output_dir, split_string='_segmentation_', reference_centre_of_mass=None):
+    if reference_centre_of_mass is None:
+        reference_centre_of_mass = (47.535904629937065, 63.16388127843436, 46.78187843241487)
+    file_list = [f for f in Path(output_dir).iterdir()]
+    png_list = [f for f in file_list if '.png' in f.name]
+    img_numb_list = [f.name.split('.png')[0].split('_')[-1] for f in png_list]
+    output_dict = {}
+    for num in img_numb_list:
+        output_dict[num] = get_output_paths(file_list, num, split_string, reference_centre_of_mass)
+    return output_dict

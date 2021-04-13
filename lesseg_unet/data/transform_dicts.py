@@ -7,6 +7,8 @@ tiny_prob = 0.05
 # low_prob = 1
 # tiny_prob = 1
 def_spatial_size = [96, 128, 96]
+# for 1mm images
+# def_spatial_size = [192, 224, 192]
 
 # def_spatial_size = [96, 96, 96]
 min_small_crop_size = [int(0.95 * d) for d in def_spatial_size]
