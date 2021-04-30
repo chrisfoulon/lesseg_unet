@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import monai
 import torch
+from torch.nn.functional import binary_cross_entropy_with_logits as BCE
 from monai.metrics import DiceMetric
 from monai.transforms import (
     Activations,
@@ -47,7 +48,8 @@ def training_loop(img_path_list: Sequence,
     model = net.create_unet_model(device, unet_hyper_params)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
-    loss_function = monai.losses.DiceLoss(sigmoid=True)
+    # loss_function = monai.losses.DiceLoss(sigmoid=True)
+    loss_function = BCE
     val_loss_function = monai.losses.DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
     print('check ok')
