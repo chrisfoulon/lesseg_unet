@@ -85,16 +85,6 @@ full_hyper_dict = {
             # 'padding_mode': "zeros",
             'as_tensor_output': False}
          },
-        {'ThreeDHaircutd': {
-            'keys': ['image', 'label'],
-            'prob': low_prob,
-            'index_range': 0.2}
-         },
-        {'Anisotropiserd': {
-            'keys': ['image', 'label'],
-            'prob': low_prob,
-            'scale_range': (0.25, 0.8)}
-         },
         # {'SqueezeDimd':
         #     {'keys': ["image", "label"],
         #      'dim': 0}
@@ -168,6 +158,17 @@ full_hyper_dict = {
 full_hyper_dict_cc = deepcopy(full_hyper_dict)
 full_hyper_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
 
+new_full_dict_cc = deepcopy(full_hyper_dict_cc)
+new_full_dict_cc['monai_transform'].append({'ThreeDHaircutd': {
+            'keys': ['image', 'label'],
+            'prob': low_prob,
+            'index_range': 0.2}
+ })
+new_full_dict_cc['monai_transform'].append({'Anisotropiserd': {
+    'keys': ['image', 'label'],
+    'prob': low_prob,
+    'scale_range': (0.25, 0.8)}
+ })
 
 minimal_hyper_dict = {
     'first_transform': [
