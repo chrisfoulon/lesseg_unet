@@ -51,9 +51,9 @@ full_hyper_dict = {
             'keys': ['image', 'label'],
             'prob': high_prob,
             'rotate_range': radians(5),
-            'shear_range': None,
-            'translate_range': None,
-            'scale_range': 0.3,
+            'shear_range': radians(5),
+            'translate_range': 0.05,
+            'scale_range': 0.05,
             'spatial_size': None,
             'padding_mode': 'border',
             'as_tensor_output': False}
@@ -85,6 +85,16 @@ full_hyper_dict = {
             # 'padding_mode': "zeros",
             'as_tensor_output': False}
          },
+        {'ThreeDHaircutd': {
+            'keys': ['image', 'label'],
+            'prob': low_prob,
+            'index_range': 0.2}
+         },
+        {'Anisotropiserd': {
+            'keys': ['image', 'label'],
+            'prob': low_prob,
+            'scale_range': (0.25, 0.8)}
+         },
         # {'SqueezeDimd':
         #     {'keys': ["image", "label"],
         #      'dim': 0}
@@ -101,11 +111,11 @@ full_hyper_dict = {
             'std': (0.01, 0.1),
             'p': low_prob}
          },
-        # 'RandomGhosting': {
-        #     'include': ['image'],
-        #     'p': tiny_prob,
-        #     'num_ghosts': (4, 10)
-        # },
+        {'RandomGhosting': {
+            'include': ['image'],
+            'p': tiny_prob,
+            'num_ghosts': (1, 4)
+        }},
         {'RandomBlur': {
             'include': ['image', 'label'],
             'std': (0.1, 0.5),
@@ -113,12 +123,12 @@ full_hyper_dict = {
          },
         {'RandomBiasField': {
             'include': ['image'],
-            'p': tiny_prob,
+            'p': high_prob,
             'coefficients': 0.5}
          },
         {'RandomMotion': {
             'include': ['image', 'label'],
-            'p': tiny_prob,
+            'p': low_prob,
             'num_transforms': 1}
          },
         {'ToTensord': {'keys': ['image', 'label']}},

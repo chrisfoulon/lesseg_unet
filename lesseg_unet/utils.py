@@ -1,4 +1,5 @@
 import os
+import shutil
 from pathlib import Path
 from typing import Union
 import json
@@ -71,11 +72,11 @@ def save_img_lbl_seg_to_nifti(image: Union[np.ndarray, torch.Tensor],
                               output_dir: Union[str, bytes, os.PathLike],
                               val_output_affine: np.ndarray,
                               suffix: str) -> None:
-    save_tensor_to_nifti(image, Path(output_dir, 'nib_input_{}.nii'.format(suffix)), val_output_affine)
+    save_tensor_to_nifti(image, Path(output_dir, 'input_{}.nii'.format(suffix)), val_output_affine)
     if label is not None:
-        save_tensor_to_nifti(label, Path(output_dir, 'nib_label_{}.nii'.format(suffix)), val_output_affine)
+        save_tensor_to_nifti(label, Path(output_dir, 'label_{}.nii'.format(suffix)), val_output_affine)
     if seg is not None:
-        save_tensor_to_nifti(seg, Path(output_dir, 'nib_output_{}.nii'.format(suffix)), val_output_affine)
+        save_tensor_to_nifti(seg, Path(output_dir, 'output_{}.nii'.format(suffix)), val_output_affine)
 
 
 def save_img_lbl_seg_to_png(image: Union[np.ndarray, torch.Tensor],
@@ -106,7 +107,7 @@ def load_json_transform_dict(json_path):
     return json.load(open(json_path, 'r'))
 
 
-def get_output_paths(output_dir, img_num, split_string='_segmentation_', reference_centre_of_mass=None):
+def get_output_paths(output_dir, img_num, split_string='_segmentation', reference_centre_of_mass=None):
     if not isinstance(output_dir, list):
         file_list = [f for f in Path(output_dir).iterdir()]
     else:
@@ -138,7 +139,7 @@ def get_output_paths(output_dir, img_num, split_string='_segmentation_', referen
     return img_dict
 
 
-def create_output_dict(output_dir, split_string='_segmentation_', reference_centre_of_mass=None):
+def create_output_dict(output_dir, split_string='_segmentation', reference_centre_of_mass=None):
     if reference_centre_of_mass is None:
         reference_centre_of_mass = (47.535904629937065, 63.16388127843436, 46.78187843241487)
     file_list = [f for f in Path(output_dir).iterdir()]
@@ -147,4 +148,42 @@ def create_output_dict(output_dir, split_string='_segmentation_', reference_cent
     output_dict = {}
     for num in img_numb_list:
         output_dict[num] = get_output_paths(file_list, num, split_string, reference_centre_of_mass)
+    return output_dict
+
+
+def get_big_seg(output_dict, vox_nb_thr=80):
+    return np.random.choice(
+        [k for k in output_dict if np.count_nonzero(nib.load(output_dict[k]['output']).get_fdata()) > vox_nb_thr])
+
+
+def split_output_fname(path, prefix=None, suffix=None):
+    fname = Path(path).name
+    if prefix is not None and prefix != '':
+        fname = fname.split(prefix)[1]
+    if suffix is not None and suffix != '':
+        s_split = fname.split(suffix)
+        fname = s_split[0] + s_split[1]
+    return fname
+
+
+def split_output_files(source_dir, dest_dir, png_split_string='_segmentation', reference_centre_of_mass=None):
+    output_dict = create_output_dict(source_dir, png_split_string, reference_centre_of_mass)
+    output_json_path = Path(dest_dir, '__output_dict.json')
+    for num in output_dict:
+        for k in output_dict[num]:
+            if k != 'centre':
+                if k == 'png':
+                    fname = split_output_fname(output_dict[num][k], suffix=png_split_string)
+                else:
+                    fname = split_output_fname(output_dict[num][k], prefix=k)
+                cp_dir = Path(dest_dir, k)
+                if not cp_dir.is_dir():
+                    os.makedirs(cp_dir, exist_ok=True)
+                out_path = str(Path(cp_dir, fname))
+                print(fname)
+                print(output_dict[num][k])
+                shutil.copyfile(output_dict[num][k], out_path)
+                output_dict[num][k] = out_path
+    with open(output_json_path, 'w+') as out_file:
+        json.dump(output_dict, out_file, indent=4)
     return output_dict

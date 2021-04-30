@@ -1,7 +1,7 @@
 from math import radians
 import logging
 from copy import deepcopy
-from typing import Mapping, Dict, Hashable, Any, Optional, Callable, Union
+from typing import Mapping, Dict, Hashable, Any, Optional, Callable, Union, List
 
 import numpy as np
 from monai.transforms.compose import Randomizable
@@ -19,6 +19,7 @@ from monai.transforms import (
     ScaleIntensityd,
     ScaleIntensityRanged,
     ToTensord,
+    Resize,
     Resized,
     RandAffined,
     Rand3DElasticd,
@@ -254,6 +255,160 @@ class RandTransformWrapper(Randomizable, MapTransform):
         return d
 
 
+class ThreeDHaircutd(Randomizable, MapTransform):
+    """
+    """
+
+    def __init__(self,
+                 keys: KeysCollection,
+                 index_range: Union[float, List[Union[float, int]]],
+                 prob: float = 0.1) -> None:
+        """
+        Args:
+            keys: keys of the corresponding items to be transformed.
+                See also: :py:class:`monai.transforms.compose.MapTransform`
+            index_range:
+            prob: probability of cutting. (If a list/tuple is given, the first cell is the global probability that
+                the transformation happens, the second is the local probability that it cuts on 2 axes
+                (so if this transformation happens, it will have another probability to cut on 2 axes), and the third
+                one is the local probability of cutting on the 3 axes.
+                e.g. (0.1, 0.15, 0.05) means a 0.1 that the transformation happens at all. If
+                (Default 0.1, with 10% probability it returns a rotated array.)
+
+        """
+        super().__init__(keys)
+        if isinstance(index_range, float) and (index_range < 0 or index_range > 0.5):
+            raise ValueError(f'If a single float given for index_range it must be between 0 and 0.5 because the'
+                             f'cut is done on both sides of the axes')
+        self.index_range = index_range
+        self.prob = prob
+        self._do_transform = False
+        self.prob_x = None
+        self.prob_y = None
+        self.prob_z = None
+        self.pick_axis = None
+
+    def randomize(self, data: Optional[Any] = None) -> None:
+        if isinstance(self.prob, tuple) or isinstance(self.prob, list):
+            g_prob = self.prob[0]
+            one_cut_prob = 1
+            # Now we make an array with the different values to get each of the cut axes permutations
+            permutations_values = [1/3, 1/3, 1/3, 0, 0, 0, 0]
+            if len(self.prob) > 1:
+                two_cut_prob = self.prob[1]
+                one_cut_prob -= two_cut_prob
+                permutations_values[3:6] = [two_cut_prob / 3] * 3
+            if len(self.prob) > 2:
+                three_cut_prob = self.prob[2]
+                one_cut_prob -= three_cut_prob
+                permutations_values[6] = 1
+            else:
+                permutations_values[5] = 1
+            permutations_values[0] *= one_cut_prob
+            permutations_values[1] *= one_cut_prob
+            permutations_values[2] *= one_cut_prob
+        else:
+            g_prob = self.prob
+            permutations_values = [1/3, 1/3, 1/3, 0, 0, 0, 0]
+        self._do_transform = self.R.random() < g_prob
+        if self._do_transform:
+            # self.index_0 = int(self.R.uniform(low=0, high=self.index_range[0]))
+            # self.index_1 = int(self.R.uniform(low=0, high=self.index_range[1]))
+            # self.index_2 = int(self.R.uniform(low=0, high=self.index_range[2]))
+            # different cuts: 0,1,2,01,02,12,012
+            cut_axes = [(0,), (1,), (2,), (0, 1), (0, 2), (1, 2), (0, 1, 2)]
+            cut_axis_prob = self.R.random()
+            self.pick_axis = (0,)
+            for ind, val in enumerate(permutations_values):
+                if cut_axis_prob < val:
+                    self.pick_axis = cut_axes[ind]
+                    break
+            self.prob_x = self.R.random()
+            self.prob_y = self.R.random()
+            self.prob_z = self.R.random()
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        d = dict(data)
+        self.randomize(data)
+        if not self._do_transform:
+            return d
+
+        for key in self.keys:
+            mask = np.zeros_like(d[key])
+            # idk if it's useful but with that it could be used with images of different sizes
+            if isinstance(self.index_range, float):
+                ind_range = [self.index_range * (s - 1) for s in mask.shape]
+            else:
+                ind_range = self.index_range
+            ind_cut_x = round(ind_range[0] * self.prob_x)
+            ind_cut_y = round(ind_range[1] * self.prob_y)
+            ind_cut_z = round(ind_range[2] * self.prob_z)
+            for ax in self.pick_axis:
+                if ax == 0:
+                    mask[0, ind_cut_x:-ind_cut_x, :, :] = 1
+                elif ax == 1:
+                    mask[0, :, ind_cut_y:-ind_cut_y, :] = 1
+                else:
+                    mask[0, :, :, ind_cut_z:-ind_cut_z] = 1
+
+            d[key] = d[key] * mask
+
+        return d
+
+
+class Anisotropiserd(Randomizable, MapTransform):
+    """
+    """
+
+    def __init__(self,
+                 keys: KeysCollection,
+                 scale_range: Union[list, tuple, np.ndarray],
+                 prob: float = 0.1) -> None:
+        """
+        Args:
+            keys: keys of the corresponding items to be transformed.
+                See also: :py:class:`monai.transforms.compose.MapTransform`
+            scale_range:
+            prob: probability of rotating.
+                (Default 0.1, with 10% probability it returns a rotated array.)
+
+        """
+        super().__init__(keys)
+
+        self.scale_range = scale_range
+        self.prob = prob
+        self._do_transform = False
+        self.scale = None
+        self.pick_axis = None
+
+    def randomize(self, data: Optional[Any] = None) -> None:
+        self.scale = self.R.uniform(low=self.scale_range[0], high=self.scale_range[1])
+        self._do_transform = self.R.random() < self.prob
+        self.pick_axis = self.R.random()
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        d = dict(data)
+        self.randomize()
+        if not self._do_transform:
+            return d
+
+        for key in self.keys:
+            shape = d[key].shape[1:]
+
+            if 0 <= self.pick_axis < 0.333:
+                self.resizer_1 = Resize(spatial_size=(int(self.scale * shape[0]), -1, -1))
+                self.resizer_2 = Resize(spatial_size=(shape[0], -1, -1))
+            elif 0.333 <= self.pick_axis < 0.666:
+                self.resizer_1 = Resize(spatial_size=(-1, int(self.scale * shape[1]), -1))
+                self.resizer_2 = Resize(spatial_size=(-1, shape[1], -1))
+            else:
+                self.resizer_1 = Resize(spatial_size=(-1, -1, int(self.scale * shape[2])))
+                self.resizer_2 = Resize(spatial_size=(-1, -1, shape[2]))
+
+            d[key] = self.resizer_2(self.resizer_1(d[key]))
+
+        return d
+
 """
 Transformation parameters
 """
@@ -269,7 +424,7 @@ def_spatial_size = [96, 128, 96]
 min_small_crop_size = [int(0.95 * d) for d in def_spatial_size]
 
 # .74 aspect ratio? maybe change to 96x128x96 or crop to 64cube and increase the epoch number by a lot
-# TODO verify that random transformations are applied the same way on the image and the seg
+
 hyper_dict = {
     'first_transform': [
         {'LoadImaged': {'keys': ['image', 'label']}},
@@ -278,129 +433,56 @@ hyper_dict = {
         #     'keys': ['image', 'label'],
         #     'channel_dim': -1}
         # },
-        {'Resized': {
+        # {'Resized': {
+        #     'keys': ['image', 'label'],
+        #     'spatial_size': def_spatial_size,
+        #     # 'mode': 'nearest'
+        # }},
+        {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
-            'spatial_size': def_spatial_size,
-            'mode': 'nearest'}
+            'spatial_size': def_spatial_size}
          },
-        {'NormalizeIntensityd': {'keys': ['image']}},
+        # {'NormalizeIntensityd': {'keys': ['image']}},
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'Fisrt resize'}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'First resize'}},
     ],
     'monai_transform': [
-        # {'ScaleIntensity': {}}
-        # {'PrintDim': {'keys': ['image', 'label']}},
-        {'RandSpatialCropd': {'keys': ['image', 'label'],
-                              'roi_size': min_small_crop_size,
-                              'random_center': True,
-                              'random_size': False}
-         },
-        {'RandHistogramShiftd': {
-            'keys': ['image'],
-            'num_control_points': (10, 15),
-            'prob': low_prob}
-         },
-        # TODO maybe 'Orientation': {} but it would interact with the flip,
-        {'RandAffined': {
-            'keys': ['image', 'label'],
-            'prob': high_prob,
-            'rotate_range': radians(5),
-            'shear_range': None,
-            'translate_range': None,
-            'scale_range': 0.3,
-            'spatial_size': None,
-            'padding_mode': 'border',
-            'as_tensor_output': False}
-         },
-        # TODO check
-        # {'RandFlipd': {
-        #     'keys': ['image', 'label'],
-        #     'prob': low_prob,
-        #     'spatial_axis': 0}
-        # },
-        # {'RandDeformGrid':
-        #     {'keys': ['image', 'label']}
-        # },
-        # {'Spacingd':
-        #     {'keys': ['image', 'label']}
-        # },
-        {'Rand3DElasticd': {
-            'keys': ['image', 'label'],
-            'sigma_range': (1, 3),
-            'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
-            'prob': tiny_prob,
-            'rotate_range': None,
-            'shear_range': None,
-            'translate_range': None,
-            'scale_range': None,
-            'spatial_size': None,
-            'padding_mode': "reflection",
-            # 'padding_mode': "border",
-            # 'padding_mode': "zeros",
-            'as_tensor_output': False}
-         },
-        # {'SqueezeDimd':
-        #     {'keys': ["image", "label"],
-        #      'dim': 0}
-        # },
+
+        # {'ScaleIntensityd': {'keys': "image"}},
+
         {'ToTensord': {'keys': ['image', 'label']}},
-        # 'AddChanneld': {'keys': ['image', 'label']},
-        # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'After MONAI'},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'Fisrt monai'}},
+        # {'RandCropByPosNegLabeld': {
+        #     'keys': ["image", "label"],
+        #     'label_key': "label",
+        #     'spatial_size': def_spatial_size,
+        #     'pos': 1,
+        #     'neg': 1,
+        #     'num_samples': 4
+        # }},
+        {'RandSpatialCropd': {
+            'keys': ["image", "label"],
+            'roi_size': min_small_crop_size,
+            'random_size': False
+        }},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'After RandCrop'}},
     ],
-    'torchio_transform': [
-        # 'PrintDim': {'keys': ['image', 'label']},
-        {'RandomNoise': {
-            'include': ['image'],
-            'mean': 0,
-            'std': (0.01, 0.1),
-            'p': low_prob}
-         },
-        # 'RandomGhosting': {
-        #     'include': ['image'],
-        #     'p': tiny_prob,
-        #     'num_ghosts': (4, 10)
-        # },
-        {'RandomBlur': {
-            'include': ['image', 'label'],
-            'std': (0.1, 0.5),
-            'p': low_prob}
-         },
-        {'RandomBiasField': {
-            'include': ['image'],
-            'p': tiny_prob,
-            'coefficients': 0.5}
-         },
-        {'RandomMotion': {
-            'include': ['image', 'label'],
-            'p': tiny_prob,
-            'num_transforms': 1}
-         },
-        {'ToTensord': {'keys': ['image', 'label']}},
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'After TORCHIO'}},
-        # {'SqueezeDimd': {'keys': ["image", "label"],
-        #                 'dim': 0}},
-    ],
-    'labelonly_transform': [
-        # {'ToTensord': {'keys': ['label']}},
-        # {'AddChanneld': {'keys': ['label']}},
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'after binarize'}},
-    ],
+    'labelonly_transform': [],
     'last_transform': [
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'Last binarized'}},
+        # {'Resized': {
+        #     'keys': ['image', 'label'],
+        #     'spatial_size': def_spatial_size,
+        #     'mode': 'nearest'
+        # }},
+        {'ResizeWithPadOrCropd': {
+            'keys': ['image', 'label'],
+            'spatial_size': def_spatial_size}
+         },
         {'Binarized': {
             'keys': ['label'],
-            'lower_threshold': 0.5}
-         },
-        {'Resized': {
-            'keys': ['image', 'label'],
-            'spatial_size': def_spatial_size,
-            'mode': 'nearest'}
-         },
-        # 'ToTensord': {'keys': ['image', 'label']},
-
-        # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'after binarize and resize'},
-        # 'AddChanneld': {'keys': ['image']},
-        # 'SqueezeDimd': {'keys': ["image", "label"],
-        #                 'dim': 0},
+            'lower_threshold': 0.5
+        }},
         {'NormalizeIntensityd': {'keys': ['image']}},
     ]
 }

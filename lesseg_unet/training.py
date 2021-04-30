@@ -53,7 +53,7 @@ def training_loop(img_path_list: Sequence,
     print('check ok')
     # it = iter(val_loader)
     # import nibabel as nib
-    # for i in range(25):
+    # for i in index_range(25):
     #     # input_data = val_ds[i]['image']
     #     print(val_ds[i]['image_meta_dict']['filename_or_obj'])
     #     raw_data = nib.load(val_ds[i]['image_meta_dict']['filename_or_obj']).get_fdata()
@@ -149,7 +149,12 @@ def training_loop(img_path_list: Sequence,
             optimizer.zero_grad()
             outputs = model(inputs)
             # print('outputs size: {}'.format(outputs.size()))
-            loss = loss_function(outputs, labels[:, :1, :, :, :])
+            # TODO smoothing?
+            y = outputs
+            s = .1
+            outputs_smoothed = y * (1 - s) + 0.5 * s
+            loss = loss_function(outputs_smoothed, labels[:, :1, :, :, :])
+            # loss = loss_function(outputs, labels[:, :1, :, :, :])
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()

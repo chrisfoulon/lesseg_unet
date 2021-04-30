@@ -148,7 +148,7 @@ def validation_loop(img_path_list: Sequence,
                 print('Saving good image #{}'.format(img_count))
                 utils.save_img_lbl_seg_to_png(
                     inputs_np, val_images_dir,
-                    '{}_validation_img_{}'.format(input_filename, img_count), labels_np, outputs_np)
+                    '{}_validation_{}'.format(input_filename, img_count), labels_np, outputs_np)
                 utils.save_img_lbl_seg_to_nifti(
                     inputs_np, labels_np, outputs_np, val_images_dir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(img_count)))

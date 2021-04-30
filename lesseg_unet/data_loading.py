@@ -5,8 +5,7 @@ from typing import Sequence, Tuple
 
 import torch
 import monai
-from monai.data import list_data_collate
-from torch.utils.data import DataLoader
+from monai.data import list_data_collate, DataLoader
 from monai.data import Dataset
 from lesseg_unet import transformations
 
