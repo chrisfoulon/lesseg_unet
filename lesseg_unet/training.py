@@ -153,9 +153,9 @@ def training_loop(img_path_list: Sequence,
             # print('outputs size: {}'.format(outputs.size()))
             # TODO smoothing?
             y = labels[:, :1, :, :, :]
-            s = .1
-            labels_smoothed = y * (1 - s) + 0.5 * s
-            loss = loss_function(outputs, labels_smoothed)
+            # s = .1
+            # labels_smoothed = y * (1 - s) + 0.5 * s
+            loss = loss_function(outputs, y)
             # loss = loss_function(outputs, labels[:, :1, :, :, :])
             loss.backward()
             optimizer.step()
