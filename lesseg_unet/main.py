@@ -54,7 +54,7 @@ def main():
             '-lp': '/media/chrisfoulon/DATA1/z_Zetas/w_les_2mm_H25_kde_zeta/',
             '-nw': 16,
             '-pref': 'wodctH25_b1000',
-            '-ne': 1000,
+            '-ne': 2000,
         }
         value_dict = {
             '-trs': ['minimal_hyper_dict', 'minimal_hyper_dict_cc', 'full_hyper_dict', 'full_hyper_dict_cc',
@@ -73,7 +73,7 @@ def main():
                                    epoch_num=param_dict['-ne'],
                                    dataloader_workers=param_dict['-nw'],
                                    label_smoothing=False,
-                                   stop_best_epoch=12)
+                                   stop_best_epoch=20)
             checkpoint = Path(output_dir, 'best_metric_model_segmentation3d_array_epo.pth')
             segmentation.validation_loop(img_list, les_list,
                                          output_dir,

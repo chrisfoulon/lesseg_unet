@@ -146,7 +146,7 @@ def training_loop(img_path_list: Sequence,
         model.train()
         epoch_loss = 0
         step = 0
-        # for batch_data in tqdm(train_loader, desc=f'training_loop{epoch_num}'):
+        # for batch_data in tqdm(train_loader, desc=f'training_loop{epoch}'):
         for batch_data in train_loader:
             step += 1
             inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
@@ -195,7 +195,7 @@ def training_loop(img_path_list: Sequence,
                 val_score_list = []
                 loss_list = []
                 step = 0
-                for val_data in tqdm(val_loader, desc=f'validation_loop{epoch_num}'):
+                for val_data in tqdm(val_loader, desc=f'validation_loop{epoch}'):
                     step += 1
                     inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
                     outputs = model(inputs)
@@ -292,10 +292,13 @@ def training_loop(img_path_list: Sequence,
                         epoch + 1, metric, trash_count, best_metric, best_metric_epoch
                     )
                 )
-        if stop_best_epoch != 0:
-            if best_epoch_count > stop_best_epoch:
-                print(f'More than {stop_best_epoch} without improvement')
-                break
+                if stop_best_epoch != 0:
+                    if best_epoch_count > stop_best_epoch:
+                        print(f'More than {stop_best_epoch} without improvement')
+                        df.to_csv(Path(output_dir, 'perf_measures.csv'), columns=perf_measure_names)
+                        print(f'train completed, best_metric: {best_metric:.4f} at epoch: {best_metric_epoch}')
+                        writer.close()
+                        return
                 # utils.save_checkpoint(model, epoch + 1, optimizer, output_dir)
     df.to_csv(Path(output_dir, 'perf_measures.csv'), columns=perf_measure_names)
     print(f'train completed, best_metric: {best_metric:.4f} at epoch: {best_metric_epoch}')
