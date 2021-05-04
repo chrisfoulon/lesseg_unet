@@ -26,6 +26,8 @@ def main():
     lesion_paths_group.add_argument('-lli', '--lesion_input_list', type=str,
                                     help='Text file containing the list of b1000')
     parser.add_argument('-trs', '--transform_dict', type=str, help='file path to a json dictionary of transformations')
+    parser.add_argument('-lab_smo', '--label_smoothing', action='store_true',
+                        help='Apply a label smoothing during the training')
     parser.add_argument('-pt', '--checkpoint', type=str, help='file path to a torch checkpoint file')
     parser.add_argument('-d', '--torch_device', type=str, help='Device type and number given to'
                                                                'torch.device()')
@@ -89,10 +91,12 @@ def main():
     else:
         print('Using default transformation dictionary')
         transform_dict = transform_dicts.minimal_hyper_dict
-
     train_val_percentage = None
     if args.train_val is not None:
         train_val_percentage = args.train_val
+    label_smoothing = False
+    if args.label_smoothing:
+        label_smoothing = True
     if args.checkpoint is None:
         if train_val_percentage is None:
             train_val_percentage = 75
@@ -102,7 +106,8 @@ def main():
                                epoch_num=args.num_epochs,
                                dataloader_workers=args.num_workers,
                                num_nifti_save=args.num_nifti_save,
-                               train_val_percentage=train_val_percentage)
+                               train_val_percentage=train_val_percentage,
+                               label_smoothing=label_smoothing)
     else:
         if train_val_percentage is None:
             train_val_percentage = 0

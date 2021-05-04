@@ -28,8 +28,8 @@ def training_loop(img_path_list: Sequence,
                   batch_size: int = 10,
                   epoch_num: int = 50,
                   dataloader_workers: int = 4,
-                  num_nifti_save=25,
-                  train_val_percentage=75):
+                  train_val_percentage=75,
+                  label_smoothing=False):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -153,8 +153,9 @@ def training_loop(img_path_list: Sequence,
             # print('outputs size: {}'.format(outputs.size()))
             # TODO smoothing?
             y = labels[:, :1, :, :, :]
-            # s = .1
-            # labels_smoothed = y * (1 - s) + 0.5 * s
+            if label_smoothing:
+                s = .1
+                y = y * (1 - s) + 0.5 * s
             loss = loss_function(outputs, y)
             # loss = loss_function(outputs, labels[:, :1, :, :, :])
             loss.backward()
