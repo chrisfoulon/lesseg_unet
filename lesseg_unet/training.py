@@ -30,7 +30,8 @@ def training_loop(img_path_list: Sequence,
                   epoch_num: int = 50,
                   dataloader_workers: int = 4,
                   train_val_percentage=75,
-                  label_smoothing=False):
+                  label_smoothing=False,
+                  stop_best_epoch=0):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -141,10 +142,12 @@ def training_loop(img_path_list: Sequence,
     for epoch in range(epoch_num):
         print('-' * 10)
         print(f'epoch {epoch + 1}/{epoch_num}')
+        best_epoch_count = 0
         model.train()
         epoch_loss = 0
         step = 0
-        for batch_data in tqdm(train_loader, desc='training_loop'):
+        # for batch_data in tqdm(train_loader, desc=f'training_loop{epoch_num}'):
+        for batch_data in train_loader:
             step += 1
             inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
             # print('inputs size: {}'.format(inputs.size()))
@@ -192,7 +195,7 @@ def training_loop(img_path_list: Sequence,
                 val_score_list = []
                 loss_list = []
                 step = 0
-                for val_data in tqdm(val_loader, desc='validation_loop'):
+                for val_data in tqdm(val_loader, desc=f'validation_loop{epoch_num}'):
                     step += 1
                     inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
                     outputs = model(inputs)
@@ -253,6 +256,7 @@ def training_loop(img_path_list: Sequence,
                     'val_best_mean_dice': 0
                 })
                 if metric > best_metric:
+                    best_epoch_count = 0
                     best_metric = metric
                     best_metric_epoch = epoch + 1
                     # torch.save(model.state_dict(),
@@ -280,13 +284,18 @@ def training_loop(img_path_list: Sequence,
                     # plot_2d_or_3d_image(inputs, epoch + 1, writer, index=0, tag="image")
                     # plot_2d_or_3d_image(labels, epoch + 1, writer, index=0, tag="label")
                     # plot_2d_or_3d_image(outputs, epoch + 1, writer, index=0, tag="output")
+                else:
+                    best_epoch_count += 1
                 print(
                     'current epoch: {} current mean dice: {:.4f} with {} '
                     'trash images best mean dice: {:.4f} at epoch {}'.format(
                         epoch + 1, metric, trash_count, best_metric, best_metric_epoch
                     )
                 )
-
+        if stop_best_epoch != 0:
+            if best_epoch_count > stop_best_epoch:
+                print(f'More than {stop_best_epoch} without improvement')
+                break
                 # utils.save_checkpoint(model, epoch + 1, optimizer, output_dir)
     df.to_csv(Path(output_dir, 'perf_measures.csv'), columns=perf_measure_names)
     print(f'train completed, best_metric: {best_metric:.4f} at epoch: {best_metric_epoch}')
