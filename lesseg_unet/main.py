@@ -44,26 +44,6 @@ def main():
     # logs init
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
     if args.benchmark:
-        """
-        lesseg_unet 
-        -o /media/chrisfoulon/HDD2/lesseg_tests/minimal/ 
-        -p /media/chrisfoulon/DATA1/z_Zetas/a_pre_processing_lesions_fil_norm/ 
-        -lp /media/chrisfoulon/DATA1/z_Zetas/w_les_2mm_H25_kde_zeta/ 
-        -nw 16 
-        -pref wodctH25_b1000 
-        -ne 50 
-        -trs minimal_hyper_dict 
-        -pt /media/chrisfoulon/HDD2/lesseg_tests/minimal/best_metric_model_segmentation3d_array_epo.pth 
-        -tv 75;
-        lesseg_unet 
-        -o /media/chrisfoulon/HDD2/lesseg_tests/minimal/uber_trick_full 
-        -p /media/chrisfoulon/DATA1/z_Zetas/a_pre_processing_lesions_fil_norm/ 
-        -lp /media/chrisfoulon/DATA1/z_Zetas/w_les_2mm_H25_kde_zeta/ 
-        -nw 16 
-        -pref wodctH25_b1000 
-        -ne 50 
-        -trs full_hyper_dict_cc
-        """
         output_root = Path(args.output)
         os.makedirs(output_root, exist_ok=True)
         if not output_root.is_dir():
@@ -75,17 +55,15 @@ def main():
             '-nw': 16,
             '-pref': 'wodctH25_b1000',
             '-ne': 1000,
-            'trs': {},
-
         }
         value_dict = {
             '-trs': ['minimal_hyper_dict', 'minimal_hyper_dict_cc', 'full_hyper_dict', 'full_hyper_dict_cc',
                      'new_full_dict_cc'],
             '-o': ['minimal', 'minimal_cc', 'full', 'full_cc', 'new_full_dict_cc']
         }
-        img_list = utils.create_input_path_list_from_root(args.input_path)
-        les_list = utils.create_input_path_list_from_root(args.lesion_input_path)
-        b1000_pref = args.image_prefix
+        img_list = utils.create_input_path_list_from_root(param_dict['-p'])
+        les_list = utils.create_input_path_list_from_root(param_dict['-lp'])
+        b1000_pref = param_dict['-pref']
 
         for ind, tr_dict in enumerate(value_dict['-trs']):
             transform_dict = getattr(tr_dicts, tr_dict)
