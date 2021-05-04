@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Sequence, Tuple, Union
 
 import pandas as pd
+from tqdm import tqdm
 import numpy as np
 import monai
 import torch
@@ -143,7 +144,7 @@ def training_loop(img_path_list: Sequence,
         model.train()
         epoch_loss = 0
         step = 0
-        for batch_data in train_loader:
+        for batch_data in tqdm(train_loader, desc='training_loop'):
             step += 1
             inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
             # print('inputs size: {}'.format(inputs.size()))
@@ -191,7 +192,7 @@ def training_loop(img_path_list: Sequence,
                 val_score_list = []
                 loss_list = []
                 step = 0
-                for val_data in val_loader:
+                for val_data in tqdm(val_loader, desc='validation_loop'):
                     step += 1
                     inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
                     outputs = model(inputs)
@@ -200,7 +201,7 @@ def training_loop(img_path_list: Sequence,
                     # loss.backward()
                     loss_list.append(loss.item())
                     value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
-                    print(f'{step}/{val_batches_per_epoch}, val_loss: {loss.item():.4f}')
+                    # print(f'{step}/{val_batches_per_epoch}, val_loss: {loss.item():.4f}')
                     writer.add_scalar('val_loss', loss.item(), val_batches_per_epoch * epoch + step)
                     val_score_list.append(value.item())
                     metric_count += len(value)
