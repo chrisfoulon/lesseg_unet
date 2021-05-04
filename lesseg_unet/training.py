@@ -48,8 +48,8 @@ def training_loop(img_path_list: Sequence,
     model = net.create_unet_model(device, unet_hyper_params)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
-    # loss_function = monai.losses.DiceLoss(sigmoid=True)
-    loss_function = BCE
+    loss_function = monai.losses.DiceLoss(sigmoid=True)
+    # loss_function = BCE
     val_loss_function = monai.losses.DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
     print('check ok')
