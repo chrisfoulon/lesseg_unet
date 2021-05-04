@@ -35,8 +35,8 @@ def main():
     parser.add_argument('-nw', '--num_workers', default=4, type=int, help='Number of dataloader workers')
     parser.add_argument('-ne', '--num_epochs', default=50, type=int, help='Number of epochs')
     parser.add_argument('-tv', '--train_val', type=int, help='Training / validation percentage cut')
-    parser.add_argument('-ns', '--num_nifti_save', default=25, type=int, help='Number of niftis saved '
-                                                                              'during validation')
+    # parser.add_argument('-ns', '--num_nifti_save', default=25, type=int, help='Number of niftis saved '
+    #                                                                           'during validation')
     args = parser.parse_args()
     # print MONAI config
     print_config()
@@ -105,7 +105,7 @@ def main():
                                device=args.torch_device,
                                epoch_num=args.num_epochs,
                                dataloader_workers=args.num_workers,
-                               num_nifti_save=args.num_nifti_save,
+                               # num_nifti_save=args.num_nifti_save,
                                train_val_percentage=train_val_percentage,
                                label_smoothing=label_smoothing)
     else:
