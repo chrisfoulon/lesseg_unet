@@ -70,13 +70,14 @@ def main():
         for ind, tr_dict in enumerate(value_dict['-trs']):
             transform_dict = getattr(tr_dicts, tr_dict)
             output_dir = Path(output_root, value_dict['-o'][ind])
-            training.training_loop(img_list, les_list, output_dir, b1000_pref,
-                                   transform_dict=transform_dict,
-                                   epoch_num=param_dict['-ne'],
-                                   dataloader_workers=param_dict['-nw'],
-                                   label_smoothing=False,
-                                   stop_best_epoch=0)
             checkpoint = Path(output_dir, 'best_metric_model_segmentation3d_array_epo.pth')
+            if not checkpoint.is_file():
+                training.training_loop(img_list, les_list, output_dir, b1000_pref,
+                                       transform_dict=transform_dict,
+                                       epoch_num=param_dict['-ne'],
+                                       dataloader_workers=param_dict['-nw'],
+                                       label_smoothing=False,
+                                       stop_best_epoch=0)
             segmentation.validation_loop(img_list, les_list,
                                          output_dir,
                                          checkpoint,
