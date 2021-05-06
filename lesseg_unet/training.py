@@ -31,7 +31,7 @@ def training_loop(img_path_list: Sequence,
                   dataloader_workers: int = 4,
                   train_val_percentage=75,
                   label_smoothing=False,
-                  stop_best_epoch=0):
+                  stop_best_epoch=-1):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -109,6 +109,7 @@ def training_loop(img_path_list: Sequence,
     epoch_loss_values = list()
     metric_values = list()
     val_save_thr = 0.7
+    print(f'Will stop after {stop_best_epoch} epochs without improvement')
     """
     Measure tracking init
     """
@@ -292,7 +293,7 @@ def training_loop(img_path_list: Sequence,
                         epoch + 1, metric, trash_count, best_metric, best_metric_epoch
                     )
                 )
-                if stop_best_epoch != 0:
+                if stop_best_epoch != -1:
                     if best_epoch_count > stop_best_epoch:
                         print(f'More than {stop_best_epoch} without improvement')
                         df.to_csv(Path(output_dir, 'perf_measures.csv'), columns=perf_measure_names)

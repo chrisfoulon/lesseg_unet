@@ -52,6 +52,8 @@ def main():
             '-o': output_root,
             '-p': '/media/chrisfoulon/DATA1/z_Zetas/a_pre_processing_lesions_fil_norm/',
             '-lp': '/media/chrisfoulon/DATA1/z_Zetas/w_les_2mm_H25_kde_zeta/',
+            # '-p': '/data/UCL_Data/a_pre_processing_lesions_fil_norm/',
+            # '-lp': '/data/UCL_Data/w_les_2mm_H25_kde_zeta/',
             '-nw': 16,
             '-pref': 'wodctH25_b1000',
             '-ne': 2000,
@@ -73,7 +75,7 @@ def main():
                                    epoch_num=param_dict['-ne'],
                                    dataloader_workers=param_dict['-nw'],
                                    label_smoothing=False,
-                                   stop_best_epoch=20)
+                                   stop_best_epoch=0)
             checkpoint = Path(output_dir, 'best_metric_model_segmentation3d_array_epo.pth')
             segmentation.validation_loop(img_list, les_list,
                                          output_dir,
@@ -148,7 +150,7 @@ def main():
                                    dataloader_workers=args.num_workers,
                                    # num_nifti_save=args.num_nifti_save,
                                    train_val_percentage=train_val_percentage,
-                                   label_smoothing=label_smoothing)
+                                   label_smoothing=True)
         else:
             if train_val_percentage is None:
                 train_val_percentage = 0
