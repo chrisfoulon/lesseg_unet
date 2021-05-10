@@ -205,11 +205,11 @@ minimal_hyper_dict = {
         #     'neg': 1,
         #     'num_samples': 4
         # }},
-        {'RandSpatialCropd': {
-            'keys': ["image", "label"],
-            'roi_size': min_small_crop_size,
-            'random_size': False
-        }},
+        # {'RandSpatialCropd': {
+        #     'keys': ["image", "label"],
+        #     'roi_size': min_small_crop_size,
+        #     'random_size': False
+        # }},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'After RandCrop'}},
     ],
     'labelonly_transform': [],

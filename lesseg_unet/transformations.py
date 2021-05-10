@@ -1,7 +1,7 @@
 from math import radians
 import logging
 from copy import deepcopy
-from typing import Mapping, Dict, Hashable, Any, Optional, Callable, Union, List
+from typing import Mapping, Dict, Hashable, Any, Optional, Callable, Union, List, Tuple
 
 import numpy as np
 from monai.transforms.compose import Randomizable
@@ -97,6 +97,37 @@ class Binarized(MapTransform):
         for idx, key in enumerate(self.keys):
             d[key] = self.binarize(d[key])
         return d
+
+
+# class CoordConv(Transform):
+#     """
+#     Implement CordConv
+#     """
+#     def __init__(
+#         self,
+#         spatial_channels: Tuple[int],
+#     ) -> None:
+#         self.spatial_channels = spatial_channels
+#
+#     def __call__(self,  img: Union[np.ndarray, torch.Tensor]) -> Union[np.ndarray, torch.Tensor]:
+#         """
+#         Apply the transform to `img`.
+#         """
+#
+#         spatial_dims = img.shape[1:]
+#         # pre-allocate memory
+#         coord_channels = np.ones((len(self.spatial_channels), *spatial_dims)).astype(img.dtype)
+#
+#         for i, dim in enumerate(self.spatial_channels):
+#             ones = np.ones((1, *spatial_dims))
+#             channel_size = img.shape[dim]
+#             range = np.arange(channel_size)
+#             non_channel_dims = list(set(np.arange(img.ndim)).difference([dim]))
+#             channel = ones * np.expand_dims(range,  non_channel_dims)
+#             channel = channel/channel_size - 0.5
+#             coord_channels[i] = channel
+#
+#         return torch.Tensor(np.concatenate((img, coord_channels), axis=0))
 
 
 class CoordConv(Transform):

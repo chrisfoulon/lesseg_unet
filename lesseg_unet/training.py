@@ -289,10 +289,12 @@ def training_loop(img_path_list: Sequence,
                     best_epoch_count += 1
                 print(
                     'current epoch: {} current mean dice: {:.4f} with {} '
-                    'trash images best mean dice: {:.4f} at epoch {}'.format(
-                        epoch + 1, metric, trash_count, best_metric, best_metric_epoch
+                    'trash (below a score of {}) images best mean dice: {:.4f} at epoch {}'.format(
+                        epoch + 1, metric, trash_count, val_save_thr, best_metric, best_metric_epoch
                     )
                 )
+                print(f'It has been [{best_epoch_count}] since a best epoch has been found'
+                      f'\nThe training will stop after [{stop_best_epoch}] epochs without improvement')
                 if stop_best_epoch != -1:
                     if best_epoch_count > stop_best_epoch:
                         print(f'More than {stop_best_epoch} without improvement')
