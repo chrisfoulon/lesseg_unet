@@ -78,7 +78,7 @@ def main():
                                            epoch_num=param_dict['-ne'],
                                            dataloader_workers=param_dict['-nw'],
                                            label_smoothing=False,
-                                           stop_best_epoch=25)
+                                           stop_best_epoch=100)
             else:
                 segmentation.validation_loop(img_list, les_list,
                                              output_dir,
