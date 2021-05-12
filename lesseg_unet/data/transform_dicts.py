@@ -195,7 +195,7 @@ minimal_hyper_dict = {
 
         # {'ScaleIntensityd': {'keys': "image"}},
 
-        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'Fisrt monai'}},
         # {'RandCropByPosNegLabeld': {
         #     'keys': ["image", "label"],
@@ -228,12 +228,16 @@ minimal_hyper_dict = {
             'keys': ['label'],
             'lower_threshold': 0.5
         }},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER binarized'}},
         {'NormalizeIntensityd': {'keys': ['image']}},
     ]
 }
 
 minimal_hyper_dict_cc = deepcopy(minimal_hyper_dict)
 minimal_hyper_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
+
+minimal_hyper_dict_altcc = deepcopy(minimal_hyper_dict)
+minimal_hyper_dict_altcc['last_transform'].append({'CoordConvAltd': {'keys': ['image', 'label']}})
 
 # TODO ResizeWithPadOrCropd doesn't preserve the input exactly, need to find a way to inverse
 test_crop = {

@@ -66,7 +66,8 @@ def main():
         img_list = utils.create_input_path_list_from_root(param_dict['-p'])
         les_list = utils.create_input_path_list_from_root(param_dict['-lp'])
         b1000_pref = param_dict['-pref']
-
+        if args.label_smoothing is None:
+            args.label_smoothing = False
         for ind, tr_dict in enumerate(value_dict['-trs']):
             transform_dict = getattr(tr_dicts, tr_dict)
             output_dir = Path(output_root, value_dict['-o'][ind])
@@ -153,7 +154,7 @@ def main():
                                    dataloader_workers=args.num_workers,
                                    # num_nifti_save=args.num_nifti_save,
                                    train_val_percentage=train_val_percentage,
-                                   label_smoothing=True)
+                                   label_smoothing=args.label_smoothing)
         else:
             if train_val_percentage is None:
                 train_val_percentage = 0

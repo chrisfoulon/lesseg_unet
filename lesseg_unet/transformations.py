@@ -99,35 +99,64 @@ class Binarized(MapTransform):
         return d
 
 
-# class CoordConv(Transform):
-#     """
-#     Implement CordConv
-#     """
-#     def __init__(
-#         self,
-#         spatial_channels: Tuple[int],
-#     ) -> None:
-#         self.spatial_channels = spatial_channels
-#
-#     def __call__(self,  img: Union[np.ndarray, torch.Tensor]) -> Union[np.ndarray, torch.Tensor]:
-#         """
-#         Apply the transform to `img`.
-#         """
-#
-#         spatial_dims = img.shape[1:]
-#         # pre-allocate memory
-#         coord_channels = np.ones((len(self.spatial_channels), *spatial_dims)).astype(img.dtype)
-#
-#         for i, dim in enumerate(self.spatial_channels):
-#             ones = np.ones((1, *spatial_dims))
-#             channel_size = img.shape[dim]
-#             range = np.arange(channel_size)
-#             non_channel_dims = list(set(np.arange(img.ndim)).difference([dim]))
-#             channel = ones * np.expand_dims(range,  non_channel_dims)
-#             channel = channel/channel_size - 0.5
-#             coord_channels[i] = channel
-#
-#         return torch.Tensor(np.concatenate((img, coord_channels), axis=0))
+class CoordConvAlt(Transform):
+    """
+    Implement CordConv
+    """
+    def __init__(
+        self,
+        spatial_channels: Tuple[int] = (1, 2, 3),
+    ) -> None:
+        self.spatial_channels = spatial_channels
+
+    def __call__(self,  img: Union[np.ndarray, torch.Tensor]) -> Union[np.ndarray, torch.Tensor]:
+        """
+        Apply the transform to `img`.
+        """
+
+        spatial_dims = img.shape[1:]
+        # pre-allocate memory
+        if isinstance(img, torch.Tensor):
+            img = np.asarray(img.detach().numpy())
+        coord_channels = np.ones((len(self.spatial_channels), *spatial_dims)).astype(img.dtype)
+
+        for i, dim in enumerate(self.spatial_channels):
+            ones = np.ones((1, *spatial_dims))
+            channel_size = img.shape[dim]
+            range = np.arange(channel_size)
+            non_channel_dims = list(set(np.arange(img.ndim)).difference([dim]))
+            channel = ones * np.expand_dims(range,  non_channel_dims)
+            channel = channel/channel_size - 0.5
+            coord_channels[i] = channel
+
+        return torch.Tensor(np.concatenate((img, coord_channels), axis=0))
+        # return np.concatenate((img, coord_channels), axis=0)
+
+
+class CoordConvAltd(MapTransform):
+    """
+    Dictionary-based wrapper of :py:class:`monai.transforms.CordConv`.
+    """
+
+    def __init__(self, keys: KeysCollection, spatial_channels: Tuple[int] = (1, 2, 3)) -> None:
+        """
+        Args:
+            keys: keys of the corresponding items to be transformed.
+                See also: :py:class:`monai.transforms.compose.MapTransform`
+            allow_missing_keys: don't raise exception if key is missing.
+
+        """
+
+        super().__init__(keys)
+        self.coord_conv = CoordConvAlt(spatial_channels)
+
+    def __call__(
+        self, data: Mapping[Hashable, Union[np.ndarray, torch.Tensor]]
+    ) -> Dict[Hashable, Union[np.ndarray, torch.Tensor]]:
+        d = dict(data)
+        for key in self.keys:
+            d[key] = self.coord_conv(d[key])
+        return d
 
 
 class CoordConv(Transform):

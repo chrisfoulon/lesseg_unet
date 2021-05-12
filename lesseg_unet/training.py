@@ -45,7 +45,7 @@ def training_loop(img_path_list: Sequence,
     # checking is CoordConv is used and change the input channel dimension
     unet_hyper_params = net.default_unet_hyper_params
     for t in val_ds.transform.transforms:
-        if isinstance(t, transformations.CoordConvd):
+        if isinstance(t, transformations.CoordConvd) or isinstance(t, transformations.CoordConvAltd):
             unet_hyper_params = net.coord_conv_unet_hyper_params
     model = net.create_unet_model(device, unet_hyper_params)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
@@ -109,7 +109,10 @@ def training_loop(img_path_list: Sequence,
     epoch_loss_values = list()
     metric_values = list()
     val_save_thr = 0.7
-    print(f'Will stop after {stop_best_epoch} epochs without improvement')
+    if stop_best_epoch != -1:
+        print(f'Will stop after {stop_best_epoch} epochs without improvement')
+    if label_smoothing:
+        print('Label smoothing activated')
     """
     Measure tracking init
     """
