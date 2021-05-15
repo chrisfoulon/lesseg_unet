@@ -55,18 +55,20 @@ def training_loop(img_path_list: Sequence,
     val_loss_function = monai.losses.DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
     print('check ok')
-    # it = iter(val_loader)
+    # it = iter(train_loader)
     # import nibabel as nib
-    # for i in index_range(25):
+    # for i in tqdm(range(5)):
     #     # input_data = val_ds[i]['image']
     #     print(val_ds[i]['image_meta_dict']['filename_or_obj'])
     #     raw_data = nib.load(val_ds[i]['image_meta_dict']['filename_or_obj']).get_fdata()
     #     data = next(it)
     #     inputs, labels = data['image'], data['label']
-    #     i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
-    #     nib.save(nib.Nifti1Image(i_data, nib.load(val_ds[i]['image_meta_dict']['filename_or_obj']).affine),
-    #              filename=f'/home/tolhsadum/neuro_apps/data/toto_{i}.nii')
-    #     print(np.all(i_data == raw_data))
+    #     # i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
+    #     for ind, channel in enumerate(inputs[0, :, :, :, :]):
+    #         i_data = channel.cpu().detach().numpy()
+    #         nib.save(nib.Nifti1Image(i_data, nib.load(val_ds[i]['image_meta_dict']['filename_or_obj']).affine),
+    #                  filename=f'/home/tolhsadum/neuro_apps/data/my_cc_{i}_{ind}.nii')
+    #     # print(np.all(i_data == raw_data))
     #     # i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
     #     # l_data = labels[0, 0, :, :, :].cpu().detach().numpy()
     #     # utils.save_img_lbl_seg_to_png(
@@ -199,7 +201,7 @@ def training_loop(img_path_list: Sequence,
                 val_score_list = []
                 loss_list = []
                 step = 0
-                for val_data in tqdm(val_loader, desc=f'validation_loop{epoch}'):
+                for val_data in tqdm(val_loader, desc=f'validation_loop [{epoch}]'):
                     step += 1
                     inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
                     outputs = model(inputs)
@@ -260,7 +262,6 @@ def training_loop(img_path_list: Sequence,
                     'val_best_mean_dice': 0
                 })
                 if metric > best_metric:
-                    best_epoch_count = 0
                     best_metric = metric
                     best_metric_epoch = epoch + 1
                     # torch.save(model.state_dict(),
@@ -288,8 +289,9 @@ def training_loop(img_path_list: Sequence,
                     # plot_2d_or_3d_image(inputs, epoch + 1, writer, index=0, tag="image")
                     # plot_2d_or_3d_image(labels, epoch + 1, writer, index=0, tag="label")
                     # plot_2d_or_3d_image(outputs, epoch + 1, writer, index=0, tag="output")
-                else:
-                    best_epoch_count += 1
+                # else:
+                #     best_epoch_count += 1
+                best_epoch_count = epoch + 1 - best_metric_epoch
                 print(
                     'current epoch: {} current mean dice: {:.4f} with {} '
                     'trash (below a score of {}) images best mean dice: {:.4f} at epoch {}'.format(

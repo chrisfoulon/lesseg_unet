@@ -11,7 +11,8 @@ default_unet_hyper_params = {
         'out_channels': 1,
         # 'channels': (16, 32, 64, 128, 256),
         'channels': (10, 20, 40, 80, 160),
-        'strides': (2, 2, 2, 2),
+        # 'strides': (2, 2, 2, 2),
+        'strides': (2, 2, 2, 2, 2),
         'num_res_units': 2
     }
 

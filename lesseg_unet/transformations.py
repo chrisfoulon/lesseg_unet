@@ -53,6 +53,25 @@ Custom Transformation Classes
 """
 
 
+def create_gradient(img_spatial_size, low=-1, high=1):
+    x = np.linspace(low, high, img_spatial_size[0])
+    y = np.linspace(low, high, img_spatial_size[1])
+    z = np.linspace(low, high, img_spatial_size[2])
+    x_grad = np.ones(img_spatial_size)
+    for ind in range(x_grad.shape[0]):
+        x_grad[ind, :, :] = x[ind]
+    y_grad = np.ones(img_spatial_size)
+    for ind in range(y_grad.shape[0]):
+        y_grad[:, ind, :] = y[ind]
+    z_grad = np.ones(img_spatial_size)
+    for ind in range(z_grad.shape[0]):
+        z_grad[:, :, ind] = z[ind]
+    x_grad = np.expand_dims(x_grad, 0)
+    y_grad = np.expand_dims(y_grad, 0)
+    z_grad = np.expand_dims(z_grad, 0)
+    return np.concatenate((x_grad, y_grad, z_grad), 0)
+
+
 class Binarize(Transform):
     """
     Set every above threshold voxel to 1.0
@@ -169,17 +188,7 @@ class CoordConv(Transform):
         # else:
         #     img = np.asarray(img[0, :, :, :])
         if self.gradients is None:
-            x_grad = np.zeros_like(img)
-            y_grad = np.zeros_like(img)
-            z_grad = np.zeros_like(img)
-            # print(x_grad.shape)
-            for k in range(img.shape[1]):
-                x_grad[0, k, :, :] = k
-            for k in range(img.shape[2]):
-                y_grad[0, :, k, :] = k
-            for k in range(img.shape[3]):
-                z_grad[0, :, :, k] = k
-            img = np.concatenate((img, x_grad, y_grad, z_grad), 0)
+            img = create_gradient(img.shape[1:])
         else:
             img = np.concatenate((img, self.gradients), 0)
         return torch.Tensor(img)
@@ -647,16 +656,8 @@ def setup_coord_conv(hyper_param_dict):
     spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size', 'last_transform')
     if spatial_size is None:
         spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size')
-    x_grad = np.expand_dims(np.zeros(spatial_size), 0)
-    y_grad = np.expand_dims(np.zeros(spatial_size), 0)
-    z_grad = np.expand_dims(np.zeros(spatial_size), 0)
-    for k in range(spatial_size[0]):
-        x_grad[0, k, :, :] = k
-    for k in range(spatial_size[1]):
-        y_grad[0, :, k, :] = k
-    for k in range(spatial_size[2]):
-        z_grad[0, :, :, k] = k
-    gradients = np.concatenate((x_grad, y_grad, z_grad), 0)
+
+    gradients = create_gradient(spatial_size)
     for k in hyper_param_dict:
         # Each dict in the sublist
         for d in hyper_param_dict[k]:

@@ -35,6 +35,8 @@ def main():
     parser.add_argument('-nw', '--num_workers', default=4, type=int, help='Number of dataloader workers')
     parser.add_argument('-ne', '--num_epochs', default=50, type=int, help='Number of epochs')
     parser.add_argument('-tv', '--train_val', type=int, help='Training / validation percentage cut')
+    parser.add_argument('-sbe', '--stop_best_epoch', type=int, help='Number of epochs without improvement before it '
+                                                                    'stops')
     # parser.add_argument('-ns', '--num_nifti_save', default=25, type=int, help='Number of niftis saved '
     #                                                                           'during validation')
     nifti_paths_group.add_argument('-bm', '--benchmark', action='store_true', help=argparse.SUPPRESS)
@@ -43,6 +45,10 @@ def main():
     print_config()
     # logs init
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+    if args.stop_best_epoch is None:
+        stop_best_epoch = -1
+    else:
+        stop_best_epoch = args.stop_best_epoch
     if args.benchmark:
         output_root = Path(args.output)
         os.makedirs(output_root, exist_ok=True)
@@ -79,7 +85,7 @@ def main():
                                            epoch_num=param_dict['-ne'],
                                            dataloader_workers=param_dict['-nw'],
                                            label_smoothing=False,
-                                           stop_best_epoch=100)
+                                           stop_best_epoch=stop_best_epoch)
             else:
                 segmentation.validation_loop(img_list, les_list,
                                              output_dir,
@@ -154,7 +160,8 @@ def main():
                                    dataloader_workers=args.num_workers,
                                    # num_nifti_save=args.num_nifti_save,
                                    train_val_percentage=train_val_percentage,
-                                   label_smoothing=args.label_smoothing)
+                                   label_smoothing=args.label_smoothing,
+                                   stop_best_epoch=stop_best_epoch)
         else:
             if train_val_percentage is None:
                 train_val_percentage = 0
