@@ -48,13 +48,17 @@ def segmentation_loop(img_path_list: Sequence,
             outputs = post_trans(outputs)
             inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy()
             outputs_np = outputs[0, 0, :, :, :].cpu().detach().numpy()
-            utils.save_img_lbl_seg_to_png(
-                inputs_np, output_dir,
-                '{}_segmentation_{}'.format(input_filename, img_count), outputs_np)
+            # utils.save_img_lbl_seg_to_png(
+            #     inputs_np, output_dir,
+            #     '{}_segmentation_{}'.format(input_filename, img_count), outputs_np)
             tmp = None
             utils.save_img_lbl_seg_to_nifti(
                 inputs_np, tmp, outputs_np, output_dir, val_output_affine,
                 '{}_{}'.format(str(input_filename), str(img_count)))
+            del inputs
+            del outputs
+            del inputs_np
+            del outputs_np
 
 
 def validation_loop(img_path_list: Sequence,

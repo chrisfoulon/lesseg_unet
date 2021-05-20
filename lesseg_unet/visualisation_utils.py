@@ -114,6 +114,7 @@ def plot_seg(img, label=None, seg=None, save_path=None):
         z = round(len(img[0, 0, :]) / 2)
     # fig = plt.figure()
     # plt.subplot(1,1,1).imshow(img[:, :, z], cmap='gray', interpolation='none')
+    z = int(z)
     plt.imshow(img[:, :, z], cmap='gray', interpolation='none')
     if label is not None:
         plt.imshow(label[:, :, z], cmap='Reds', alpha=label[:, :, z], interpolation='none')
