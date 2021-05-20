@@ -4,6 +4,7 @@ from typing import Sequence, Union
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 import torch
 from lesseg_unet import data_loading, utils, net, transformations
 from monai.metrics import DiceMetric
@@ -39,7 +40,7 @@ def segmentation_loop(img_path_list: Sequence,
     model.eval()
     img_count = 0
     with torch.no_grad():
-        for val_data in val_loader:
+        for val_data in tqdm(val_loader, desc=f'Segmentation '):
             img_count += 1
             inputs = val_data['image'].to(device)
             input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
@@ -122,7 +123,7 @@ def validation_loop(img_path_list: Sequence,
         trash_count = 0
         # img_max_num = len(train_ds) + len(val_ds)
         val_score_list = []
-        for val_data in val_loader:
+        for val_data in tqdm(val_loader, desc=f'Validation '):
             inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
             input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
             outputs = model(inputs)
