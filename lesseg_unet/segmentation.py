@@ -48,6 +48,7 @@ def segmentation_loop(img_path_list: Sequence,
             outputs = post_trans(outputs)
             inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy()
             outputs_np = outputs[0, 0, :, :, :].cpu().detach().numpy()
+            # TODO This is slow AF because of the imshow, maybe resetting the plot would work
             # utils.save_img_lbl_seg_to_png(
             #     inputs_np, output_dir,
             #     '{}_segmentation_{}'.format(input_filename, img_count), outputs_np)
@@ -142,18 +143,20 @@ def validation_loop(img_path_list: Sequence,
             if value.item() < bad_dice_treshold:
                 trash_count += 1
                 print('Saving trash image #{}'.format(trash_count))
-                utils.save_img_lbl_seg_to_png(
-                    inputs_np, trash_val_images_dir,
-                    '{}_trash_img_{}'.format(input_filename, trash_count), labels_np, outputs_np)
+                # TODO This is slow AF because of the imshow, maybe resetting the plot would work
+                # utils.save_img_lbl_seg_to_png(
+                #     inputs_np, trash_val_images_dir,
+                #     '{}_trash_img_{}'.format(input_filename, trash_count), labels_np, outputs_np)
                 utils.save_img_lbl_seg_to_nifti(
                     inputs_np, labels_np, outputs_np, trash_val_images_dir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(trash_count)))
             else:
                 img_count += 1
                 print('Saving good image #{}'.format(img_count))
-                utils.save_img_lbl_seg_to_png(
-                    inputs_np, val_images_dir,
-                    '{}_validation_{}'.format(input_filename, img_count), labels_np, outputs_np)
+                # TODO This is slow AF because of the imshow, maybe resetting the plot would work
+                # utils.save_img_lbl_seg_to_png(
+                #     inputs_np, val_images_dir,
+                #     '{}_validation_{}'.format(input_filename, img_count), labels_np, outputs_np)
                 utils.save_img_lbl_seg_to_nifti(
                     inputs_np, labels_np, outputs_np, val_images_dir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(img_count)))

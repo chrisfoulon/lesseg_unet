@@ -26,6 +26,8 @@ def main():
     lesion_paths_group.add_argument('-lli', '--lesion_input_list', type=str,
                                     help='Text file containing the list of b1000')
     parser.add_argument('-trs', '--transform_dict', type=str, help='file path to a json dictionary of transformations')
+    parser.add_argument('-dl', '--default_label', type=str, help='Path to a default mask that will be used in case no '
+                                                                 'lesion mask is found for the b1000')
     parser.add_argument('-lab_smo', '--label_smoothing', action='store_true',
                         help='Apply a label smoothing during the training')
     parser.add_argument('-pt', '--checkpoint', type=str, help='file path to a torch checkpoint file')
@@ -85,7 +87,8 @@ def main():
                                            epoch_num=param_dict['-ne'],
                                            dataloader_workers=param_dict['-nw'],
                                            label_smoothing=False,
-                                           stop_best_epoch=stop_best_epoch)
+                                           stop_best_epoch=stop_best_epoch,
+                                           default_label=args.default_label)
             else:
                 segmentation.validation_loop(img_list, les_list,
                                              output_dir,
@@ -147,12 +150,11 @@ def main():
         train_val_percentage = None
         if args.train_val is not None:
             train_val_percentage = args.train_val
-        label_smoothing = False
-        if args.label_smoothing:
-            label_smoothing = True
         if args.checkpoint is None:
             if train_val_percentage is None:
                 train_val_percentage = 75
+            if les_list is None and args.default_label is None:
+                parser.error(message='For the training, there must be a list of labels')
             training.training_loop(img_list, les_list, output_root, b1000_pref,
                                    transform_dict=transform_dict,
                                    device=args.torch_device,
@@ -161,7 +163,8 @@ def main():
                                    # num_nifti_save=args.num_nifti_save,
                                    train_val_percentage=train_val_percentage,
                                    label_smoothing=args.label_smoothing,
-                                   stop_best_epoch=stop_best_epoch)
+                                   stop_best_epoch=stop_best_epoch,
+                                   default_label=args.default_label)
         else:
             if train_val_percentage is None:
                 train_val_percentage = 0

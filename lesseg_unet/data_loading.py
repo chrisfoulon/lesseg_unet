@@ -1,7 +1,8 @@
 import math
 import logging
+import os
 from pathlib import Path
-from typing import Sequence, Tuple
+from typing import Sequence, Tuple, Union
 
 import torch
 import monai
@@ -11,14 +12,23 @@ from lesseg_unet import transformations
 
 
 def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
-                           img_pref: str = None) -> dict:
+                           img_pref: str = None, default_label=None) -> dict:
+    if default_label is not None:
+        if not Path(default_label).is_file():
+            raise ValueError('fill_up_empty_labels must be an existing nifti file ')
     img_dict = {}
     if img_pref is not None and img_pref != '':
         img_path_list = [str(img) for img in img_path_list if img_pref in Path(img).name]
     for img in img_path_list:
-        matching_les_list = [str(les) for les in seg_path_list if Path(img).name in Path(les).name]
+        if seg_path_list is None:
+            matching_les_list = []
+        else:
+            matching_les_list = [str(les) for les in seg_path_list if Path(img).name in Path(les).name]
         if len(matching_les_list) == 0:
-            raise ValueError('No matching seg file found for {}'.format(img))
+            if default_label is None:
+                raise ValueError('No matching seg file found for {}'.format(img))
+            else:
+                matching_les_list = [str(default_label)]
         if len(matching_les_list) > 1:
             raise ValueError('Multiple matching seg file found for {}'.format(img))
         img_dict[img] = matching_les_list[0]
@@ -27,10 +37,11 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
 
 
 def create_file_dict_lists(raw_img_path_list: Sequence, raw_seg_path_list: Sequence,
-                           img_pref: str = None, train_val_percentage: float = 75) -> Tuple[list, list]:
-    img_dict = match_img_seg_by_names(raw_img_path_list, raw_seg_path_list, img_pref)
+                           img_pref: str = None, train_val_percentage: float = 75,
+                           default_label: Union[str, os.PathLike] = None) -> Tuple[list, list]:
+    img_dict = match_img_seg_by_names(raw_img_path_list, raw_seg_path_list, img_pref, default_label)
     training_end_index = math.ceil(train_val_percentage / 100 * len(img_dict))
-    full_file_list = [{'image': img, 'label': img_dict[img]} for img in img_dict]
+    full_file_list = [{'image': str(img), 'label': str(img_dict[img])} for img in img_dict]
     train_files = full_file_list[:training_end_index]
     val_files = full_file_list[training_end_index:]
     return train_files, val_files
@@ -78,17 +89,17 @@ def init_training_data(img_path_list: Sequence,
                        seg_path_list: Sequence,
                        img_pref: str = None,
                        transform_dict: dict = None,
-                       train_val_percentage: float = 75) -> Tuple[monai.data.Dataset, monai.data.Dataset]:
+                       train_val_percentage: float = 75,
+                       default_label: Union[str, os.PathLike] = None) -> Tuple[monai.data.Dataset, monai.data.Dataset]:
     logging.info('Listing input files to be loaded')
     train_files, val_files = create_file_dict_lists(img_path_list, seg_path_list, img_pref,
-                                                    train_val_percentage)
+                                                    train_val_percentage, default_label)
     logging.info('Create transformations')
     train_img_transforms = transformations.segmentation_train_transformd(transform_dict)
     val_img_transforms = transformations.segmentation_val_transformd(transform_dict)
     # define dataset, data loader
     logging.info('Create training monai datasets')
     train_ds = Dataset(train_files, transform=train_img_transforms)
-
     # define dataset, data loader
     logging.info('Create validation actual monai datasets')
     val_ds = Dataset(val_files, transform=val_img_transforms)

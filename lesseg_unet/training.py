@@ -31,7 +31,8 @@ def training_loop(img_path_list: Sequence,
                   dataloader_workers: int = 4,
                   train_val_percentage=75,
                   label_smoothing=False,
-                  stop_best_epoch=-1):
+                  stop_best_epoch=-1,
+                  default_label=None):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -39,7 +40,8 @@ def training_loop(img_path_list: Sequence,
     # val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
     train_ds, val_ds = data_loading.init_training_data(img_path_list, seg_path_list, img_pref,
                                                        transform_dict=transform_dict,
-                                                       train_val_percentage=train_val_percentage)
+                                                       train_val_percentage=train_val_percentage,
+                                                       default_label=default_label)
     train_loader = data_loading.create_training_data_loader(train_ds, batch_size, dataloader_workers)
     val_loader = data_loading.create_validation_data_loader(val_ds, dataloader_workers=dataloader_workers)
     # checking is CoordConv is used and change the input channel dimension
