@@ -47,6 +47,8 @@ def main():
     print_config()
     # logs init
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+    if args.default_label is not None:
+        logging.info(f'{args.default_label} will be used to fill up missing labels')
     if args.stop_best_epoch is None:
         stop_best_epoch = -1
     else:
@@ -97,7 +99,7 @@ def main():
                                              transform_dict=transform_dict,
                                              dataloader_workers=param_dict['-nw'],
                                              train_val_percentage=75,
-                                             default_label = args.default_label
+                                             default_label=args.default_label
                                              )
     else:
         # Gather input data and setup based on script arguments

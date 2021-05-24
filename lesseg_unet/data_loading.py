@@ -17,6 +17,7 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
         if not Path(default_label).is_file():
             raise ValueError('fill_up_empty_labels must be an existing nifti file ')
     img_dict = {}
+    no_match = False
     if img_pref is not None and img_pref != '':
         img_path_list = [str(img) for img in img_path_list if img_pref in Path(img).name]
     for img in img_path_list:
@@ -28,10 +29,13 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
             if default_label is None:
                 raise ValueError('No matching seg file found for {}'.format(img))
             else:
+                no_match = True
                 matching_les_list = [str(default_label)]
         if len(matching_les_list) > 1:
             raise ValueError('Multiple matching seg file found for {}'.format(img))
         img_dict[img] = matching_les_list[0]
+    if no_match:
+        print(f'Some images did not have a label so it has been replaced with {default_label}')
     print('Number of images: {}'.format(len(img_dict)))
     return img_dict
 
