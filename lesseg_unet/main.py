@@ -96,7 +96,9 @@ def main():
                                              b1000_pref,
                                              transform_dict=transform_dict,
                                              dataloader_workers=param_dict['-nw'],
-                                             train_val_percentage=75)
+                                             train_val_percentage=75,
+                                             default_label = args.default_label
+                                             )
     else:
         # Gather input data and setup based on script arguments
         output_root = Path(args.output)
@@ -184,7 +186,8 @@ def main():
                                              transform_dict=transform_dict,
                                              device=args.torch_device,
                                              dataloader_workers=args.num_workers,
-                                             train_val_percentage=train_val_percentage)
+                                             train_val_percentage=train_val_percentage,
+                                             default_label=args.default_label)
 
 
 if __name__ == "__main__":
