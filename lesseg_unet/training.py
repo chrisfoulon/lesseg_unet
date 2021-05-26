@@ -11,6 +11,7 @@ import monai
 import torch
 from torch.nn.functional import binary_cross_entropy_with_logits as BCE
 from monai.metrics import DiceMetric
+from monai.losses import DiceLoss, TverskyLoss, FocalLoss
 from monai.transforms import (
     Activations,
     AsDiscrete,
@@ -52,9 +53,11 @@ def training_loop(img_path_list: Sequence,
     model = net.create_unet_model(device, unet_hyper_params)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
-    loss_function = monai.losses.DiceLoss(sigmoid=True)
+    loss_function = DiceLoss(sigmoid=True)
+    tversky_function = TverskyLoss(sigmoid=True)
+    focal_function = FocalLoss()
     # loss_function = BCE
-    val_loss_function = monai.losses.DiceLoss(sigmoid=True)
+    val_loss_function = DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
     print('check ok')
     # it = iter(train_loader)
@@ -168,7 +171,11 @@ def training_loop(img_path_list: Sequence,
             if label_smoothing:
                 s = .1
                 y = y * (1 - s) + 0.5 * s
-            loss = loss_function(outputs, y)
+            # loss = loss_function(outputs, y)
+            loss = tversky_function(outputs, y)
+            # print(f'dice: {loss.item():.4f}')
+            # print(f'tversky: {tversky_function.forward(outputs, y):.4f}')
+            # print(f'focal: {focal_function(outputs, y).item():.4f}')
             # loss = loss_function(outputs, labels[:, :1, :, :, :])
             loss.backward()
             optimizer.step()
@@ -208,7 +215,8 @@ def training_loop(img_path_list: Sequence,
                     inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
                     outputs = model(inputs)
                     outputs = post_trans(outputs)
-                    loss = val_loss_function(outputs, labels[:, :1, :, :, :])
+                    # loss = val_loss_function(outputs, labels[:, :1, :, :, :])
+                    loss = tversky_function(outputs, labels[:, :1, :, :, :])
                     # loss.backward()
                     loss_list.append(loss.item())
                     value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])

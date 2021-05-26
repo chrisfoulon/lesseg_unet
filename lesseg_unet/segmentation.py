@@ -144,7 +144,7 @@ def validation_loop(img_path_list: Sequence,
             metric_sum += value.item() * len(value)
             if value.item() < bad_dice_treshold:
                 trash_count += 1
-                print('Saving trash image #{}'.format(trash_count))
+                # print('Saving trash image #{}'.format(trash_count))
                 # TODO This is slow AF because of the imshow, maybe resetting the plot would work
                 # utils.save_img_lbl_seg_to_png(
                 #     inputs_np, trash_val_images_dir,
@@ -154,7 +154,7 @@ def validation_loop(img_path_list: Sequence,
                     '{}_{}'.format(str(input_filename), str(trash_count)))
             else:
                 img_count += 1
-                print('Saving good image #{}'.format(img_count))
+                # print('Saving good image #{}'.format(img_count))
                 # TODO This is slow AF because of the imshow, maybe resetting the plot would work
                 # utils.save_img_lbl_seg_to_png(
                 #     inputs_np, val_images_dir,
