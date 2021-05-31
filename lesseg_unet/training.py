@@ -161,8 +161,8 @@ def training_loop(img_path_list: Sequence,
         for batch_data in train_loader:
             step += 1
             inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
-            # print('inputs size: {}'.format(inputs.size()))
-            # print('labels size: {}'.format(labels.size()))
+            # print('inputs size: {}'.format(inputs.shape))
+            # print('labels size: {}'.format(labels.shape))
             optimizer.zero_grad()
             outputs = model(inputs)
             # print('outputs size: {}'.format(outputs.size()))

@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import Sequence, Union
+from copy import deepcopy
 
 import numpy as np
 import pandas as pd
@@ -46,8 +47,15 @@ def segmentation_loop(img_path_list: Sequence,
             input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
             outputs = model(inputs)
             outputs = post_trans(outputs)
-            inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy()
-            outputs_np = outputs[0, 0, :, :, :].cpu().detach().numpy()
+            output_dict_data = deepcopy(val_data)
+            val_data['image'] = val_data['image'].to(device)[0]
+            inverted_dict = val_ds.transform.inverse(val_data)
+            output_dict_data['image'] = outputs[0]
+            inverted_output_dict = val_ds.transform.inverse(output_dict_data)
+            inv_inputs = inverted_dict['image']
+            inv_outputs = inverted_output_dict['image']
+            inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy()
+            outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy()
             # TODO This is slow AF because of the imshow, maybe resetting the plot would work
             # utils.save_img_lbl_seg_to_png(
             #     inputs_np, output_dir,
@@ -135,13 +143,23 @@ def validation_loop(img_path_list: Sequence,
             input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
             outputs = model(inputs)
             outputs = post_trans(outputs)
-            inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy()
-            labels_np = labels[0, 0, :, :, :].cpu().detach().numpy()
-            outputs_np = outputs[0, 0, :, :, :].cpu().detach().numpy()
+            output_dict_data = deepcopy(val_data)
             value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
             val_score_list.append(value.item())
             metric_count += len(value)
             metric_sum += value.item() * len(value)
+
+            val_data['image'] = val_data['image'].to(device)[0]
+            val_data['label'] = val_data['label'].to(device)[0]
+            output_dict_data['image'] = val_data['image']
+            output_dict_data['label'] = outputs[0]
+
+            inverted_dict = val_ds.transform.inverse(val_data)
+            inv_inputs, inv_labels = inverted_dict['image'], inverted_dict['label']
+            inv_outputs = val_ds.transform.inverse(output_dict_data)['label']
+            inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy()
+            labels_np = inv_labels[0, :, :, :].cpu().detach().numpy()
+            outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy()
             if value.item() < bad_dice_treshold:
                 trash_count += 1
                 # print('Saving trash image #{}'.format(trash_count))

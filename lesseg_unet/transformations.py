@@ -5,6 +5,7 @@ from typing import Mapping, Dict, Hashable, Any, Optional, Callable, Union, List
 
 import numpy as np
 from monai.transforms.compose import Randomizable
+from monai.transforms.inverse import InvertibleTransform
 from monai.config import KeysCollection
 import torch
 from monai.transforms import (
@@ -194,7 +195,7 @@ class CoordConv(Transform):
         return torch.Tensor(img)
 
 
-class CoordConvd(MapTransform):
+class CoordConvd(MapTransform, InvertibleTransform):
     """
     """
 
@@ -204,8 +205,22 @@ class CoordConvd(MapTransform):
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
         d = dict(data)
-        for idx, key in enumerate(self.keys):
+        for key in self.key_iterator(d):
             d[key] = self.coord_conv(d[key])
+            self.push_transform(
+                d,
+                key
+            )
+        return d
+
+    def inverse(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        d = deepcopy(dict(data))
+        for key in self.key_iterator(d):
+            transform = self.get_most_recent_transform(d, key)
+            # Apply inverse transform
+            d[key] = d[key][:1, :, :, :]
+            # Remove the applied transform
+            self.pop_transform(d, key)
         return d
 
 
@@ -654,6 +669,7 @@ Transformation compositions for the image segmentation
 
 def setup_coord_conv(hyper_param_dict):
     spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size', 'last_transform')
+    logging.info(f'Spatial resize to {spatial_size}')
     if spatial_size is None:
         spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size')
 
@@ -687,6 +703,7 @@ def segmentation_train_transformd(hyper_param_dict=None):
 def segmentation_val_transformd(hyper_param_dict=None):
     if hyper_param_dict is None:
         hyper_param_dict = hyper_dict
+    setup_coord_conv(hyper_param_dict)
     val_transd = Compose(
         trans_list_from_list(hyper_param_dict['first_transform']) +
         # trans_list_from_list(hyper_dict['labelonly_transform']) +
