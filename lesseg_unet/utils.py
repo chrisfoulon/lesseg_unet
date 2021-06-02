@@ -1,7 +1,7 @@
 import os
 import shutil
 from pathlib import Path
-from typing import Union
+from typing import Union, List
 import json
 
 from bcblib.tools.nifti_utils import is_nifti, centre_of_mass_difference
@@ -71,12 +71,19 @@ def save_img_lbl_seg_to_nifti(image: Union[np.ndarray, torch.Tensor],
                               seg: Union[np.ndarray, torch.Tensor],
                               output_dir: Union[str, bytes, os.PathLike],
                               val_output_affine: np.ndarray,
-                              suffix: str) -> None:
-    save_tensor_to_nifti(image, Path(output_dir, 'input_{}.nii'.format(suffix)), val_output_affine)
+                              suffix: str) -> List[str]:
+    out_input_path = Path(output_dir, 'input_{}.nii'.format(suffix))
+    save_tensor_to_nifti(image, out_input_path, val_output_affine)
+    out_paths_list = [str(out_input_path)]
     if label is not None:
-        save_tensor_to_nifti(label, Path(output_dir, 'label_{}.nii'.format(suffix)), val_output_affine)
+        out_label_path = Path(output_dir, 'label_{}.nii'.format(suffix))
+        save_tensor_to_nifti(label, out_label_path, val_output_affine)
+        out_paths_list.append(str(out_label_path))
     if seg is not None:
-        save_tensor_to_nifti(seg, Path(output_dir, 'output_{}.nii'.format(suffix)), val_output_affine)
+        out_output_path = Path(output_dir, 'output_{}.nii'.format(suffix))
+        save_tensor_to_nifti(seg, out_output_path, val_output_affine)
+        out_paths_list.append(str(out_output_path))
+    return out_paths_list
 
 
 def save_img_lbl_seg_to_png(image: Union[np.ndarray, torch.Tensor],

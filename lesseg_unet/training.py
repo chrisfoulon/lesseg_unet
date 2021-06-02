@@ -60,26 +60,32 @@ def training_loop(img_path_list: Sequence,
     val_loss_function = DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
     print('check ok')
+
     # it = iter(train_loader)
     # import nibabel as nib
     # for i in tqdm(range(5)):
     #     # input_data = val_ds[i]['image']
-    #     print(val_ds[i]['image_meta_dict']['filename_or_obj'])
-    #     raw_data = nib.load(val_ds[i]['image_meta_dict']['filename_or_obj']).get_fdata()
+    #     # print(val_ds[i]['image_meta_dict']['filename_or_obj'])
+    #     # raw_data = nib.load(val_ds[i]['image_meta_dict']['filename_or_obj']).get_fdata()
     #     data = next(it)
+    #     data_nii = nib.load(data['image_meta_dict']['filename_or_obj'][0])
+    #     out_affine = data_nii.affine
     #     inputs, labels = data['image'], data['label']
     #     # i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
-    #     for ind, channel in enumerate(inputs[0, :, :, :, :]):
-    #         i_data = channel.cpu().detach().numpy()
-    #         nib.save(nib.Nifti1Image(i_data, nib.load(val_ds[i]['image_meta_dict']['filename_or_obj']).affine),
-    #                  filename=f'/home/tolhsadum/neuro_apps/data/my_cc_{i}_{ind}.nii')
+    #     if inputs.shape[1] > 1:
+    #         for ind, channel in enumerate(inputs[0, :, :, :, :]):
+    #             i_data = channel.cpu().detach().numpy()
+    #             nib.save(nib.Nifti1Image(i_data, out_affine),
+    #                      filename=f'{Path(output_dir)}/img_test_{i}_{ind}.nii')
     #     # print(np.all(i_data == raw_data))
     #     # i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
     #     # l_data = labels[0, 0, :, :, :].cpu().detach().numpy()
     #     # utils.save_img_lbl_seg_to_png(
-    #     #     inputs, '/home/tolhsadum/neuro_apps/data', 'validation_img_{}'.format(i), labels, None)
-    #     # utils.save_img_lbl_seg_to_nifti(
-    #     #     inputs, labels, None, '/home/tolhsadum/neuro_apps/data', val_output_affine, i)
+    #     #     i_data, output_dir, 'validation_img_{}'.format(i), l_data, None)
+    #     out_paths_list = utils.save_img_lbl_seg_to_nifti(
+    #         inputs, labels, None, output_dir, out_affine, i)
+    #
+    #     print(f'fsleyes {data["image_meta_dict"]["filename_or_obj"][0]} {out_paths_list[0]} {out_paths_list[1]}')
     # # if np.equal(i_data, l_data).all():
     # #     print('ok')
     # # else:

@@ -239,69 +239,111 @@ minimal_hyper_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image',
 minimal_hyper_dict_altcc = deepcopy(minimal_hyper_dict)
 minimal_hyper_dict_altcc['last_transform'].append({'CoordConvAltd': {'keys': ['image', 'label']}})
 
-# TODO ResizeWithPadOrCropd doesn't preserve the input exactly, need to find a way to inverse
-test_crop = {
+new_dict = {
     'first_transform': [
         {'LoadImaged': {'keys': ['image', 'label']}},
         {'AddChanneld': {'keys': ['image', 'label']}},
-        # {'AsChannelFirstd': {
-        #     'keys': ['image', 'label'],
-        #     'channel_dim': -1}
-        # },
-        # {'Resized': {
-        #     'keys': ['image', 'label'],
-        #     'spatial_size': def_spatial_size,
-        #     # 'mode': 'nearest'
-        # }},
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
          },
-        # {'NormalizeIntensityd': {'keys': ['image']}},
-        # {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'First resize'}},
+        {'NormalizeIntensityd': {'keys': ['image']}},
+        {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
+    ],
+    'custom_transform': [
+    #     {'ThreeDHaircutd': {
+    #                 'keys': ['image', 'label'],
+    #                 'prob': low_prob,
+    #                 'index_range': 0.2}
+    #      },
+        {'Anisotropiserd': {
+            'keys': ['image', 'label'],
+            'prob': low_prob,
+            'scale_range': (0.25, 0.8)}
+         }
     ],
     'monai_transform': [
-
-        # {'ScaleIntensityd': {'keys': "image"}},
-
+        {'RandSpatialCropd': {'keys': ['image', 'label'],
+                              'roi_size': min_small_crop_size,
+                              'random_center': True,
+                              'random_size': False}
+         },
+        # {'RandHistogramShiftd': {
+        #     'keys': ['image'],
+        #     'num_control_points': (3, 4),
+        #     'prob': low_prob}
+        #  },
+        # # TODO maybe 'Orientation': {} but it would interact with the flip,
+        {'RandAffined': {
+            'keys': ['image', 'label'],
+            'prob': high_prob,
+            'rotate_range': radians(5),
+            'shear_range': radians(5),
+            'translate_range': 0.05,
+            'scale_range': 0.05,
+            'spatial_size': None,
+            'padding_mode': 'border',
+            'as_tensor_output': False}
+         },
+        {'Rand3DElasticd': {
+            'keys': ['image', 'label'],
+            'sigma_range': (1, 3),
+            'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
+            'prob': tiny_prob,
+            'rotate_range': None,
+            'shear_range': None,
+            'translate_range': None,
+            'scale_range': None,
+            'spatial_size': None,
+            'padding_mode': "reflection",
+            # 'padding_mode': "border",
+            # 'padding_mode': "zeros",
+            'as_tensor_output': False}
+         },
         {'ToTensord': {'keys': ['image', 'label']}},
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'Fisrt monai'}},
-        # {'RandCropByPosNegLabeld': {
-        #     'keys': ["image", "label"],
-        #     'label_key': "label",
-        #     'spatial_size': def_spatial_size,
-        #     'pos': 1,
-        #     'neg': 1,
-        #     'num_samples': 4
-        # }},
-        # {'RandSpatialCropd': {
-        #     'keys': ["image", "label"],
-        #     'roi_size': min_small_crop_size,
-        #     'random_size': False
-        # }},
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'After RandCrop'}},
     ],
-    'labelonly_transform': [],
+    'torchio_transform': [
+        # {'RandomNoise': {
+        #     'include': ['image'],
+        #     'mean': 0,
+        #     'std': (0.01, 0.1),
+        #     'p': low_prob}
+        #  },
+        {'RandomGhosting': {
+            'include': ['image'],
+            'p': tiny_prob,
+            'num_ghosts': (1, 4),
+            'intensity': (0.3, 0.6)
+        }},
+        {'RandomBlur': {
+            'include': ['image', 'label'],
+            'std': (0.01, 0.07),
+            'p': low_prob}
+         },
+        {'RandomBiasField': {
+            'include': ['image'],
+            'p': high_prob,
+            'coefficients': 0.1}
+         },
+        # {'RandomMotion': {
+        #     'include': ['image', 'label'],
+        #     'p': low_prob,
+        #     'num_transforms': 1}
+        #  },
+        {'ToTensord': {'keys': ['image', 'label']}},
+    ],
     'last_transform': [
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'Last binarized'}},
-        # {'Resized': {
-        #     'keys': ['image', 'label'],
-        #     'spatial_size': def_spatial_size,
-        #     'mode': 'nearest'
-        # }},
+        {'Binarized': {
+            'keys': ['label'],
+            'lower_threshold': 0.5}
+         },
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
          },
-        # {'Binarized': {
-        #     'keys': ['label'],
-        #     'lower_threshold': 0.5
-        # }},
-        # {'NormalizeIntensityd': {'keys': ['image']}},
-        {'ResizeWithPadOrCropd': {
-            'keys': ['image', 'label'],
-            'spatial_size': [91, 109, 91]
-        }},
+        {'NormalizeIntensityd': {'keys': ['image']}},
     ]
 }
+
+new_dict_cc = deepcopy(full_hyper_dict)
+new_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
