@@ -25,6 +25,7 @@ from monai.transforms import (
     RandAffined,
     Rand3DElasticd,
     RandDeformGrid,
+    RandBiasFieldd,
     Spacingd,
     RandHistogramShiftd,
     NormalizeIntensityd,
