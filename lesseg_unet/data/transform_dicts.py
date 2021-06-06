@@ -380,7 +380,7 @@ curated_dict = {
          },
         {'RandHistogramShiftd': {
             'keys': ['image'],
-            'num_control_points': (3, 4),
+            'num_control_points': (10, 15),
             'prob': low_prob}
          },
         # {'RandBiasFieldd': {
@@ -418,12 +418,12 @@ curated_dict = {
         {'ToTensord': {'keys': ['image', 'label']}},
     ],
     'torchio_transform': [
-        {'RandomNoise': {
-            'include': ['image'],
-            'mean': 0,
-            'std': (0.01, 0.1),
-            'p': low_prob}
-         },
+        # {'RandomNoise': {
+        #     'include': ['image'],
+        #     'mean': 0,
+        #     'std': (0.01, 0.1),
+        #     'p': low_prob}
+        #  },
         # {'RandomGhosting': {
         #     'include': ['image'],
         #     'p': tiny_prob,
