@@ -85,7 +85,15 @@ def training_loop(img_path_list: Sequence,
     #     out_paths_list = utils.save_img_lbl_seg_to_nifti(
     #         inputs, labels, None, output_dir, out_affine, i)
     #
-    #     print(f'fsleyes {data["image_meta_dict"]["filename_or_obj"][0]} {out_paths_list[0]} {out_paths_list[1]}')
+    #     print(f'fsleyes {data["image_meta_dict"]["filename_or_obj"][0]} {data["label_meta_dict"]["filename_or_obj"][0]}'
+    #           f' {out_paths_list[0]} {out_paths_list[1]}')
+    #     print('###########VOLUMES#######')
+    #     orig_label = nib.load(data["label_meta_dict"]["filename_or_obj"][0]).get_fdata()
+    #     label = nib.load(out_paths_list[1]).get_fdata()
+    #     print(f'original label volume: {np.count_nonzero(orig_label)}')
+    #     print(f'Smoothed label volume 0.5: {len(np.where(label > 0.5)[0])}')
+    #     print(f'Smoothed label volume 0.25: {len(np.where(label > 0.25)[0])}')
+    #     print('###########ENDVOLUMES#######')
     # # if np.equal(i_data, l_data).all():
     # #     print('ok')
     # # else:
@@ -105,7 +113,7 @@ def training_loop(img_path_list: Sequence,
     # starting_epoch = checkpoint['epoch'] + 1
     # scaler.load_state_dict(checkpoint['scaler'])
     #
-    # # Code for saving (to be used in the validaiton vlock)
+    # # Code for saving (to be used in the validation)
     # checkpoint_dict = {'epoch': epoch,
     #                    'model_state_dict': model.state_dict(),
     #                    'optimizer_state_dict': optimizer.state_dict(),
@@ -130,18 +138,18 @@ def training_loop(img_path_list: Sequence,
     Measure tracking init
     """
     writer = SummaryWriter(log_dir=str(output_dir))
-    val_images_dir = Path(output_dir, 'val_images')
-    if not val_images_dir.is_dir():
-        val_images_dir.mkdir(exist_ok=True)
-    trash_val_images_dir = Path(output_dir, 'trash_val_images')
-    if not trash_val_images_dir.is_dir():
-        trash_val_images_dir.mkdir(exist_ok=True)
-    best_val_images_dir = Path(output_dir, 'best_epoch_val_images')
-    if not best_val_images_dir.is_dir():
-        best_val_images_dir.mkdir(exist_ok=True)
-    best_trash_images_dir = Path(output_dir, 'best_epoch_val_images')
-    if not best_trash_images_dir.is_dir():
-        best_trash_images_dir.mkdir(exist_ok=True)
+    # val_images_dir = Path(output_dir, 'val_images')
+    # if not val_images_dir.is_dir():
+    #     val_images_dir.mkdir(exist_ok=True)
+    # trash_val_images_dir = Path(output_dir, 'trash_val_images')
+    # if not trash_val_images_dir.is_dir():
+    #     trash_val_images_dir.mkdir(exist_ok=True)
+    # best_val_images_dir = Path(output_dir, 'best_epoch_val_images')
+    # if not best_val_images_dir.is_dir():
+    #     best_val_images_dir.mkdir(exist_ok=True)
+    # best_trash_images_dir = Path(output_dir, 'best_epoch_val_images')
+    # if not best_trash_images_dir.is_dir():
+    #     best_trash_images_dir.mkdir(exist_ok=True)
     perf_measure_names = ['avg_train_loss',
                           'val_mean_dice',
                           'val_median_dice',
@@ -198,10 +206,10 @@ def training_loop(img_path_list: Sequence,
         Validation loop
         """
         if (epoch + 1) % val_interval == 0:
-            for f in val_images_dir.iterdir():
-                os.remove(f)
-            for f in trash_val_images_dir.iterdir():
-                os.remove(f)
+            # for f in val_images_dir.iterdir():
+            #     os.remove(f)
+            # for f in trash_val_images_dir.iterdir():
+            #     os.remove(f)
             model.eval()
             with torch.no_grad():
                 metric_sum = 0.0

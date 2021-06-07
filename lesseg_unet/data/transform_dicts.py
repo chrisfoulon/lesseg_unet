@@ -224,10 +224,14 @@ minimal_hyper_dict = {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
          },
-        {'Binarized': {
-            'keys': ['label'],
-            'lower_threshold': 0.5
-        }},
+        # {'GaussianSmoothd': {
+        #     'keys': ['label'],
+        #     'sigma': .5}
+        #  },
+        # {'Binarized': {
+        #     'keys': ['label'],
+        #     'lower_threshold': 0.5
+        # }},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER binarized'}},
         {'NormalizeIntensityd': {'keys': ['image']}},
     ]
@@ -448,9 +452,13 @@ curated_dict = {
         {'ToTensord': {'keys': ['image', 'label']}},
     ],
     'last_transform': [
+        {'GaussianSmoothd': {
+            'keys': ['label'],
+            'sigma': .5}
+         },
         {'Binarized': {
             'keys': ['label'],
-            'lower_threshold': 0.5}
+            'lower_threshold': 0.25}
          },
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
