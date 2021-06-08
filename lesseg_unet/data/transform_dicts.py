@@ -267,21 +267,21 @@ new_dict = {
          }
     ],
     'monai_transform': [
-        {'RandSpatialCropd': {'keys': ['image', 'label'],
-                              'roi_size': min_small_crop_size,
-                              'random_center': True,
-                              'random_size': False}
-         },
-        # {'RandHistogramShiftd': {
-        #     'keys': ['image'],
-        #     'num_control_points': (3, 4),
-        #     'prob': low_prob}
+        # {'RandSpatialCropd': {'keys': ['image', 'label'],
+        #                       'roi_size': min_small_crop_size,
+        #                       'random_center': True,
+        #                       'random_size': False}
         #  },
+        {'RandHistogramShiftd': {
+            'keys': ['image'],
+            'num_control_points': (10, 15),
+            'prob': low_prob}
+         },
         # # TODO maybe 'Orientation': {} but it would interact with the flip,
         {'RandAffined': {
             'keys': ['image', 'label'],
             'prob': high_prob,
-            'rotate_range': radians(5),
+            'rotate_range': radians(5),  # 5 degrees converted in radians
             'shear_range': radians(5),
             'translate_range': 0.05,
             'scale_range': 0.05,
@@ -292,7 +292,7 @@ new_dict = {
         {'Rand3DElasticd': {
             'keys': ['image', 'label'],
             'sigma_range': (1, 3),
-            'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
+            'magnitude_range': (3, 5),
             'prob': tiny_prob,
             'rotate_range': None,
             'shear_range': None,
@@ -377,33 +377,34 @@ curated_dict = {
     #      }
     # ],
     'monai_transform': [
-        {'RandSpatialCropd': {'keys': ['image', 'label'],
-                              'roi_size': min_small_crop_size,
-                              'random_center': True,
-                              'random_size': False}
-         },
+        # {'RandSpatialCropd': {'keys': ['image', 'label'],
+        #                       'roi_size': min_small_crop_size,
+        #                       'random_center': True,
+        #                       'random_size': False}
+        #  },
         {'RandHistogramShiftd': {
             'keys': ['image'],
             'num_control_points': (10, 15),
             'prob': low_prob}
          },
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER HIST SHIFT'}},
         # {'RandBiasFieldd': {
         #     'keys': ['image'],
         #     'coeff_range': (0, 0.05),
         #     'prob': high_prob}
         #  },
         # # TODO maybe 'Orientation': {} but it would interact with the flip,
-        {'RandAffined': {
-            'keys': ['image', 'label'],
-            'prob': high_prob,
-            'rotate_range': radians(5),
-            'shear_range': radians(5),
-            'translate_range': 0.05,
-            'scale_range': 0.05,
-            'spatial_size': None,
-            'padding_mode': 'border',
-            'as_tensor_output': False}
-         },
+        # {'RandAffined': {
+        #     'keys': ['image', 'label'],
+        #     'prob': high_prob,
+        #     'rotate_range': radians(5),
+        #     'shear_range': radians(5),
+        #     'translate_range': 0.05,
+        #     'scale_range': 0.05,
+        #     'spatial_size': None,
+        #     'padding_mode': 'border',
+        #     'as_tensor_output': False}
+        #  },
         {'Rand3DElasticd': {
             'keys': ['image', 'label'],
             'sigma_range': (1, 3),
@@ -419,9 +420,9 @@ curated_dict = {
             # 'padding_mode': "zeros",
             'as_tensor_output': False}
          },
-        {'ToTensord': {'keys': ['image', 'label']}},
     ],
     'torchio_transform': [
+        {'ToTensord': {'keys': ['image', 'label']}},
         # {'RandomNoise': {
         #     'include': ['image'],
         #     'mean': 0,
@@ -449,7 +450,7 @@ curated_dict = {
         #     'p': low_prob,
         #     'num_transforms': 1}
         #  },
-        {'ToTensord': {'keys': ['image', 'label']}},
+        {'ToNumpyd': {'keys': ['image', 'label']}},
     ],
     'last_transform': [
         {'GaussianSmoothd': {

@@ -9,6 +9,7 @@ from monai.transforms.inverse import InvertibleTransform
 from monai.config import KeysCollection
 import torch
 from monai.transforms import (
+    ToNumpyd,
     GaussianSmoothd,
     MapTransform,
     Transform,

@@ -10,7 +10,7 @@ import numpy as np
 import monai
 import torch
 from torch.nn.functional import binary_cross_entropy_with_logits as BCE
-from monai.metrics import DiceMetric
+from monai.metrics import DiceMetric, SurfaceDistanceMetric
 from monai.losses import DiceLoss, TverskyLoss, FocalLoss
 from monai.transforms import (
     Activations,
@@ -52,6 +52,7 @@ def training_loop(img_path_list: Sequence,
             unet_hyper_params = net.coord_conv_unet_hyper_params
     model = net.create_unet_model(device, unet_hyper_params)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
+    surface_metric = SurfaceDistanceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
     loss_function = DiceLoss(sigmoid=True)
     tversky_function = TverskyLoss(sigmoid=True)
@@ -86,7 +87,8 @@ def training_loop(img_path_list: Sequence,
     #         inputs, labels, None, output_dir, out_affine, i)
     #
     #     print(f'fsleyes {data["image_meta_dict"]["filename_or_obj"][0]} {data["label_meta_dict"]["filename_or_obj"][0]}'
-    #           f' {out_paths_list[0]} {out_paths_list[1]}')
+    #           f' {out_paths_list[0]} {out_paths_list[1]} '
+    #           f'{"/home/tolhsadum/neuro_apps/data/input_avg152T2_template.nii"}')
     #     print('###########VOLUMES#######')
     #     orig_label = nib.load(data["label_meta_dict"]["filename_or_obj"][0]).get_fdata()
     #     label = nib.load(out_paths_list[1]).get_fdata()
@@ -129,7 +131,8 @@ def training_loop(img_path_list: Sequence,
     best_metric_epoch = -1
     epoch_loss_values = list()
     metric_values = list()
-    val_save_thr = 0.7
+    val_meh_thr = 0.7
+    val_trash_thr = 0.3
     if stop_best_epoch != -1:
         print(f'Will stop after {stop_best_epoch} epochs without improvement')
     if label_smoothing:
@@ -185,8 +188,8 @@ def training_loop(img_path_list: Sequence,
             if label_smoothing:
                 s = .1
                 y = y * (1 - s) + 0.5 * s
-            # loss = loss_function(outputs, y)
-            loss = tversky_function(outputs, y)
+            loss = loss_function(outputs, y)
+            # loss = tversky_function(outputs, y)
             # print(f'dice: {loss.item():.4f}')
             # print(f'tversky: {tversky_function.forward(outputs, y):.4f}')
             # print(f'focal: {focal_function(outputs, y).item():.4f}')
@@ -215,6 +218,7 @@ def training_loop(img_path_list: Sequence,
                 metric_sum = 0.0
                 metric_count = 0
                 img_count = 0
+                meh_count = 0
                 trash_count = 0
                 # img_max_num = len(train_ds) + len(val_ds)
                 # inputs = None
@@ -233,14 +237,17 @@ def training_loop(img_path_list: Sequence,
                     loss = tversky_function(outputs, labels[:, :1, :, :, :])
                     # loss.backward()
                     loss_list.append(loss.item())
-                    value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
+                    # value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
+                    value, _ = surface_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
                     # print(f'{step}/{val_batches_per_epoch}, val_loss: {loss.item():.4f}')
                     writer.add_scalar('val_loss', loss.item(), val_batches_per_epoch * epoch + step)
                     val_score_list.append(value.item())
                     metric_count += len(value)
                     metric_sum += value.item() * len(value)
-                    if value.item() > val_save_thr:
+                    if value.item() > val_meh_thr:
                         img_count += 1
+                    elif value.item() > val_meh_thr:
+                        meh_count += 1
                     else:
                         trash_count += 1
                     # if best_metric > val_save_thr:
@@ -317,11 +324,10 @@ def training_loop(img_path_list: Sequence,
                 #     best_epoch_count += 1
                 best_epoch_count = epoch + 1 - best_metric_epoch
                 print(
-                    'current epoch: {} current mean dice: {:.4f} with {} '
-                    'trash (below a score of {}) images best mean dice: {:.4f} at epoch {}'.format(
-                        epoch + 1, metric, trash_count, val_save_thr, best_metric, best_metric_epoch
+                    f'current epoch: {epoch + 1} current mean dice: {metric:.4f} with {trash_count} '
+                    f'trash (below a score of {val_trash_thr}) images best mean dice: {best_metric:.4f} '
+                    f'at epoch {best_metric_epoch}'
                     )
-                )
                 print(f'It has been [{best_epoch_count}] since a best epoch has been found'
                       f'\nThe training will stop after [{stop_best_epoch}] epochs without improvement')
                 if stop_best_epoch != -1:

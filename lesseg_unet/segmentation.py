@@ -28,6 +28,8 @@ def segmentation_loop(img_path_list: Sequence,
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
+
+    original_size = True
     val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
     val_ds = data_loading.init_segmentation(img_path_list, img_pref, transform_dict)
     val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
@@ -47,23 +49,31 @@ def segmentation_loop(img_path_list: Sequence,
             input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
             outputs = model(inputs)
             outputs = post_trans(outputs)
-            output_dict_data = deepcopy(val_data)
-            val_data['image'] = val_data['image'].to(device)[0]
-            inverted_dict = val_ds.transform.inverse(val_data)
-            output_dict_data['image'] = outputs[0]
-            inverted_output_dict = val_ds.transform.inverse(output_dict_data)
-            inv_inputs = inverted_dict['image']
-            inv_outputs = inverted_output_dict['image']
-            inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy()
-            outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy()
-            # TODO This is slow AF because of the imshow, maybe resetting the plot would work
-            # utils.save_img_lbl_seg_to_png(
-            #     inputs_np, output_dir,
-            #     '{}_segmentation_{}'.format(input_filename, img_count), outputs_np)
-            tmp = None
-            utils.save_img_lbl_seg_to_nifti(
-                inputs_np, tmp, outputs_np, output_dir, val_output_affine,
-                '{}_{}'.format(str(input_filename), str(img_count)))
+            if original_size:
+                output_dict_data = deepcopy(val_data)
+                val_data['image'] = val_data['image'].to(device)[0]
+                inverted_dict = val_ds.transform.inverse(val_data)
+                output_dict_data['image'] = outputs[0]
+                inverted_output_dict = val_ds.transform.inverse(output_dict_data)
+                inv_inputs = inverted_dict['image']
+                inv_outputs = inverted_output_dict['image']
+                inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy()
+                outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy()
+                # TODO This is slow AF because of the imshow, maybe resetting the plot would work
+                # utils.save_img_lbl_seg_to_png(
+                #     inputs_np, output_dir,
+                #     '{}_segmentation_{}'.format(input_filename, img_count), outputs_np)
+                tmp = None
+                utils.save_img_lbl_seg_to_nifti(
+                    inputs_np, tmp, outputs_np, output_dir, val_output_affine,
+                    '{}_{}'.format(str(input_filename), str(img_count)))
+            else:
+                inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy()
+                outputs_np = outputs[0, 0, :, :, :].cpu().detach().numpy()
+                tmp = None
+                utils.save_img_lbl_seg_to_nifti(
+                    inputs_np, tmp, outputs_np, output_dir, val_output_affine,
+                    '{}_{}'.format(str(input_filename), str(img_count)))
             del inputs
             del outputs
             del inputs_np
