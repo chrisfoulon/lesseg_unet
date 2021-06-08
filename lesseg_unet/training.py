@@ -220,6 +220,8 @@ def training_loop(img_path_list: Sequence,
                 img_count = 0
                 meh_count = 0
                 trash_count = 0
+                distance_sum = 0.0
+                distance_count = 0
                 # img_max_num = len(train_ds) + len(val_ds)
                 # inputs = None
                 # labels = None
@@ -237,10 +239,12 @@ def training_loop(img_path_list: Sequence,
                     loss = tversky_function(outputs, labels[:, :1, :, :, :])
                     # loss.backward()
                     loss_list.append(loss.item())
-                    # value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
-                    value, _ = surface_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
+                    value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
+                    distance, _ = surface_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
+                    distance_sum += distance
                     # print(f'{step}/{val_batches_per_epoch}, val_loss: {loss.item():.4f}')
-                    writer.add_scalar('val_loss', loss.item(), val_batches_per_epoch * epoch + step)
+                    if not torch.isinf(distance):
+                        writer.add_scalar('distance', loss.item(), val_batches_per_epoch * epoch + step)
                     val_score_list.append(value.item())
                     metric_count += len(value)
                     metric_sum += value.item() * len(value)
@@ -268,6 +272,7 @@ def training_loop(img_path_list: Sequence,
                     #             utils.save_img_lbl_seg_to_nifti(
                     #                 inputs, labels, outputs, trash_val_images_dir, val_output_affine, trash_count)
                 metric = metric_sum / metric_count
+                writer.add_scalar('val_loss', metric, val_batches_per_epoch * epoch + step)
                 metric_values.append(metric)
                 val_mean_loss = np.mean(loss_list)
                 median = np.median(np.array(val_score_list))
@@ -325,7 +330,9 @@ def training_loop(img_path_list: Sequence,
                 best_epoch_count = epoch + 1 - best_metric_epoch
                 print(
                     f'current epoch: {epoch + 1} current mean dice: {metric:.4f} with {trash_count} '
-                    f'trash (below a score of {val_trash_thr}) images best mean dice: {best_metric:.4f} '
+                    f'trash (below a score of {val_trash_thr}) images '
+                    f'and an average distance of {distance_sum / step};'
+                    f' best mean dice: {best_metric:.4f} '
                     f'at epoch {best_metric_epoch}'
                     )
                 print(f'It has been [{best_epoch_count}] since a best epoch has been found'
