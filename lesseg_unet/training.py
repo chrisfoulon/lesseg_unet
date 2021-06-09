@@ -9,9 +9,10 @@ from tqdm import tqdm
 import numpy as np
 import monai
 import torch
-from torch.nn.functional import binary_cross_entropy_with_logits as BCE
+from torch.nn.functional import binary_cross_entropy_with_logits as BCEl
+from torch.nn.functional import binary_cross_entropy as BCE
 from monai.metrics import DiceMetric, SurfaceDistanceMetric
-from monai.losses import DiceLoss, TverskyLoss, FocalLoss
+from monai.losses import DiceLoss, TverskyLoss, FocalLoss, DiceFocalLoss, DiceCELoss
 from monai.transforms import (
     Activations,
     AsDiscrete,
@@ -57,6 +58,8 @@ def training_loop(img_path_list: Sequence,
     loss_function = DiceLoss(sigmoid=True)
     tversky_function = TverskyLoss(sigmoid=True)
     focal_function = FocalLoss()
+    df_loss = DiceFocalLoss(sigmoid=True)
+    dce_loss = DiceCELoss(sigmoid=True)
     # loss_function = BCE
     val_loss_function = DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
@@ -128,6 +131,8 @@ def training_loop(img_path_list: Sequence,
     # start a typical PyTorch training
     val_interval = 1
     best_metric = -1
+    best_distance = -1
+    best_avg_loss = -1
     best_metric_epoch = -1
     epoch_loss_values = list()
     metric_values = list()
@@ -153,6 +158,7 @@ def training_loop(img_path_list: Sequence,
     # best_trash_images_dir = Path(output_dir, 'best_epoch_val_images')
     # if not best_trash_images_dir.is_dir():
     #     best_trash_images_dir.mkdir(exist_ok=True)
+    # TODO add the new measures if useful to the csv
     perf_measure_names = ['avg_train_loss',
                           'val_mean_dice',
                           'val_median_dice',
@@ -197,7 +203,11 @@ def training_loop(img_path_list: Sequence,
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
-            print(f'{step}/{batches_per_epoch}, train_loss: {loss.item():.4f}')
+            print(f'{step}/{batches_per_epoch}, train_loss: {loss.item():.4f}, '
+                  f'| tversky_loss: {tversky_function(outputs, y).item():.4f}'
+                  f'| dicefocal: {df_loss(outputs, y).item():.4f}'
+                  f'| diceCE: {dce_loss(outputs, y).item():.4f}'
+                  f'| focal_loss: {focal_function(outputs, y).item():.4f}')
             writer.add_scalar('train_loss', loss.item(), batches_per_epoch * epoch + step)
 
         epoch_loss /= step
@@ -230,30 +240,36 @@ def training_loop(img_path_list: Sequence,
                 val_score_list = []
                 loss_list = []
                 step = 0
-                for val_data in tqdm(val_loader, desc=f'validation_loop [{epoch}]'):
+                inf = ''
+                pbar = tqdm(val_loader, desc=f'Val[{epoch}] avg_loss:[N/A]')
+                for val_data in pbar:
                     step += 1
                     inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
                     outputs = model(inputs)
                     outputs = post_trans(outputs)
-                    # loss = val_loss_function(outputs, labels[:, :1, :, :, :])
-                    loss = tversky_function(outputs, labels[:, :1, :, :, :])
+                    loss = val_loss_function(outputs, labels[:, :1, :, :, :])
+                    # loss = tversky_function(outputs, labels[:, :1, :, :, :])
                     # loss.backward()
                     loss_list.append(loss.item())
                     value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
                     distance, _ = surface_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
-                    distance_sum += distance
                     # print(f'{step}/{val_batches_per_epoch}, val_loss: {loss.item():.4f}')
                     if not torch.isinf(distance):
-                        writer.add_scalar('distance', loss.item(), val_batches_per_epoch * epoch + step)
+                        distance_sum += distance.item() * len(distance)
+                        distance_count += len(distance)
+                        writer.add_scalar('distance', distance.item(), val_batches_per_epoch * epoch + step)
+                    else:
+                        inf = '+- inf'
                     val_score_list.append(value.item())
                     metric_count += len(value)
                     metric_sum += value.item() * len(value)
                     if value.item() > val_meh_thr:
                         img_count += 1
-                    elif value.item() > val_meh_thr:
+                    elif value.item() > val_trash_thr:
                         meh_count += 1
                     else:
                         trash_count += 1
+                    pbar.set_description(f'Val[{epoch}] avg_loss:[{metric_sum / metric_count}]')
                     # if best_metric > val_save_thr:
                     #     if value.item() * len(value) > val_save_thr:
                     #         img_count += 1
@@ -299,6 +315,8 @@ def training_loop(img_path_list: Sequence,
                 })
                 if metric > best_metric:
                     best_metric = metric
+                    best_distance = distance_sum / distance_count
+                    best_avg_loss = val_mean_loss
                     best_metric_epoch = epoch + 1
                     # torch.save(model.state_dict(),
                     #            Path(output_dir,
@@ -329,11 +347,11 @@ def training_loop(img_path_list: Sequence,
                 #     best_epoch_count += 1
                 best_epoch_count = epoch + 1 - best_metric_epoch
                 print(
-                    f'current epoch: {epoch + 1} current mean dice: {metric:.4f} with {trash_count} '
-                    f'trash (below a score of {val_trash_thr}) images '
-                    f'and an average distance of {distance_sum / step};'
-                    f' best mean dice: {best_metric:.4f} '
-                    f'at epoch {best_metric_epoch}'
+                    f'Current epoch: {epoch + 1} current mean dice: {metric:.4f} with {trash_count}\n'
+                    f'trash (below a score of {val_trash_thr}) images \n'
+                    f'and {meh_count} meh images (between {val_meh_thr} and {val_trash_thr}) images \n'
+                    f'and an average distance of {distance_sum / distance_count} ({inf});\n'
+                    f'Best epoch {best_metric_epoch} dice{best_metric:.4f}/dist{best_distance}/avgloss{best_avg_loss}'
                     )
                 print(f'It has been [{best_epoch_count}] since a best epoch has been found'
                       f'\nThe training will stop after [{stop_best_epoch}] epochs without improvement')
