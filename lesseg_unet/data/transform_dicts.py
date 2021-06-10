@@ -453,10 +453,10 @@ curated_dict = {
         {'ToNumpyd': {'keys': ['image', 'label']}},
     ],
     'last_transform': [
-        # {'GaussianSmoothd': {
-        #     'keys': ['label'],
-        #     'sigma': .5}
-        #  },
+        {'GaussianSmoothd': {
+            'keys': ['label'],
+            'sigma': .5}
+         },
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.25}

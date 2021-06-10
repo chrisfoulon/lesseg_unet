@@ -33,7 +33,8 @@ def training_loop(img_path_list: Sequence,
                   train_val_percentage=80,
                   label_smoothing=False,
                   stop_best_epoch=-1,
-                  default_label=None):
+                  default_label=None,
+                  training_loss_fct='dice'):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -57,9 +58,9 @@ def training_loop(img_path_list: Sequence,
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
     loss_function = DiceLoss(sigmoid=True)
     tversky_function = TverskyLoss(sigmoid=True, alpha=2, beta=0.5)
-    focal_function = FocalLoss()
-    df_loss = DiceFocalLoss(sigmoid=True)
-    dce_loss = DiceCELoss(sigmoid=True, ce_weight=torch.Tensor([1]).cuda())
+    # focal_function = FocalLoss()
+    # df_loss = DiceFocalLoss(sigmoid=True)
+    # dce_loss = DiceCELoss(sigmoid=True, ce_weight=torch.Tensor([1]).cuda())
     # loss_function = BCE
     val_loss_function = DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
@@ -129,6 +130,7 @@ def training_loop(img_path_list: Sequence,
     # ##################################################################################
 
     # start a typical PyTorch training
+
     val_interval = 1
     best_metric = -1
     best_distance = -1
@@ -194,9 +196,15 @@ def training_loop(img_path_list: Sequence,
             if label_smoothing:
                 s = .1
                 y = y * (1 - s) + 0.5 * s
-            loss = loss_function(outputs, y)
+            if training_loss_fct == 'BCE':
+                loss = BCE(outputs, y)
+            elif training_loss_fct == 'tversky_loss':
+                loss = tversky_function(outputs, y)
+            else:
+                loss = loss_function(outputs, y)
             # Just trying some dark magic
-            # distance, _ = surface_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
+            distance, _ = surface_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
+            hausdorff, _ = hausdorff_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
             # if not torch.isinf(distance):
             #     dist = distance.item() * len(distance) / len(distance)
             #     if dist > 1:
@@ -210,13 +218,16 @@ def training_loop(img_path_list: Sequence,
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
-            print(f'{step}/{batches_per_epoch}, train_loss: {loss.item():.4f}, '
+
+            print(f'{step}/{batches_per_epoch}, train {training_loss_fct} loss: {loss.item():.4f}, '
                   f'| tversky_loss: {tversky_function(outputs, y).item():.4f}'
-                  f'| dicefocal: {df_loss(outputs, y).item():.4f}'
-                  f'| BCE: {BCE(outputs, y):.4f}'
+                  # f'| dicefocal: {df_loss(outputs, y).item():.4f}'
+                  f'| BCE: {BCE(outputs, y).item():.4f}'
+                  f'| Surface distance: {distance.item():.4f}'
+                  f'| Hausdorff distance: {hausdorff.item():.4f}'
                   # f'| BCE: {BCE(outputs, y, reduction="mean"):.4f}'
                   # f'| focal_loss: {focal_function(outputs, y).item():.4f}'
-            )
+                  )
             writer.add_scalar('train_loss', loss.item(), batches_per_epoch * epoch + step)
 
         epoch_loss /= step
@@ -361,8 +372,9 @@ def training_loop(img_path_list: Sequence,
                     f'Current epoch: {epoch + 1} current mean dice: {metric:.4f} with {trash_count}\n'
                     f'trash (below a score of {val_trash_thr}) images \n'
                     f'and {meh_count} meh images (between {val_meh_thr} and {val_trash_thr}) images \n'
-                    f'and an average distance of {distance_sum / distance_count} ({inf});\n'
-                    f'Best epoch {best_metric_epoch} dice{best_metric:.4f}/dist{best_distance}/avgloss{best_avg_loss}'
+                    f'and an average distance of [{distance_sum / distance_count}] ({inf});\n\n'
+                    f'Best epoch {best_metric_epoch} '
+                    f'dice {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}'
                     )
                 print(f'It has been [{best_epoch_count}] since a best epoch has been found'
                       f'\nThe training will stop after [{stop_best_epoch}] epochs without improvement')
