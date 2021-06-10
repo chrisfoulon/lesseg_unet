@@ -376,87 +376,87 @@ curated_dict = {
     #         'scale_range': (0.25, 0.8)}
     #      }
     # ],
-    # 'monai_transform': [
-    #     # {'RandSpatialCropd': {'keys': ['image', 'label'],
-    #     #                       'roi_size': min_small_crop_size,
-    #     #                       'random_center': True,
-    #     #                       'random_size': False}
-    #     #  },
-    #     {'RandHistogramShiftd': {
-    #         'keys': ['image'],
-    #         'num_control_points': (10, 15),
-    #         'prob': low_prob}
-    #      },
-    #     # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER HIST SHIFT'}},
-    #     # {'RandBiasFieldd': {
-    #     #     'keys': ['image'],
-    #     #     'coeff_range': (0, 0.05),
-    #     #     'prob': high_prob}
-    #     #  },
-    #     # # TODO maybe 'Orientation': {} but it would interact with the flip,
-    #     # {'RandAffined': {
-    #     #     'keys': ['image', 'label'],
-    #     #     'prob': high_prob,
-    #     #     'rotate_range': radians(5),
-    #     #     'shear_range': radians(5),
-    #     #     'translate_range': 0.05,
-    #     #     'scale_range': 0.05,
-    #     #     'spatial_size': None,
-    #     #     'padding_mode': 'border',
-    #     #     'as_tensor_output': False}
-    #     #  },
-    #     {'Rand3DElasticd': {
-    #         'keys': ['image', 'label'],
-    #         'sigma_range': (1, 3),
-    #         'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
-    #         'prob': tiny_prob,
-    #         'rotate_range': None,
-    #         'shear_range': None,
-    #         'translate_range': None,
-    #         'scale_range': None,
-    #         'spatial_size': None,
-    #         'padding_mode': "reflection",
-    #         # 'padding_mode': "border",
-    #         # 'padding_mode': "zeros",
-    #         'as_tensor_output': False}
-    #      },
-    # ],
-    # 'torchio_transform': [
-    #     {'ToTensord': {'keys': ['image', 'label']}},
-    #     # {'RandomNoise': {
-    #     #     'include': ['image'],
-    #     #     'mean': 0,
-    #     #     'std': (0.01, 0.1),
-    #     #     'p': low_prob}
-    #     #  },
-    #     # {'RandomGhosting': {
-    #     #     'include': ['image'],
-    #     #     'p': tiny_prob,
-    #     #     'num_ghosts': (1, 4),
-    #     #     'intensity': (0.3, 0.6)
-    #     # }},
-    #     # {'RandomBlur': {
-    #     #     'include': ['image', 'label'],
-    #     #     'std': (0.01, 0.07),
-    #     #     'p': low_prob}
-    #     #  },
-    #     {'RandomBiasField': {
-    #         'include': ['image'],
-    #         'p': high_prob,
-    #         'coefficients': 0.1}
-    #      },
-    #     # {'RandomMotion': {
-    #     #     'include': ['image', 'label'],
-    #     #     'p': low_prob,
-    #     #     'num_transforms': 1}
-    #     #  },
-    #     {'ToNumpyd': {'keys': ['image', 'label']}},
-    # ],
-    'last_transform': [
-        {'GaussianSmoothd': {
-            'keys': ['label'],
-            'sigma': .5}
+    'monai_transform': [
+        # {'RandSpatialCropd': {'keys': ['image', 'label'],
+        #                       'roi_size': min_small_crop_size,
+        #                       'random_center': True,
+        #                       'random_size': False}
+        #  },
+        {'RandHistogramShiftd': {
+            'keys': ['image'],
+            'num_control_points': (10, 15),
+            'prob': low_prob}
          },
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER HIST SHIFT'}},
+        # {'RandBiasFieldd': {
+        #     'keys': ['image'],
+        #     'coeff_range': (0, 0.05),
+        #     'prob': high_prob}
+        #  },
+        # # TODO maybe 'Orientation': {} but it would interact with the flip,
+        {'RandAffined': {
+            'keys': ['image', 'label'],
+            'prob': high_prob,
+            'rotate_range': radians(5),
+            'shear_range': radians(5),
+            'translate_range': 0.05,
+            'scale_range': 0.05,
+            'spatial_size': None,
+            'padding_mode': 'border',
+            'as_tensor_output': False}
+         },
+        {'Rand3DElasticd': {
+            'keys': ['image', 'label'],
+            'sigma_range': (1, 3),
+            'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
+            'prob': tiny_prob,
+            'rotate_range': None,
+            'shear_range': None,
+            'translate_range': None,
+            'scale_range': None,
+            'spatial_size': None,
+            'padding_mode': "reflection",
+            # 'padding_mode': "border",
+            # 'padding_mode': "zeros",
+            'as_tensor_output': False}
+         },
+    ],
+    'torchio_transform': [
+        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'RandomNoise': {
+        #     'include': ['image'],
+        #     'mean': 0,
+        #     'std': (0.01, 0.1),
+        #     'p': low_prob}
+        #  },
+        # {'RandomGhosting': {
+        #     'include': ['image'],
+        #     'p': tiny_prob,
+        #     'num_ghosts': (1, 4),
+        #     'intensity': (0.3, 0.6)
+        # }},
+        # {'RandomBlur': {
+        #     'include': ['image', 'label'],
+        #     'std': (0.01, 0.07),
+        #     'p': low_prob}
+        #  },
+        {'RandomBiasField': {
+            'include': ['image'],
+            'p': high_prob,
+            'coefficients': 0.1}
+         },
+        # {'RandomMotion': {
+        #     'include': ['image', 'label'],
+        #     'p': low_prob,
+        #     'num_transforms': 1}
+        #  },
+        {'ToNumpyd': {'keys': ['image', 'label']}},
+    ],
+    'last_transform': [
+        # {'GaussianSmoothd': {
+        #     'keys': ['label'],
+        #     'sigma': .5}
+        #  },
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.25}
