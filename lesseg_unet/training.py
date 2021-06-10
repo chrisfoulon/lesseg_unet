@@ -196,11 +196,11 @@ def training_loop(img_path_list: Sequence,
                 y = y * (1 - s) + 0.5 * s
             loss = loss_function(outputs, y)
             # Just trying some dark magic
-            distance, _ = surface_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
-            if not torch.isinf(distance):
-                dist = distance.item() * len(distance) / len(distance)
-                if dist > 1:
-                    loss = loss * (1 - 1/dist)
+            # distance, _ = surface_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
+            # if not torch.isinf(distance):
+            #     dist = distance.item() * len(distance) / len(distance)
+            #     if dist > 1:
+            #         loss = loss * (1 - 1/dist)
 
             # loss = tversky_function(outputs, y)
             # print(f'dice: {loss.item():.4f}')
@@ -213,8 +213,10 @@ def training_loop(img_path_list: Sequence,
             print(f'{step}/{batches_per_epoch}, train_loss: {loss.item():.4f}, '
                   f'| tversky_loss: {tversky_function(outputs, y).item():.4f}'
                   f'| dicefocal: {df_loss(outputs, y).item():.4f}'
-                  f'| BCE: {BCE(outputs, y, reduction="mean"):.4f}'
-                  f'| focal_loss: {focal_function(outputs, y).item():.4f}')
+                  f'| BCE: {BCE(outputs, y):.4f}'
+                  # f'| BCE: {BCE(outputs, y, reduction="mean"):.4f}'
+                  # f'| focal_loss: {focal_function(outputs, y).item():.4f}'
+            )
             writer.add_scalar('train_loss', loss.item(), batches_per_epoch * epoch + step)
 
         epoch_loss /= step
