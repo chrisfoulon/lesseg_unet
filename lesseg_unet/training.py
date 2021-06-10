@@ -201,8 +201,6 @@ def training_loop(img_path_list: Sequence,
                 dist = distance.item() * len(distance) / len(distance)
                 if dist > 1:
                     loss = loss * (1 - 1/dist)
-            else:
-                loss = torch.ones_like(loss)
 
             # loss = tversky_function(outputs, y)
             # print(f'dice: {loss.item():.4f}')
