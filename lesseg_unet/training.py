@@ -9,9 +9,8 @@ from tqdm import tqdm
 import numpy as np
 import monai
 import torch
-from torch.nn.functional import binary_cross_entropy_with_logits as BCEl
-from torch.nn.functional import binary_cross_entropy as BCE
-from monai.metrics import DiceMetric, SurfaceDistanceMetric
+from torch.nn.functional import binary_cross_entropy_with_logits as BCE
+from monai.metrics import DiceMetric, SurfaceDistanceMetric, HausdorffDistanceMetric
 from monai.losses import DiceLoss, TverskyLoss, FocalLoss, DiceFocalLoss, DiceCELoss
 from monai.transforms import (
     Activations,
@@ -31,7 +30,7 @@ def training_loop(img_path_list: Sequence,
                   batch_size: int = 10,
                   epoch_num: int = 50,
                   dataloader_workers: int = 4,
-                  train_val_percentage=75,
+                  train_val_percentage=80,
                   label_smoothing=False,
                   stop_best_epoch=-1,
                   default_label=None):
@@ -53,13 +52,14 @@ def training_loop(img_path_list: Sequence,
             unet_hyper_params = net.coord_conv_unet_hyper_params
     model = net.create_unet_model(device, unet_hyper_params)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
-    surface_metric = SurfaceDistanceMetric(include_background=True, reduction="mean")
+    surface_metric = SurfaceDistanceMetric(include_background=True, reduction="mean", symmetric=True)
+    hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
     loss_function = DiceLoss(sigmoid=True)
-    tversky_function = TverskyLoss(sigmoid=True)
+    tversky_function = TverskyLoss(sigmoid=True, alpha=2, beta=0.5)
     focal_function = FocalLoss()
     df_loss = DiceFocalLoss(sigmoid=True)
-    dce_loss = DiceCELoss(sigmoid=True)
+    dce_loss = DiceCELoss(sigmoid=True, ce_weight=torch.Tensor([1]).cuda())
     # loss_function = BCE
     val_loss_function = DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
@@ -195,6 +195,15 @@ def training_loop(img_path_list: Sequence,
                 s = .1
                 y = y * (1 - s) + 0.5 * s
             loss = loss_function(outputs, y)
+            # Just trying some dark magic
+            distance, _ = surface_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
+            if not torch.isinf(distance):
+                dist = distance.item() * len(distance) / len(distance)
+                if dist > 1:
+                    loss = loss * (1 - 1/dist)
+            else:
+                loss = torch.ones_like(loss)
+
             # loss = tversky_function(outputs, y)
             # print(f'dice: {loss.item():.4f}')
             # print(f'tversky: {tversky_function.forward(outputs, y):.4f}')
@@ -206,7 +215,7 @@ def training_loop(img_path_list: Sequence,
             print(f'{step}/{batches_per_epoch}, train_loss: {loss.item():.4f}, '
                   f'| tversky_loss: {tversky_function(outputs, y).item():.4f}'
                   f'| dicefocal: {df_loss(outputs, y).item():.4f}'
-                  f'| diceCE: {dce_loss(outputs, y).item():.4f}'
+                  f'| BCE: {BCE(outputs, y, reduction="mean"):.4f}'
                   f'| focal_loss: {focal_function(outputs, y).item():.4f}')
             writer.add_scalar('train_loss', loss.item(), batches_per_epoch * epoch + step)
 
@@ -246,8 +255,10 @@ def training_loop(img_path_list: Sequence,
                     step += 1
                     inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
                     outputs = model(inputs)
-                    outputs = post_trans(outputs)
+                    # TODO check if that fixes the increase of val loss
                     loss = val_loss_function(outputs, labels[:, :1, :, :, :])
+
+                    outputs = post_trans(outputs)
                     # loss = tversky_function(outputs, labels[:, :1, :, :, :])
                     # loss.backward()
                     loss_list.append(loss.item())

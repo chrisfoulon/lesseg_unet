@@ -13,7 +13,8 @@ default_unet_hyper_params = {
         'channels': (10, 20, 40, 80, 160),
         # 'strides': (2, 2, 2, 2),
         'strides': (2, 2, 2, 2, 2),
-        'num_res_units': 2
+        'num_res_units': 2,
+        'dropout': 0.5
     }
 
 coord_conv_unet_hyper_params = deepcopy(default_unet_hyper_params)
