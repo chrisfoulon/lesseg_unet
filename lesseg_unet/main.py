@@ -44,6 +44,10 @@ def main():
     # parser.add_argument('-ns', '--num_nifti_save', default=25, type=int, help='Number of niftis saved '
     #                                                                           'during validation')
     nifti_paths_group.add_argument('-bm', '--benchmark', action='store_true', help=argparse.SUPPRESS)
+    # TODO
+    nifti_paths_group.add_argument('-dropout', type=float, help='Set a dropout value for the model')
+    nifti_paths_group.add_argument('-nf', '--number_folds', default=1, type=int,
+                                   help='Set a dropout value for the model')
     args = parser.parse_args()
     # print MONAI config
     print_config()

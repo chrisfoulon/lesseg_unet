@@ -196,9 +196,9 @@ def training_loop(img_path_list: Sequence,
             if label_smoothing:
                 s = .1
                 y = y * (1 - s) + 0.5 * s
-            if training_loss_fct == 'BCE':
+            if training_loss_fct.lower() == 'BCE':
                 loss = BCE(outputs, y)
-            elif training_loss_fct == 'tversky_loss':
+            elif training_loss_fct.lower() == 'tversky_loss':
                 loss = tversky_function(outputs, y)
             else:
                 loss = loss_function(outputs, y)
