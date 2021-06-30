@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 from typing import Union, List
 import json
+import math
 
 from bcblib.tools.nifti_utils import is_nifti, centre_of_mass_difference
 from lesseg_unet.visualisation_utils import plot_seg
@@ -194,3 +195,16 @@ def split_output_files(source_dir, dest_dir, png_split_string='_segmentation', r
     with open(output_json_path, 'w+') as out_file:
         json.dump(output_dict, out_file, indent=4)
     return output_dict
+
+
+def split_lists_in_folds(img_dict: dict,
+                         folds_number: int = 1,
+                         train_val_percentage: float = 80):
+    full_file_list = [{'image': str(img), 'label': str(img_dict[img])} for img in img_dict]
+    if folds_number == 1:
+        training_end_index = math.ceil(train_val_percentage / 100 * len(img_dict))
+        # Inverse the order of the splits because the validation chunk in that case will be 0
+        split_lists = [full_file_list[training_end_index:], full_file_list[:training_end_index]]
+    else:
+        split_lists = list(np.array_split(np.array(full_file_list), folds_number))
+    return split_lists

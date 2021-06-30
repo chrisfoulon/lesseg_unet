@@ -16,6 +16,7 @@ import lesseg_unet.data.transform_dicts as tr_dicts
 def main():
     # Script arguments
     parser = argparse.ArgumentParser(description='Monai unet training')
+    # Paths
     parser.add_argument('-o', '--output', type=str, help='output folder', required=True)
     nifti_paths_group = parser.add_mutually_exclusive_group(required=True)
     nifti_paths_group.add_argument('-p', '--input_path', type=str, help='Root folder of the b1000 dataset')
@@ -25,17 +26,30 @@ def main():
                                     help='Root folder of the b1000 dataset')
     lesion_paths_group.add_argument('-lli', '--lesion_input_list', type=str,
                                     help='Text file containing the list of b1000')
-    parser.add_argument('-trs', '--transform_dict', type=str, help='file path to a json dictionary of transformations')
+    control_paths_group = parser.add_mutually_exclusive_group(required=False)
+    control_paths_group.add_argument('-ctr', '--controls_path', type=str,
+                                     help='folder containing the control images (image_prefix not applied)')
+    control_paths_group.add_argument('-lctr', '--controls_list', type=str,
+                                     help='paths list to the control images (image_prefix not applied)')
+    parser.add_argument('-trs', '--transform_dict', type=str,
+                                     help='file path to a json dictionary of transformations')
     parser.add_argument('-lfct', '--loss_function', type=str, default='dice',
                         help='Loss function used for training')
-    parser.add_argument('-dl', '--default_label', type=str, help='Path to a default mask that will be used in case no '
-                                                                 'lesion mask is found for the b1000')
+    default_label_group = parser.add_mutually_exclusive_group(required=False)
+    default_label_group.add_argument('-cdl', '--create_default_label', action='store_true',
+                                     help='Creates a default image filled with zeros for control images label')
+    default_label_group.add_argument('-dl', '--default_label', type=str,
+                                     help='Path to a default mask that will be used in case no '
+                                          'lesion mask is found for the b1000')
     parser.add_argument('-lab_smo', '--label_smoothing', action='store_true',
                         help='Apply a label smoothing during the training')
     parser.add_argument('-pt', '--checkpoint', type=str, help='file path to a torch checkpoint file')
     parser.add_argument('-d', '--torch_device', type=str, help='Device type and number given to'
                                                                'torch.device()')
     parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
+    # TODO maybe
+    # parser.add_argument('-ctr_pref', '--control_image_prefix', type=str,
+    #                     help='Define a prefix to filter the control images')
     parser.add_argument('-nw', '--num_workers', default=4, type=int, help='Number of dataloader workers')
     parser.add_argument('-ne', '--num_epochs', default=50, type=int, help='Number of epochs')
     parser.add_argument('-tv', '--train_val', type=int, help='Training / validation percentage cut')
@@ -44,17 +58,13 @@ def main():
     # parser.add_argument('-ns', '--num_nifti_save', default=25, type=int, help='Number of niftis saved '
     #                                                                           'during validation')
     nifti_paths_group.add_argument('-bm', '--benchmark', action='store_true', help=argparse.SUPPRESS)
-    # TODO
-    nifti_paths_group.add_argument('-dropout', type=float, help='Set a dropout value for the model')
-    nifti_paths_group.add_argument('-nf', '--number_folds', default=1, type=int,
-                                   help='Set a dropout value for the model')
+    parser.add_argument('-dropout', type=float, help='Set a dropout value for the model')
+    parser.add_argument('-nf', '--folds_number', default=1, type=int, help='Set a dropout value for the model')
     args = parser.parse_args()
     # print MONAI config
     print_config()
     # logs init
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
-    if args.default_label is not None:
-        logging.info(f'{args.default_label} will be used to fill up missing labels')
     if args.stop_best_epoch is None:
         stop_best_epoch = -1
     else:
@@ -97,7 +107,9 @@ def main():
                                            label_smoothing=False,
                                            stop_best_epoch=stop_best_epoch,
                                            default_label=args.default_label,
-                                           training_loss_fct=args.loss_function)
+                                           training_loss_fct=args.loss_function,
+                                           folds_number=args.folds_number,
+                                           dropout=args.dropout)
             else:
                 segmentation.validation_loop(img_list, les_list,
                                              output_dir,
@@ -112,6 +124,11 @@ def main():
         # Gather input data and setup based on script arguments
         output_root = Path(args.output)
         os.makedirs(output_root, exist_ok=True)
+        if args.default_label is not None:
+            logging.info(f'{args.default_label} will be used to fill up missing labels')
+        if args.create_default_label:
+            args.default_label = output_root
+            logging.info(f'Missing labels will be replace by an zero-filled default image')
         if not output_root.is_dir():
             raise ValueError('{} is not an existing directory and could not be created'.format(output_root))
         logging.info('loading input dwi path list')
@@ -134,8 +151,16 @@ def main():
             les_list = file_to_list(args.lesion_input_list)
         else:
             les_list = None
-        if les_list is not None and args.output in les_list:
-            raise ValueError("The output directory CANNOT be one of the input directories")
+
+        if args.controls_path is not None:
+            ctr_list = utils.create_input_path_list_from_root(args.controls_path)
+            if args.controls_path == args.output:
+                raise ValueError("The output directory CANNOT be the input directory")
+        # So args.lesion_input_list is not None
+        elif args.controls_list is not None:
+            ctr_list = file_to_list(args.controls_list)
+        else:
+            ctr_list = None
 
         # match the lesion labels with the images
         logging.info('Matching the dwi and lesions')
@@ -166,7 +191,11 @@ def main():
                 train_val_percentage = 75
             if les_list is None and args.default_label is None:
                 parser.error(message='For the training, there must be a list of labels')
-            training.training_loop(img_list, les_list, output_root, b1000_pref,
+            training.training_loop(img_path_list=img_list,
+                                   seg_path_list=les_list,
+                                   output_dir=output_root,
+                                   ctr_path_list=ctr_list,
+                                   img_pref=b1000_pref,
                                    transform_dict=transform_dict,
                                    device=args.torch_device,
                                    epoch_num=args.num_epochs,
@@ -176,7 +205,9 @@ def main():
                                    label_smoothing=args.label_smoothing,
                                    stop_best_epoch=stop_best_epoch,
                                    default_label=args.default_label,
-                                   training_loss_fct=args.loss_function)
+                                   training_loss_fct=args.loss_function,
+                                   folds_number=args.folds_number,
+                                   dropout=args.dropout)
         else:
             if train_val_percentage is None:
                 train_val_percentage = 0

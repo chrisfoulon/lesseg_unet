@@ -88,7 +88,7 @@ class Binarize(Transform):
         """
         Apply the transform to `img`.
         """
-        s = str(img.shape)
+        # s = str(img.shape)
         tensor_shape = img.shape
         if isinstance(img, torch.Tensor):
             img = np.asarray(img[0, :, :, :].detach().numpy())
@@ -99,7 +99,7 @@ class Binarize(Transform):
             output = torch.from_numpy(output).unsqueeze(0)
         # if len(tensor_shape) == 5:
         #     output = torch.from_numpy(output).unsqueeze(0).unsqueeze(0)
-        s += '\n {}'.format(output.shape)
+        # s += '\n {}'.format(output.shape)
         # print('Binarized ######\n{}\n#####'.format(s))
         return output
 
