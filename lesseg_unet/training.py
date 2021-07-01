@@ -378,6 +378,8 @@ def training_loop(img_path_list: Sequence,
                     step = 0
                     inf = ''
                     pbar = tqdm(val_loader, desc=f'Val[{epoch}] avg_loss:[N/A]')
+                    controls_mean_loss = 1
+                    controls_mean_dist = torch.Tensor([float('Inf')])
                     for val_data in pbar:
                         step += 1
                         inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
@@ -388,13 +390,15 @@ def training_loop(img_path_list: Sequence,
                             inputs_controls = batch_data_controls['image'].to(device)
                             labels_controls = batch_data_controls['label'].to(device)
                             outputs_controls = model(inputs_controls)
-                            controls_loss = loss(outputs_controls, labels_controls[:, :1, :, :, :])
+                            controls_loss = val_loss_function(outputs_controls, labels_controls[:, :1, :, :, :])
                             outputs_controls = post_trans(outputs_controls)
                             controls_value, _ = dice_metric(y_pred=outputs_controls, y=labels_controls[:, :1, :, :, :])
                             controls_distance, _ = surface_metric(
                                 y_pred=outputs_controls, y=labels_controls[:, :1, :, :, :])
-                            print(f'control dice: [{controls_value}]'
-                                  f'\ncontrol distance: [{controls_distance}]')
+                            controls_mean_loss = np.mean([controls_mean_loss, controls_value])
+                            controls_mean_dist = torch.mean(torch.Tensor([controls_mean_dist, controls_value]))
+                            # print(f'control dice: [{controls_value}]'
+                            #       f'\ncontrol distance: [{controls_distance}]')
 
                         loss = val_loss_function(outputs, labels[:, :1, :, :, :]) + controls_loss
 
@@ -490,7 +494,8 @@ def training_loop(img_path_list: Sequence,
                                      f'{img_count}'.rjust(12, ' '))
                     str_current_epoch = (
                         f'[Fold: {fold}]Current epoch: {epoch + 1} current mean dice: {metric:.4f}\n'
-                        f'and an average distance of [{distance_sum / distance_count}] ({inf});\n\n'
+                        f'and an average distance of [{distance_sum / distance_count}] ({inf});\n'
+                        f'Controls dice / dist [{controls_mean_loss}]/[{controls_mean_dist}] ({inf});\n\n'
                         + str_img_count + str_best_epoch
                     )
                     print(str_current_epoch)
