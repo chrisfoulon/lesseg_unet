@@ -236,19 +236,19 @@ def training_loop(img_path_list: Sequence,
                 controls_lists, fold, train_img_transforms,
                 val_img_transforms, batch_size, dataloader_workers
             )
-            batch_data_normals = next(iter(ctr_train_loader))
+            # batch_data_controls = next(iter(ctr_train_loader))
             # print(
             #     f"control split list size: {len(controls_lists[0])}\n"
             #     f"control split list element: {controls_lists[0][0]}"
-            #     f"control batch: {batch_data_normals['image'].shape}"
-            #     f"control batch: {batch_data_normals['label'].shape}"
+            #     f"control batch: {batch_data_controls['image'].shape}"
+            #     f"control batch: {batch_data_controls['label'].shape}"
             # )
             # exit()
         """
         Training loop
         """
         for epoch in range(epoch_num):
-            # TODO create new normals_loader (shuffled from the whole normal dataset) of the
+            # TODO create new controls_loader (shuffled from the whole control dataset) of the
             #  same size as the train_loader
             print('-' * 10)
             print(f'epoch {epoch + 1}/{epoch_num}')
@@ -264,51 +264,53 @@ def training_loop(img_path_list: Sequence,
                 inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
                 outputs = model(inputs)
                 if controls_lists:
-                    batch_data_normals = next(iter(ctr_train_loader))
-                    inputs_normals = batch_data_normals['image'].to(device)
-                    labels_normals = batch_data_normals['label'].to(device)
-                    outputs_normals = model(inputs_normals)
+                    batch_data_controls = next(iter(ctr_train_loader))
+                    inputs_controls = batch_data_controls['image'].to(device)
+                    labels_controls = batch_data_controls['label'].to(device)
+                    outputs_controls = model(inputs_controls)
                 # print('inputs size: {}'.format(inputs.shape))
                 # print('labels size: {}'.format(labels.shape))
                 # print('outputs size: {}'.format(outputs.size()))
+                controls_loss_str = ''
                 # TODO smoothing?
                 y = labels[:, :1, :, :, :]
                 if label_smoothing:
                     s = .1
                     y = y * (1 - s) + 0.5 * s
                 if training_loss_fct.lower() == 'BCE':
-                    # TODO check if the BCE would work with the normals
-                    normals_loss = 0
+                    # TODO check if the BCE would work with the controls
+                    controls_loss = 0
                     if controls_lists:
-                        normals_loss = BCE(outputs_normals, labels_normals[:, :1, :, :, :])
-                    loss = BCE(outputs, y) + normals_loss
+                        controls_loss = BCE(outputs_controls, labels_controls[:, :1, :, :, :])
+                    loss = BCE(outputs, y) + controls_loss
                     # loss = BCE(outputs, y)
                 elif training_loss_fct.lower() == 'tversky_loss':
-                    normals_loss = 0
+                    controls_loss = 0
                     if controls_lists:
-                        normals_loss = tversky_function(outputs_normals, labels_normals[:, :1, :, :, :])
-                    loss = tversky_function(outputs, y) + normals_loss
+                        controls_loss = tversky_function(outputs_controls, labels_controls[:, :1, :, :, :])
+                    loss = tversky_function(outputs, y) + controls_loss
                 elif training_loss_fct.lower() == 'surface_dist_dice':
                     loss = loss_function(outputs, y)
                     # Just trying some dark magic
                     distance, _ = surface_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
                     # TODO check if we can just use the euclidian distance
                     loss += torch.mean(distance)
-                    normals_loss = 0
+                    controls_loss = 0
                     if controls_lists:
-                        normals_loss = loss_function(outputs_normals, labels_normals[:, :1, :, :, :])
-                        normals_distance, _ = surface_metric(
-                            y_pred=post_trans(outputs_normals), y=labels_normals[:, :1, :, :, :])
-                        normals_loss = torch.mean(normals_distance) + normals_loss
-                    loss += normals_loss
+                        controls_loss = loss_function(outputs_controls, labels_controls[:, :1, :, :, :])
+                        controls_distance, _ = surface_metric(
+                            y_pred=post_trans(outputs_controls), y=labels_controls[:, :1, :, :, :])
+                        controls_loss = torch.mean(controls_distance) + controls_loss
+                        controls_loss_str = f'Controls loss: {controls_loss}'
+                    loss += controls_loss
                 else:
-                    normals_loss = 0
+                    controls_loss = 0
                     if controls_lists:
-                        normals_loss = loss_function(outputs_normals, labels_normals[:, :1, :, :, :])
-                    loss = loss_function(outputs, y) + normals_loss
+                        controls_loss = loss_function(outputs_controls, labels_controls[:, :1, :, :, :])
+                    loss = loss_function(outputs, y) + controls_loss
                 # TODO check that
                 # distance, _ = surface_metric(y_pred=Activations(sigmoid=True)(outputs), y=labels[:, :1, :, :, :])
-                hausdorff, _ = hausdorff_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
+                # hausdorff, _ = hausdorff_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
                 # if not torch.isinf(distance):
                 #     dist = distance.item() * len(distance) / len(distance)
                 #     if dist > 1:
@@ -323,12 +325,13 @@ def training_loop(img_path_list: Sequence,
                 optimizer.step()
                 epoch_loss += loss.item()
 
-                print(f'{step}/{batches_per_epoch}, train {training_loss_fct} loss: {loss.item():.4f}, '
-                      f'| tversky_loss: {tversky_function(outputs, y).item():.4f}'
+                print(f'[{fold}]{step}/{batches_per_epoch}, train {training_loss_fct} loss: {loss.item():.4f}, ' +
+                      controls_loss_str
+                      # f'| tversky_loss: {tversky_function(outputs, y).item():.4f}'
                       # f'| dicefocal: {df_loss(outputs, y).item():.4f}'
-                      f'| BCE: {BCE(outputs, y).item():.4f}'
+                      # f'| BCE: {BCE(outputs, y).item():.4f}'
                       # f'| Surface distance: {distance.item():.4f}'
-                      f'| Hausdorff distance: {hausdorff.item():.4f}'
+                      # f'| Hausdorff distance: {hausdorff.item():.4f}'
                       # f'| BCE: {BCE(outputs, y, reduction="mean"):.4f}'
                       # f'| focal_loss: {focal_function(outputs, y).item():.4f}'
                       )
@@ -371,21 +374,21 @@ def training_loop(img_path_list: Sequence,
                         step += 1
                         inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
                         outputs = model(inputs)
-                        normals_loss = 0
+                        controls_loss = 0
                         if controls_lists:
-                            batch_data_normals = next(iter(ctr_val_loader))
-                            inputs_normals = batch_data_normals['image'].to(device)
-                            labels_normals = batch_data_normals['label'].to(device)
-                            outputs_normals = model(inputs_normals)
-                            normals_loss = loss(outputs_normals, labels_normals[:, :1, :, :, :])
-                            outputs_normals = post_trans(outputs_normals)
-                            normals_value, _ = dice_metric(y_pred=outputs_normals, y=labels_normals[:, :1, :, :, :])
-                            normals_distance, _ = surface_metric(
-                                y_pred=outputs_normals, y=labels_normals[:, :1, :, :, :])
-                            print(f'Normal dice: [{normals_value}]'
-                                  f'\nNormal distance: [{normals_distance}] ')
+                            batch_data_controls = next(iter(ctr_val_loader))
+                            inputs_controls = batch_data_controls['image'].to(device)
+                            labels_controls = batch_data_controls['label'].to(device)
+                            outputs_controls = model(inputs_controls)
+                            controls_loss = loss(outputs_controls, labels_controls[:, :1, :, :, :])
+                            outputs_controls = post_trans(outputs_controls)
+                            controls_value, _ = dice_metric(y_pred=outputs_controls, y=labels_controls[:, :1, :, :, :])
+                            controls_distance, _ = surface_metric(
+                                y_pred=outputs_controls, y=labels_controls[:, :1, :, :, :])
+                            print(f'control dice: [{controls_value}]'
+                                  f'\ncontrol distance: [{controls_distance}]')
 
-                        loss = val_loss_function(outputs, labels[:, :1, :, :, :]) + normals_loss
+                        loss = val_loss_function(outputs, labels[:, :1, :, :, :]) + controls_loss
 
                         outputs = post_trans(outputs)
                         # loss = tversky_function(outputs, labels[:, :1, :, :, :])
@@ -410,23 +413,6 @@ def training_loop(img_path_list: Sequence,
                         else:
                             trash_count += 1
                         pbar.set_description(f'Val[{epoch}] avg_loss:[{metric_sum / metric_count}]')
-                        # if best_metric > val_save_thr:
-                        #     if value.item() * len(value) > val_save_thr:
-                        #         img_count += 1
-                        #         if img_count < num_nifti_save:
-                        #             print('Saving good image #{}'.format(img_count))
-                        #             utils.save_img_lbl_seg_to_png(
-                        #                 inputs, val_images_dir, 'validation_img_{}'.format(img_count), labels, outputs)
-                        #             utils.save_img_lbl_seg_to_nifti(
-                        #                 inputs, labels, outputs, val_images_dir, val_output_affine, img_count)
-                        #     if value.item() * len(value) < 0.1:
-                        #         trash_count += 1
-                        #         if trash_count < num_nifti_save:
-                        #             print('Saving trash image #{}'.format(trash_count))
-                        #             utils.save_img_lbl_seg_to_png(
-                        #                 inputs, trash_val_images_dir, 'trash_img_{}'.format(trash_count), labels, outputs)
-                        #             utils.save_img_lbl_seg_to_nifti(
-                        #                 inputs, labels, outputs, trash_val_images_dir, val_output_affine, trash_count)
                     metric = metric_sum / metric_count
                     writer.add_scalar('val_loss', metric, val_batches_per_epoch * epoch + step)
                     metric_values.append(metric)
