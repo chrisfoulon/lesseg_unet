@@ -252,6 +252,10 @@ def training_loop(img_path_list: Sequence,
                 print(
                     f"Train batch: {batch_data['image'].shape}"
                 )
+                print(
+                    f"control batch: {batch_data_normals['image'].shape}"
+                )
+                exit()
                 step += 1
                 optimizer.zero_grad()
                 inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
