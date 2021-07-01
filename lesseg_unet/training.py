@@ -223,6 +223,9 @@ def training_loop(img_path_list: Sequence,
             split_lists, fold, train_img_transforms,
             val_img_transforms, batch_size, dataloader_workers
         )
+        print(
+            f'train loaders and stuff: {train_loader}'
+        )
 
         batches_per_epoch = len(train_loader)
         val_batches_per_epoch = len(val_loader)
@@ -245,13 +248,19 @@ def training_loop(img_path_list: Sequence,
             step = 0
             # for batch_data in tqdm(train_loader, desc=f'training_loop{epoch}'):
             # for batch_data in train_loader:
-            for ind, batch_data in enumerate(train_loader):  # zip the two loaders
+            for batch_data in train_loader:  # zip the two loaders
+                print(
+                    f"Train batch: {batch_data['image'].shape}"
+                )
                 step += 1
                 optimizer.zero_grad()
                 inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
                 outputs = model(inputs)
                 if controls_lists:
                     batch_data_normals = next(iter(ctr_train_loader))
+                    print(
+                        f"control batch: {batch_data_normals['image'].shape}"
+                    )
                     inputs_normals = batch_data_normals['image'].to(device)
                     labels_normals = batch_data_normals['label'].to(device)
                     outputs_normals = model(inputs_normals)
@@ -314,7 +323,7 @@ def training_loop(img_path_list: Sequence,
                       f'| tversky_loss: {tversky_function(outputs, y).item():.4f}'
                       # f'| dicefocal: {df_loss(outputs, y).item():.4f}'
                       f'| BCE: {BCE(outputs, y).item():.4f}'
-                      f'| Surface distance: {distance.item():.4f}'
+                      # f'| Surface distance: {distance.item():.4f}'
                       f'| Hausdorff distance: {hausdorff.item():.4f}'
                       # f'| BCE: {BCE(outputs, y, reduction="mean"):.4f}'
                       # f'| focal_loss: {focal_function(outputs, y).item():.4f}'
