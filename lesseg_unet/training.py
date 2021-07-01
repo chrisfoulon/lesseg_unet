@@ -179,12 +179,13 @@ def training_loop(img_path_list: Sequence,
     df = pd.DataFrame(columns=perf_measure_names)
     # Gather data
     img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, seg_path_list, img_pref, default_label)
+    
     # If the default_label option is used, we try to find controls images and create a second set of datasets and a
     # second set of loaders
     if default_label is not None:
         if ctr_path_list is not None and ctr_path_list != []:
             # _, controls_2 = data_loading.match_img_seg_by_names(img_path_list, [], img_pref, default_label)
-            _, controls_2 = data_loading.match_img_seg_by_names(img_path_list, [], None, default_label)
+            _, controls_2 = data_loading.match_img_seg_by_names(ctr_path_list, [], None, default_label)
             controls.update(controls_2)
     else:
         if ctr_path_list is not None and ctr_path_list != []:
