@@ -57,6 +57,8 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
     if no_match:
         print(f'Some images did not have a label so it has been replaced with {default_label}')
     print('Number of images: {}'.format(len(img_dict)))
+    if img_dict:
+        print(f'First image and label in img_dict: {img_dict[list(img_dict.keys())[0]]}')
     if controls:
         print('Number of controls: {}'.format(len(controls)))
     return img_dict, controls
@@ -168,7 +170,6 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
     # define dataset, data loader
     logging.info(f'Create validation monai dataset')
     val_ds = Dataset(val_data_list, transform=val_img_transforms)
-
     train_loader = create_training_data_loader(train_ds, batch_size, dataloader_workers)
     val_loader = create_validation_data_loader(val_ds, dataloader_workers=dataloader_workers)
     return train_loader, val_loader

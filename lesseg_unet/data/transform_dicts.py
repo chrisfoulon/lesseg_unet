@@ -357,10 +357,13 @@ curated_dict = {
     'first_transform': [
         {'LoadImaged': {'keys': ['image', 'label']}},
         {'AddChanneld': {'keys': ['image', 'label']}},
+
+        {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE RESIZE'}},
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
          },
+        {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER RESIZE'}},
         {'NormalizeIntensityd': {'keys': ['image']}},
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
     ],

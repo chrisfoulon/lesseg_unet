@@ -184,11 +184,12 @@ def training_loop(img_path_list: Sequence,
     if default_label is not None:
         if ctr_path_list is not None and ctr_path_list != []:
             # _, controls_2 = data_loading.match_img_seg_by_names(img_path_list, [], img_pref, default_label)
-            _, controls_2 = data_loading.match_img_seg_by_names(img_path_list, [], '', default_label)
+            _, controls_2 = data_loading.match_img_seg_by_names(img_path_list, [], None, default_label)
             controls.update(controls_2)
     else:
         if ctr_path_list is not None and ctr_path_list != []:
             _, controls_2 = data_loading.match_img_seg_by_names(ctr_path_list, [], None,
+            # _, controls_2 = data_loading.match_img_seg_by_names(ctr_path_list, [], img_pref,
                                                                 default_label=output_dir)
             controls.update(controls_2)
         else:
@@ -234,6 +235,14 @@ def training_loop(img_path_list: Sequence,
                 controls_lists, fold, train_img_transforms,
                 val_img_transforms, batch_size, dataloader_workers
             )
+            batch_data_normals = next(iter(ctr_train_loader))
+            # print(
+            #     f"control split list size: {len(controls_lists[0])}\n"
+            #     f"control split list element: {controls_lists[0][0]}"
+            #     f"control batch: {batch_data_normals['image'].shape}"
+            #     f"control batch: {batch_data_normals['label'].shape}"
+            # )
+            # exit()
         """
         Training loop
         """
@@ -252,10 +261,6 @@ def training_loop(img_path_list: Sequence,
                 print(
                     f"Train batch: {batch_data['image'].shape}"
                 )
-                print(
-                    f"control batch: {batch_data_normals['image'].shape}"
-                )
-                exit()
                 step += 1
                 optimizer.zero_grad()
                 inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
@@ -268,6 +273,7 @@ def training_loop(img_path_list: Sequence,
                     inputs_normals = batch_data_normals['image'].to(device)
                     labels_normals = batch_data_normals['label'].to(device)
                     outputs_normals = model(inputs_normals)
+                exit()
                 # print('inputs size: {}'.format(inputs.shape))
                 # print('labels size: {}'.format(labels.shape))
                 # print('outputs size: {}'.format(outputs.size()))
