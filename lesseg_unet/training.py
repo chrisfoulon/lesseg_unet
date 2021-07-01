@@ -259,22 +259,15 @@ def training_loop(img_path_list: Sequence,
             # for batch_data in tqdm(train_loader, desc=f'training_loop{epoch}'):
             # for batch_data in train_loader:
             for batch_data in train_loader:  # zip the two loaders
-                print(
-                    f"Train batch: {batch_data['image'].shape}"
-                )
                 step += 1
                 optimizer.zero_grad()
                 inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
                 outputs = model(inputs)
                 if controls_lists:
                     batch_data_normals = next(iter(ctr_train_loader))
-                    print(
-                        f"control batch: {batch_data_normals['image'].shape}"
-                    )
                     inputs_normals = batch_data_normals['image'].to(device)
                     labels_normals = batch_data_normals['label'].to(device)
                     outputs_normals = model(inputs_normals)
-                exit()
                 # print('inputs size: {}'.format(inputs.shape))
                 # print('labels size: {}'.format(labels.shape))
                 # print('outputs size: {}'.format(outputs.size()))
