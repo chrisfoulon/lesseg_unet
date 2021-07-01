@@ -183,8 +183,8 @@ def training_loop(img_path_list: Sequence,
     # second set of loaders
     if default_label is not None:
         if ctr_path_list is not None and ctr_path_list != []:
-            img_dict, controls_2 = data_loading.match_img_seg_by_names(img_path_list, [], img_pref,
-                                                                       default_label)
+            # _, controls_2 = data_loading.match_img_seg_by_names(img_path_list, [], img_pref, default_label)
+            _, controls_2 = data_loading.match_img_seg_by_names(img_path_list, [], '', default_label)
             controls.update(controls_2)
     else:
         if ctr_path_list is not None and ctr_path_list != []:
@@ -205,7 +205,6 @@ def training_loop(img_path_list: Sequence,
             raise ValueError(f'Only {len(controls)} controls for {len(img_dict)} patient images')
         else:
             controls_lists = utils.split_lists_in_folds(controls, folds_number, train_val_percentage)
-    print(f'CONTROL_dict SIIIIIIZZZZEEEE: {len(controls)}')
     logging.info('Create transformations')
     train_img_transforms = transformations.segmentation_train_transformd(transform_dict)
     val_img_transforms = transformations.segmentation_val_transformd(transform_dict)
