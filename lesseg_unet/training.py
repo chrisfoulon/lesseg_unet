@@ -268,6 +268,8 @@ def training_loop(img_path_list: Sequence,
                     inputs_controls = batch_data_controls['image'].to(device)
                     labels_controls = batch_data_controls['label'].to(device)
                     outputs_controls = model(inputs_controls)
+                    print(f'Control image shape {inputs_controls.shape}')
+                    print(f'Control output shape {outputs_controls.shape}')
                 # print('inputs size: {}'.format(inputs.shape))
                 # print('labels size: {}'.format(labels.shape))
                 # print('outputs size: {}'.format(outputs.size()))
@@ -293,13 +295,18 @@ def training_loop(img_path_list: Sequence,
                     loss = loss_function(outputs, y)
                     # Just trying some dark magic
                     distance, _ = surface_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
+                    if torch.isinf(distance):
+                        distance = torch.Tensor(np.linalg.norm(outputs_controls[0, 0, :, :, :].shape))
                     # TODO check if we can just use the euclidian distance
+                    print(f'Distance {distance}')
                     loss += torch.mean(distance)
                     controls_loss = 0
                     if controls_lists:
                         controls_loss = loss_function(outputs_controls, labels_controls[:, :1, :, :, :])
                         controls_distance, _ = surface_metric(
                             y_pred=post_trans(outputs_controls), y=labels_controls[:, :1, :, :, :])
+                        if torch.isinf(controls_distance):
+                            controls_distance = torch.Tensor(np.linalg.norm(outputs_controls[0, 0, :, :, :].shape))
                         controls_loss = torch.mean(controls_distance) + controls_loss
                         controls_loss_str = f'Controls loss: {controls_loss}'
                     loss += controls_loss
@@ -307,6 +314,7 @@ def training_loop(img_path_list: Sequence,
                     controls_loss = 0
                     if controls_lists:
                         controls_loss = loss_function(outputs_controls, labels_controls[:, :1, :, :, :])
+                        controls_loss_str = f'Controls loss: {controls_loss}'
                     loss = loss_function(outputs, y) + controls_loss
                 # TODO check that
                 # distance, _ = surface_metric(y_pred=Activations(sigmoid=True)(outputs), y=labels[:, :1, :, :, :])
