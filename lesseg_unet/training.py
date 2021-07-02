@@ -257,7 +257,14 @@ def training_loop(img_path_list: Sequence,
             epoch_loss = 0
             step = 0
             # for batch_data in tqdm(train_loader, desc=f'training_loop{epoch}'):
-            # for batch_data in train_loader:
+            # Time test
+            import time
+            start_time = time.time()
+            for i in tqdm(range(10)):
+                next(iter(train_loader))
+            end_time = time.time()
+            print(f'Time: {end_time - start_time}')
+            exit()
             for batch_data in train_loader:  # zip the two loaders
                 step += 1
                 optimizer.zero_grad()
@@ -488,10 +495,12 @@ def training_loop(img_path_list: Sequence,
                     # else:
                     #     best_epoch_count += 1
                     best_epoch_count = epoch + 1 - best_metric_epoch
-                    str_img_count = (f'Trash (<{val_trash_thr}|'.rjust(12, ' ') +
-                                     f'Meh (<{val_meh_thr})|'.rjust(12, ' ') + f'Good'
-                                     f'{trash_count}|'.rjust(12, ' ') + f'{meh_count}|'.rjust(12, ' ') +
-                                     f'{img_count}'.rjust(12, ' '))
+                    str_img_count = (
+                            f'Trash (<{val_trash_thr}|'.rjust(12, ' ') +
+                            f'Meh (<{val_meh_thr})|'.rjust(12, ' ') + f'Good\n'
+                            f'{trash_count}|'.rjust(12, ' ') + f'{meh_count}|'.rjust(12, ' ') +
+                            f'{img_count}'.rjust(12, ' ') + '\n\n'
+                            )
                     str_current_epoch = (
                         f'[Fold: {fold}]Current epoch: {epoch + 1} current mean dice: {metric:.4f}\n'
                         f'and an average distance of [{distance_sum / distance_count}] ({inf});\n'

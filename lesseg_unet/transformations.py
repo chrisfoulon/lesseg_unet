@@ -1,12 +1,13 @@
 from math import radians
 import logging
 from copy import deepcopy
-from typing import Mapping, Dict, Hashable, Any, Optional, Callable, Union, List, Tuple
+from typing import Mapping, Dict, Hashable, Any, Optional, Callable, Union, List, Tuple, Sequence
+import time
 
 import numpy as np
 from monai.transforms.compose import Randomizable
 from monai.transforms.inverse import InvertibleTransform
-from monai.config import KeysCollection
+from monai.config import KeysCollection, DtypeLike
 import torch
 from monai.transforms import (
     ToNumpyd,
@@ -55,6 +56,8 @@ from torchvision.transforms import RandomOrder
 """
 Custom Transformation Classes
 """
+timeziz = time.time()
+timean = 0
 
 
 def create_gradient(img_spatial_size, low=-1, high=1):
@@ -84,24 +87,27 @@ class Binarize(Transform):
     def __init__(self, lower_threshold: float = 0) -> None:
         self.lower_threshold = lower_threshold
 
-    def __call__(self, img: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
+    def __call__(self, img: torch.Tensor) -> torch.Tensor:
         """
         Apply the transform to `img`.
         """
         # s = str(img.shape)
-        tensor_shape = img.shape
-        if isinstance(img, torch.Tensor):
-            img = np.asarray(img[0, :, :, :].detach().numpy())
-        else:
-            img = np.asarray(img[0, :, :, :])
-        output = np.asarray(np.where(img > self.lower_threshold, 1, 0), dtype=img.dtype)
-        if len(tensor_shape) == 4:
-            output = torch.from_numpy(output).unsqueeze(0)
+        # tensor_shape = img.shape
+        # if isinstance(img, torch.Tensor):
+        # img = img[0, :, :, :].detach()
+        # img = np.asarray(img[0, :, :, :].detach().numpy())
+        # else:
+        #     # img = np.asarray(img[0, :, :, :])
+        #     img = img[0, :, :, :]
+        img[0, :, :, :] = torch.where(img[0, :, :, :] > self.lower_threshold, 1, 0)
+        # output = torch.tensor(torch.where(img > self.lower_threshold, 1, 0), dtype=img.dtype)
+        # if len(tensor_shape) == 4:
+        #     output = output.unsqueeze(0)
         # if len(tensor_shape) == 5:
         #     output = torch.from_numpy(output).unsqueeze(0).unsqueeze(0)
         # s += '\n {}'.format(output.shape)
         # print('Binarized ######\n{}\n#####'.format(s))
-        return output
+        return img
 
 
 class Binarized(MapTransform):
@@ -115,7 +121,8 @@ class Binarized(MapTransform):
         self.lower_threshold = lower_threshold
         self.binarize = Binarize(lower_threshold)
 
-    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+    def __call__(self, data: Mapping[Hashable, Union[np.ndarray, torch.Tensor]]
+                 ) -> Dict[Hashable, Union[np.ndarray, torch.Tensor]]:
         d = dict(data)
         for idx, key in enumerate(self.keys):
             d[key] = self.binarize(d[key])
@@ -227,6 +234,117 @@ class CoordConvd(MapTransform, InvertibleTransform):
         return d
 
 
+class NormalizeIntensity(Transform):
+    """
+    Normalize input based on provided args, using calculated mean and std if not provided.
+    This transform can normalize only non-zero values or entire image, and can also calculate
+    mean and std on each channel separately.
+    When `channel_wise` is True, the first dimension of `subtrahend` and `divisor` should
+    be the number of image channels if they are not None.
+
+    Args:
+        subtrahend: the amount to subtract by (usually the mean).
+        divisor: the amount to divide by (usually the standard deviation).
+        nonzero: whether only normalize non-zero values.
+        channel_wise: if using calculated mean and std, calculate on each channel separately
+            or calculate on the entire image directly.
+        dtype: output data type, defaults to float32.
+    """
+
+    def __init__(
+        self,
+        subtrahend: Union[Sequence, torch.Tensor, None] = None,
+        divisor: Union[Sequence, torch.Tensor, None] = None,
+        nonzero: bool = False,
+        channel_wise: bool = False,
+        dtype: torch.dtype = torch.float32,
+    ) -> None:
+        self.subtrahend = subtrahend
+        self.divisor = divisor
+        self.nonzero = nonzero
+        self.channel_wise = channel_wise
+        self.dtype = dtype
+
+    def _normalize(self, img: torch.Tensor, sub=None, div=None) -> torch.Tensor:
+        slices = (img != 0) if self.nonzero else torch.ones(img.shape, dtype=torch.bool)
+        # print(f'slices : {slices.shape}')
+        if not torch.any(slices):
+            return img
+
+        _sub = sub if sub is not None else torch.mean(img[slices])
+        if _sub.shape != torch.Size([]):
+            _sub = _sub[slices]
+
+        _div = div if div is not None else torch.std(img[slices])
+        if _div.shape == torch.Size([]):
+            if _div == 0.0:
+                _div = 1.0
+        elif isinstance(_div, torch.Tensor):
+            _div = _div[slices]
+            _div[_div == 0.0] = 1.0
+        img[slices] = (img[slices] - _sub) / _div
+        return img
+
+    def __call__(self, img: torch.Tensor) -> torch.Tensor:
+        """
+        Apply the transform to `img`, assuming `img` is a channel-first array if `self.channel_wise` is True,
+        """
+        if self.channel_wise:
+            if self.subtrahend is not None and len(self.subtrahend) != len(img):
+                raise ValueError(f"img has {len(img)} channels, but subtrahend has {len(self.subtrahend)} components.")
+            if self.divisor is not None and len(self.divisor) != len(img):
+                raise ValueError(f"img has {len(img)} channels, but divisor has {len(self.divisor)} components.")
+
+            for i, d in enumerate(img):
+                img[i] = self._normalize(
+                    d,
+                    sub=self.subtrahend[i] if self.subtrahend is not None else None,
+                    div=self.divisor[i] if self.divisor is not None else None,
+                )
+        else:
+            img = self._normalize(img, self.subtrahend, self.divisor)
+
+        return img.type(self.dtype)
+
+
+class MyNormalizeIntensityd(MapTransform):
+    """
+    Dictionary-based wrapper of :py:class:`monai.transforms.NormalizeIntensity`.
+    This transform can normalize only non-zero values or entire image, and can also calculate
+    mean and std on each channel separately.
+
+    Args:
+        keys: keys of the corresponding items to be transformed.
+            See also: monai.transforms.MapTransform
+        subtrahend: the amount to subtract by (usually the mean)
+        divisor: the amount to divide by (usually the standard deviation)
+        nonzero: whether only normalize non-zero values.
+        channel_wise: if using calculated mean and std, calculate on each channel separately
+            or calculate on the entire image directly.
+        dtype: output data type, defaults to float32.
+        allow_missing_keys: don't raise exception if key is missing.
+    """
+
+    def __init__(
+        self,
+        keys: KeysCollection,
+        subtrahend: Optional[torch.Tensor] = None,
+        divisor: Optional[torch.Tensor] = None,
+        nonzero: bool = False,
+        channel_wise: bool = False,
+        dtype: DtypeLike = torch.float32,
+        allow_missing_keys: bool = False,
+    ) -> None:
+        super().__init__(keys, allow_missing_keys)
+        self.normalizer = NormalizeIntensity(subtrahend, divisor, nonzero, channel_wise, dtype)
+
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Dict[Hashable, torch.Tensor]:
+        d = dict(data)
+        for key in self.key_iterator(d):
+            d[key] = self.normalizer(d[key])
+        return d
+
+
 class PrintDim(MapTransform):
     """
     Set every above threshold voxel to 1.0
@@ -238,6 +356,16 @@ class PrintDim(MapTransform):
         self.msg = msg
 
     def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        if 'start time' in self.msg.lower():
+            global timeziz
+            timeziz = time.time()
+        if 'end time' in self.msg.lower():
+            # global timeziz
+            ol_timziz = timeziz
+            timeziz = time.time()
+            global timean
+            timean = np.mean([timeziz - ol_timziz, timean])
+            print(f'Mean time between start and end time: {timean}')
         if self.msg:
             s = self.msg + '\n'
         else:

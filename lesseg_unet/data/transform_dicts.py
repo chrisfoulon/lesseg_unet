@@ -355,15 +355,20 @@ new_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}
 
 curated_dict = {
     'first_transform': [
-        {'LoadImaged': {'keys': ['image', 'label']}},
+        {'LoadImaged': {
+            'keys': ['image', 'label']}},
+        {'ToTensord': {'keys': ['image', 'label']}},
         {'AddChanneld': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE RESIZE'}},
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
          },
+        {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER RESIZE'}},
         {'NormalizeIntensityd': {'keys': ['image']}},
+        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE Binarize'}},
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
     ],
     # 'custom_transform': [
@@ -384,11 +389,11 @@ curated_dict = {
         #                       'random_center': True,
         #                       'random_size': False}
         #  },
-        {'RandHistogramShiftd': {
-            'keys': ['image'],
-            'num_control_points': (10, 15),
-            'prob': low_prob}
-         },
+        # {'RandHistogramShiftd': {
+        #     'keys': ['image'],
+        #     'num_control_points': (10, 15),
+        #     'prob': low_prob}
+        #  },
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER HIST SHIFT'}},
         # {'RandBiasFieldd': {
         #     'keys': ['image'],
@@ -405,7 +410,7 @@ curated_dict = {
             'scale_range': 0.05,
             'spatial_size': None,
             'padding_mode': 'border',
-            'as_tensor_output': False}
+            'as_tensor_output': True}  # was False
          },
         {'Rand3DElasticd': {
             'keys': ['image', 'label'],
@@ -420,7 +425,7 @@ curated_dict = {
             'padding_mode': "reflection",
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
-            'as_tensor_output': False}
+            'as_tensor_output': True}
          },
     ],
     'torchio_transform': [
@@ -452,13 +457,15 @@ curated_dict = {
         #     'p': low_prob,
         #     'num_transforms': 1}
         #  },
-        {'ToNumpyd': {'keys': ['image', 'label']}},
+        # {'ToNumpyd': {'keys': ['image', 'label']}},
     ],
     'last_transform': [
-        {'GaussianSmoothd': {
-            'keys': ['label'],
-            'sigma': .5}
-         },
+        # {'GaussianSmoothd': {
+        #     'keys': ['label'],
+        #     'sigma': .5}
+        #  },
+
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE SECOND F_ING BINARIZE'}},
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.25}
@@ -467,10 +474,151 @@ curated_dict = {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
          },
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER binarized'}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER second binarized'}},
         {'NormalizeIntensityd': {'keys': ['image']}},
     ]
 }
 
 curated_dict_cc = deepcopy(full_hyper_dict)
 curated_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
+
+test_dict = {
+    'first_transform': [
+        {'LoadImaged': {
+            'keys': ['image', 'label']}},
+        {'ToTensord': {'keys': ['image', 'label']}},
+        {'AddChanneld': {'keys': ['image', 'label']}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE RESIZE'}},
+        {'ResizeWithPadOrCropd': {
+            'keys': ['image', 'label'],
+            'spatial_size': def_spatial_size}
+         },
+        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER RESIZE'}},
+        {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE NORMALIZE start time'}},
+        {'MyNormalizeIntensityd': {'keys': ['image']}},
+        {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER NORMALIZE end time'}},
+        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE Binarize'}},
+        {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
+    ],
+    'monai_transform': [
+        # # TODO maybe 'Orientation': {} but it would interact with the flip,
+        {'RandAffined': {
+            'keys': ['image', 'label'],
+            'prob': high_prob,
+            'rotate_range': radians(5),
+            'shear_range': radians(5),
+            'translate_range': 0.05,
+            'scale_range': 0.05,
+            'spatial_size': None,
+            'padding_mode': 'border',
+            'as_tensor_output': True}  # was False
+         },
+        {'Rand3DElasticd': {
+            'keys': ['image', 'label'],
+            'sigma_range': (1, 3),
+            'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
+            'prob': tiny_prob,
+            'rotate_range': None,
+            'shear_range': None,
+            'translate_range': None,
+            'scale_range': None,
+            'spatial_size': None,
+            'padding_mode': "reflection",
+            # 'padding_mode': "border",
+            # 'padding_mode': "zeros",
+            'as_tensor_output': True}
+         },
+    ],
+    'torchio_transform': [
+        {'ToTensord': {'keys': ['image', 'label']}},
+        {'RandomBiasField': {
+            'include': ['image'],
+            'p': high_prob,
+            'coefficients': 0.1}
+         },
+    ],
+    'last_transform': [
+        {'Binarized': {
+            'keys': ['label'],
+            'lower_threshold': 0.25}
+         },
+        {'ResizeWithPadOrCropd': {
+            'keys': ['image', 'label'],
+            'spatial_size': def_spatial_size}
+         },
+        {'MyNormalizeIntensityd': {'keys': ['image']}},
+    ]
+}
+
+test_dict2 = {
+    'first_transform': [
+        {'LoadImaged': {
+            'keys': ['image', 'label']}},
+        {'ToTensord': {'keys': ['image', 'label']}},
+        {'AddChanneld': {'keys': ['image', 'label']}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE RESIZE'}},
+        {'ResizeWithPadOrCropd': {
+            'keys': ['image', 'label'],
+            'spatial_size': def_spatial_size}
+         },
+        # {'ToTensord': {'keys': ['image', 'label']}},
+        {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE NORMALIZE start time'}},
+        {'NormalizeIntensityd': {'keys': ['image']}},
+        {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER NORMALIZE end time'}},
+        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE Binarize'}},
+        {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
+    ],
+    'monai_transform': [
+        # # TODO maybe 'Orientation': {} but it would interact with the flip,
+        {'RandAffined': {
+            'keys': ['image', 'label'],
+            'prob': high_prob,
+            'rotate_range': radians(5),
+            'shear_range': radians(5),
+            'translate_range': 0.05,
+            'scale_range': 0.05,
+            'spatial_size': None,
+            'padding_mode': 'border',
+            'as_tensor_output': True}  # was False
+         },
+        {'Rand3DElasticd': {
+            'keys': ['image', 'label'],
+            'sigma_range': (1, 3),
+            'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
+            'prob': tiny_prob,
+            'rotate_range': None,
+            'shear_range': None,
+            'translate_range': None,
+            'scale_range': None,
+            'spatial_size': None,
+            'padding_mode': "reflection",
+            # 'padding_mode': "border",
+            # 'padding_mode': "zeros",
+            'as_tensor_output': True}
+         },
+    ],
+    'torchio_transform': [
+        # {'ToTensord': {'keys': ['image', 'label']}},
+        {'RandomBiasField': {
+            'include': ['image'],
+            'p': high_prob,
+            'coefficients': 0.1}
+         },
+    ],
+    'last_transform': [
+        {'Binarized': {
+            'keys': ['label'],
+            'lower_threshold': 0.25}
+         },
+        {'ResizeWithPadOrCropd': {
+            'keys': ['image', 'label'],
+            'spatial_size': def_spatial_size}
+         },
+        # {'AddChanneld': {'keys': ['image', 'label']}},
+        {'ToNumpyd': {'keys': ['image', 'label']}},
+        {'NormalizeIntensityd': {'keys': ['image']}},
+    ]
+}
