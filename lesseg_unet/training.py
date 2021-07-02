@@ -377,7 +377,7 @@ def training_loop(img_path_list: Sequence,
                     loss_list = []
                     step = 0
                     inf = ''
-                    pbar = tqdm(val_loader, desc=f'Val[{epoch}] avg_loss:[N/A]')
+                    pbar = tqdm(val_loader, desc=f'Val[{epoch}] avg_metric:[N/A]')
                     controls_mean_loss = 1
                     controls_mean_dist = torch.Tensor([float('Inf')])
                     for val_data in pbar:
@@ -395,7 +395,7 @@ def training_loop(img_path_list: Sequence,
                             controls_value, _ = dice_metric(y_pred=outputs_controls, y=labels_controls[:, :1, :, :, :])
                             controls_distance, _ = surface_metric(
                                 y_pred=outputs_controls, y=labels_controls[:, :1, :, :, :])
-                            controls_mean_loss = np.mean([controls_mean_loss, controls_value])
+                            controls_mean_loss = torch.mean(torch.Tensor([controls_mean_loss, controls_value]))
                             controls_mean_dist = torch.mean(torch.Tensor([controls_mean_dist, controls_value]))
                             # print(f'control dice: [{controls_value}]'
                             #       f'\ncontrol distance: [{controls_distance}]')
