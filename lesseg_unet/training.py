@@ -314,7 +314,8 @@ def training_loop(img_path_list: Sequence,
                     # Just trying some dark magic
                     distance, _ = surface_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
                     if torch.isinf(distance):
-                        distance = torch.as_tensor([torch.linalg.norm(outputs_controls[0, 0, :, :, :].shape)])
+                        distance = torch.as_tensor([torch.linalg.norm(
+                            torch.as_tensor(outputs_controls[0, 0, :, :, :].shape))])
                     # TODO check if we can just use the euclidian distance
                     print(f'Distance {distance}')
                     loss += torch.mean(distance)
@@ -325,7 +326,7 @@ def training_loop(img_path_list: Sequence,
                             y_pred=post_trans(outputs_controls), y=labels_controls[:, :1, :, :, :])
                         if torch.isinf(controls_distance):
                             controls_distance = torch.as_tensor(
-                                [torch.linalg.norm(outputs_controls[0, 0, :, :, :].shape)])
+                                [torch.linalg.norm(torch.as_tensor(outputs_controls[0, 0, :, :, :].shape))])
                         controls_loss = torch.mean(controls_distance) + controls_loss
                         controls_loss_str = f'Controls loss: {controls_loss}'
                     loss += controls_loss
