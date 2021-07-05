@@ -228,7 +228,8 @@ def training_loop(img_path_list: Sequence,
         print(
             f'train loaders and stuff: {train_loader}'
         )
-
+        output_spatial_size = None
+        max_distance = None
         batches_per_epoch = len(train_loader)
         val_batches_per_epoch = len(val_loader)
         ctr_train_loader = None
@@ -282,6 +283,10 @@ def training_loop(img_path_list: Sequence,
                 step += 1
                 optimizer.zero_grad()
                 inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
+                if output_spatial_size is None:
+                    output_spatial_size = inputs.shape
+                    max_distance = torch.as_tensor(
+                        [torch.linalg.norm(torch.as_tensor(output_spatial_size, dtype=torch.float16))])
                 outputs = model(inputs)
                 inputs_controls = None
                 labels_controls = None
@@ -313,9 +318,7 @@ def training_loop(img_path_list: Sequence,
                     loss = loss_function(outputs, y)
                     # Just trying some dark magic
                     distance, _ = surface_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
-                    if torch.isinf(distance):
-                        distance = torch.as_tensor([torch.linalg.norm(
-                            torch.as_tensor(outputs_controls[0, 0, :, :, :].shape, dtype=torch.float16))])
+                    distance = torch.minimum(distance, max_distance)
                     # TODO check if we can just use the euclidian distance
                     print(f'Distance {distance}')
                     loss += torch.mean(distance)
@@ -324,10 +327,7 @@ def training_loop(img_path_list: Sequence,
                         controls_loss = loss_function(outputs_controls, labels_controls[:, :1, :, :, :])
                         controls_distance, _ = surface_metric(
                             y_pred=post_trans(outputs_controls), y=labels_controls[:, :1, :, :, :])
-                        if torch.isinf(controls_distance):
-                            controls_distance = torch.as_tensor(
-                                [torch.linalg.norm(torch.as_tensor(
-                                    outputs_controls[0, 0, :, :, :].shape, dtype=torch.float16))])
+                        controls_distance = torch.minimum(controls_distance, max_distance)
                         controls_loss = torch.mean(controls_distance) + controls_loss
                         controls_loss_str = f'Controls loss: {controls_loss}'
                     loss += controls_loss
@@ -420,8 +420,9 @@ def training_loop(img_path_list: Sequence,
                             controls_value, _ = dice_metric(y_pred=outputs_controls, y=labels_controls[:, :1, :, :, :])
                             controls_distance, _ = surface_metric(
                                 y_pred=outputs_controls, y=labels_controls[:, :1, :, :, :])
+                            controls_distance = torch.minimum(controls_distance, max_distance)
                             controls_mean_loss = torch.mean(torch.Tensor([controls_mean_loss, controls_value]))
-                            controls_mean_dist = torch.mean(torch.Tensor([controls_mean_dist, controls_value]))
+                            controls_mean_dist = torch.mean(torch.Tensor([controls_mean_dist, controls_distance]))
                             # print(f'control dice: [{controls_value}]'
                             #       f'\ncontrol distance: [{controls_distance}]')
 
@@ -433,13 +434,10 @@ def training_loop(img_path_list: Sequence,
                         loss_list.append(loss.item())
                         value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
                         distance, _ = surface_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
-                        # print(f'{step}/{val_batches_per_epoch}, val_loss: {loss.item():.4f}')
-                        if not torch.isinf(distance):
-                            distance_sum += distance.item() * len(distance)
-                            distance_count += len(distance)
-                            writer.add_scalar('distance', distance.item(), val_batches_per_epoch * epoch + step)
-                        else:
-                            inf = '+- inf'
+                        distance = torch.minimum(distance, max_distance)
+                        distance_sum += distance.item() * len(distance)
+                        distance_count += len(distance)
+                        writer.add_scalar('distance', distance.item(), val_batches_per_epoch * epoch + step)
                         val_score_list.append(value.item())
                         metric_count += len(value)
                         metric_sum += value.item() * len(value)
@@ -515,7 +513,7 @@ def training_loop(img_path_list: Sequence,
                     best_epoch_count = epoch + 1 - best_metric_epoch
                     str_img_count = (
                             f'Trash (<{val_trash_thr}|'.rjust(12, ' ') +
-                            f'Meh (<{val_meh_thr})|'.rjust(12, ' ') + f'Good\n'
+                            f'Meh (<{val_meh_thr})|'.rjust(12, ' ') + f'Good\n'.rjust(12, ' ') +
                             f'{trash_count}|'.rjust(12, ' ') + f'{meh_count}|'.rjust(12, ' ') +
                             f'{img_count}'.rjust(12, ' ') + '\n\n'
                             )
