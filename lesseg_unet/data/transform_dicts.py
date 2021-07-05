@@ -357,7 +357,7 @@ curated_dict = {
     'first_transform': [
         {'LoadImaged': {
             'keys': ['image', 'label']}},
-        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'ToTensord': {'keys': ['image', 'label']}},
         {'AddChanneld': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE RESIZE'}},
         {'ResizeWithPadOrCropd': {
