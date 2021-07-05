@@ -231,6 +231,8 @@ def training_loop(img_path_list: Sequence,
 
         batches_per_epoch = len(train_loader)
         val_batches_per_epoch = len(val_loader)
+        ctr_train_loader = None
+        ctr_val_loader = None
         if controls_lists:
             ctr_train_loader, ctr_val_loader = data_loading.create_fold_dataloaders(
                 controls_lists, fold, train_img_transforms,
@@ -258,28 +260,37 @@ def training_loop(img_path_list: Sequence,
             step = 0
             # for batch_data in tqdm(train_loader, desc=f'training_loop{epoch}'):
             # Time test
-            import time
-            start_time = time.time()
-            for i in tqdm(range(10)):
-                next(iter(train_loader))
-            end_time = time.time()
-            print(f'Time: {end_time - start_time}')
-            exit()
+            # import time
+            # start_time = time.time()
+            # for i in tqdm(range(100)):
+            #     next(iter(train_loader))
+            # end_time = time.time()
+            # print(f'ITER Time: {end_time - start_time}')
+            # start_time = time.time()
+            # for i, b in enumerate(train_loader):
+            #     if i == 99:
+            #         break
+            #     continue
+            # end_time = time.time()
+            # print(f'Loop Time: {end_time - start_time}')
+            # exit()
+            ctr_train_iter = None
+            if ctr_train_loader:
+                ctr_train_iter = iter(ctr_train_loader)
             for batch_data in train_loader:  # zip the two loaders
+                # with torch.autograd.profiler.profile(use_cuda=False) as prof:
                 step += 1
                 optimizer.zero_grad()
                 inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
                 outputs = model(inputs)
-                if controls_lists:
-                    batch_data_controls = next(iter(ctr_train_loader))
+                inputs_controls = None
+                labels_controls = None
+                outputs_controls = None
+                if ctr_train_iter:
+                    batch_data_controls = next(ctr_train_iter)
                     inputs_controls = batch_data_controls['image'].to(device)
                     labels_controls = batch_data_controls['label'].to(device)
                     outputs_controls = model(inputs_controls)
-                    print(f'Control image shape {inputs_controls.shape}')
-                    print(f'Control output shape {outputs_controls.shape}')
-                # print('inputs size: {}'.format(inputs.shape))
-                # print('labels size: {}'.format(labels.shape))
-                # print('outputs size: {}'.format(outputs.size()))
                 controls_loss_str = ''
                 # TODO smoothing?
                 y = labels[:, :1, :, :, :]
@@ -289,7 +300,7 @@ def training_loop(img_path_list: Sequence,
                 if training_loss_fct.lower() == 'BCE':
                     # TODO check if the BCE would work with the controls
                     controls_loss = 0
-                    if controls_lists:
+                    if inputs_controls:
                         controls_loss = BCE(outputs_controls, labels_controls[:, :1, :, :, :])
                     loss = BCE(outputs, y) + controls_loss
                     # loss = BCE(outputs, y)
@@ -303,7 +314,7 @@ def training_loop(img_path_list: Sequence,
                     # Just trying some dark magic
                     distance, _ = surface_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
                     if torch.isinf(distance):
-                        distance = torch.Tensor([np.linalg.norm(outputs_controls[0, 0, :, :, :].shape)])
+                        distance = torch.as_tensor([torch.linalg.norm(outputs_controls[0, 0, :, :, :].shape)])
                     # TODO check if we can just use the euclidian distance
                     print(f'Distance {distance}')
                     loss += torch.mean(distance)
@@ -313,7 +324,8 @@ def training_loop(img_path_list: Sequence,
                         controls_distance, _ = surface_metric(
                             y_pred=post_trans(outputs_controls), y=labels_controls[:, :1, :, :, :])
                         if torch.isinf(controls_distance):
-                            controls_distance = torch.Tensor([np.linalg.norm(outputs_controls[0, 0, :, :, :].shape)])
+                            controls_distance = torch.as_tensor(
+                                [torch.linalg.norm(outputs_controls[0, 0, :, :, :].shape)])
                         controls_loss = torch.mean(controls_distance) + controls_loss
                         controls_loss_str = f'Controls loss: {controls_loss}'
                     loss += controls_loss
@@ -351,7 +363,8 @@ def training_loop(img_path_list: Sequence,
                       # f'| focal_loss: {focal_function(outputs, y).item():.4f}'
                       )
                 writer.add_scalar('train_loss', loss.item(), batches_per_epoch * epoch + step)
-
+                # print(prof.total_average())
+                # print(prof.key_averages().table(row_limit=0))
             epoch_loss /= step
             epoch_loss_values.append(epoch_loss)
             print(f'epoch {epoch + 1} average loss: {epoch_loss:.4f}')
@@ -387,13 +400,16 @@ def training_loop(img_path_list: Sequence,
                     pbar = tqdm(val_loader, desc=f'Val[{epoch}] avg_metric:[N/A]')
                     controls_mean_loss = 1
                     controls_mean_dist = torch.Tensor([float('Inf')])
+                    ctr_val_iter = None
+                    if ctr_val_loader:
+                        ctr_val_iter = iter(ctr_val_loader)
                     for val_data in pbar:
                         step += 1
                         inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
                         outputs = model(inputs)
                         controls_loss = 0
-                        if controls_lists:
-                            batch_data_controls = next(iter(ctr_val_loader))
+                        if ctr_val_iter:
+                            batch_data_controls = next(ctr_val_iter)
                             inputs_controls = batch_data_controls['image'].to(device)
                             labels_controls = batch_data_controls['label'].to(device)
                             outputs_controls = model(inputs_controls)

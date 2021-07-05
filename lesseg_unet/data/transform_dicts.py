@@ -364,7 +364,7 @@ curated_dict = {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
          },
-        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER RESIZE'}},
         {'NormalizeIntensityd': {'keys': ['image']}},
         {'ToTensord': {'keys': ['image', 'label']}},
@@ -470,6 +470,7 @@ curated_dict = {
             'keys': ['label'],
             'lower_threshold': 0.25}
          },
+        {'ToNumpyd': {'keys': ['image', 'label']}},
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
@@ -506,7 +507,7 @@ test_dict = {
         # # TODO maybe 'Orientation': {} but it would interact with the flip,
         {'RandAffined': {
             'keys': ['image', 'label'],
-            'prob': high_prob,
+            'prob': 1,
             'rotate_range': radians(5),
             'shear_range': radians(5),
             'translate_range': 0.05,
@@ -519,7 +520,7 @@ test_dict = {
             'keys': ['image', 'label'],
             'sigma_range': (1, 3),
             'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
-            'prob': tiny_prob,
+            'prob': 1,
             'rotate_range': None,
             'shear_range': None,
             'translate_range': None,
@@ -535,7 +536,7 @@ test_dict = {
         {'ToTensord': {'keys': ['image', 'label']}},
         {'RandomBiasField': {
             'include': ['image'],
-            'p': high_prob,
+            'p': 1,
             'coefficients': 0.1}
          },
     ],
@@ -575,7 +576,7 @@ test_dict2 = {
         # # TODO maybe 'Orientation': {} but it would interact with the flip,
         {'RandAffined': {
             'keys': ['image', 'label'],
-            'prob': high_prob,
+            'prob': 1,
             'rotate_range': radians(5),
             'shear_range': radians(5),
             'translate_range': 0.05,
@@ -588,7 +589,7 @@ test_dict2 = {
             'keys': ['image', 'label'],
             'sigma_range': (1, 3),
             'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
-            'prob': tiny_prob,
+            'prob': 1,
             'rotate_range': None,
             'shear_range': None,
             'translate_range': None,
@@ -604,7 +605,7 @@ test_dict2 = {
         # {'ToTensord': {'keys': ['image', 'label']}},
         {'RandomBiasField': {
             'include': ['image'],
-            'p': high_prob,
+            'p': 1,
             'coefficients': 0.1}
          },
     ],

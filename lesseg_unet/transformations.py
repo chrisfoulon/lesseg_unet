@@ -3,12 +3,15 @@ import logging
 from copy import deepcopy
 from typing import Mapping, Dict, Hashable, Any, Optional, Callable, Union, List, Tuple, Sequence
 import time
+from enum import Enum
 
 import numpy as np
+from monai.utils import Method, fall_back_tuple
 from monai.transforms.compose import Randomizable
 from monai.transforms.inverse import InvertibleTransform
 from monai.config import KeysCollection, DtypeLike
 import torch
+from torch.nn.functional import pad
 from monai.transforms import (
     ToNumpyd,
     GaussianSmoothd,
@@ -58,6 +61,16 @@ Custom Transformation Classes
 """
 timeziz = time.time()
 timean = 0
+
+
+class TorchPadMode(Enum):
+    """
+    See also: https://numpy.org/doc/1.18/reference/generated/numpy.pad.html
+    """
+    CONSTANT = "constant"
+    REPLICATE = "replicate"
+    CIRCULAR = "circular"
+    REFLECT = "reflect"
 
 
 def create_gradient(img_spatial_size, low=-1, high=1):
@@ -121,8 +134,8 @@ class Binarized(MapTransform):
         self.lower_threshold = lower_threshold
         self.binarize = Binarize(lower_threshold)
 
-    def __call__(self, data: Mapping[Hashable, Union[np.ndarray, torch.Tensor]]
-                 ) -> Dict[Hashable, Union[np.ndarray, torch.Tensor]]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]
+                 ) -> Dict[Hashable, torch.Tensor]:
         d = dict(data)
         for idx, key in enumerate(self.keys):
             d[key] = self.binarize(d[key])
@@ -193,7 +206,7 @@ class CoordConv(Transform):
     def __init__(self, gradients: np.ndarray = None) -> None:
         self.gradients = gradients
 
-    def __call__(self, img: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
+    def __call__(self, img: Union[np.ndarray, torch.Tensor]) -> Union[np.ndarray, torch.Tensor]:
         # if isinstance(img, torch.Tensor):
         #     img = np.asarray(img[0, :, :, :].detach().numpy())
         # else:
@@ -201,19 +214,25 @@ class CoordConv(Transform):
         if self.gradients is None:
             img = create_gradient(img.shape[1:])
         else:
-            img = np.concatenate((img, self.gradients), 0)
-        return torch.Tensor(img)
+            if isinstance(img, np.ndarray):
+                img = np.concatenate((img, self.gradients), 0)
+            else:
+                img = torch.cat([img, self.gradients], dim=0)
+        return img
 
 
 class CoordConvd(MapTransform, InvertibleTransform):
     """
     """
 
-    def __init__(self, keys: KeysCollection, gradients: np.ndarray = None) -> None:
+    def __init__(self, keys: KeysCollection, gradients: Union[np.ndarray, torch.Tensor] = None) -> None:
         super().__init__(keys)
         self.coord_conv = CoordConv(gradients)
 
-    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+    def __call__(
+            self,
+            data: Mapping[Hashable, Union[np.ndarray, torch.Tensor]]
+    ) -> Dict[Hashable, Union[np.ndarray, torch.Tensor]]:
         d = dict(data)
         for key in self.key_iterator(d):
             d[key] = self.coord_conv(d[key])
@@ -223,10 +242,13 @@ class CoordConvd(MapTransform, InvertibleTransform):
             )
         return d
 
-    def inverse(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+    def inverse(
+            self,
+            data: Mapping[Hashable, Union[np.ndarray, torch.Tensor]]
+    ) -> Dict[Hashable, Union[np.ndarray, torch.Tensor]]:
         d = deepcopy(dict(data))
         for key in self.key_iterator(d):
-            transform = self.get_most_recent_transform(d, key)
+            # transform = self.get_most_recent_transform(d, key)
             # Apply inverse transform
             d[key] = d[key][:1, :, :, :]
             # Remove the applied transform
@@ -234,7 +256,164 @@ class CoordConvd(MapTransform, InvertibleTransform):
         return d
 
 
-class NormalizeIntensity(Transform):
+class SpatialCrop(Transform):
+    """
+    General purpose cropper to produce sub-volume region of interest (ROI).
+    If a dimension of the expected ROI size is bigger than the input image size, will not crop that dimension.
+    So the cropped result may be smaller than the expected ROI, and the cropped results of several images may
+    not have exactly the same shape.
+    It can support to crop ND spatial (channel-first) data.
+
+    The cropped region can be parameterised in various ways:
+        - a list of slices for each spatial dimension (allows for use of -ve indexing and `None`)
+        - a spatial center and size
+        - the start and end coordinates of the ROI
+    """
+
+    def __init__(
+        self,
+        roi_center: Union[Sequence[int], torch.Tensor, None] = None,
+        roi_size: Union[Sequence[int], torch.Tensor, None] = None,
+        roi_start: Union[Sequence[int], torch.Tensor, None] = None,
+        roi_end: Union[Sequence[int], torch.Tensor, None] = None,
+        roi_slices: Optional[Sequence[slice]] = None,
+    ) -> None:
+        """
+        Args:
+            roi_center: voxel coordinates for center of the crop ROI.
+            roi_size: size of the crop ROI, if a dimension of ROI size is bigger than image size,
+                will not crop that dimension of the image.
+            roi_start: voxel coordinates for start of the crop ROI.
+            roi_end: voxel coordinates for end of the crop ROI, if a coordinate is out of image,
+                use the end coordinate of image.
+            roi_slices: list of slices for each of the spatial dimensions.
+        """
+        if roi_slices:
+            if not all(s.step is None or s.step == 1 for s in roi_slices):
+                raise ValueError("Only slice steps of 1/None are currently supported")
+            self.slices = list(roi_slices)
+        else:
+            if roi_center is not None and roi_size is not None:
+                roi_center = torch.as_tensor(roi_center, dtype=torch.int16)
+                roi_size = torch.as_tensor(roi_size, dtype=torch.int16)
+                roi_start = torch.maximum(roi_center - torch.floor_divide(roi_size, 2), torch.tensor(0))
+                roi_end = torch.maximum(roi_start + roi_size, roi_start)
+            else:
+                if roi_start is None or roi_end is None:
+                    raise ValueError("Please specify either roi_center, roi_size or roi_start, roi_end.")
+                roi_start = torch.maximum(torch.as_tensor(roi_start, dtype=torch.int16), torch.tensor(0))
+                roi_end = torch.maximum(torch.as_tensor(roi_end, dtype=torch.int16), roi_start)
+            # Allow for 1D by converting back to np.array (since np.maximum will convert to int)
+            roi_start = roi_start if isinstance(roi_start, torch.Tensor) else torch.as_tensor([roi_start])
+            roi_end = roi_end if isinstance(roi_end, torch.Tensor) else torch.as_tensor([roi_end])
+            # convert to slices
+            self.slices = [slice(s, e) for s, e in zip(roi_start, roi_end)]
+
+    def __call__(self, img: torch.Tensor):
+        """
+        Apply the transform to `img`, assuming `img` is channel-first and
+        slicing doesn't apply to the channel dim.
+        """
+        sd = min(len(self.slices), len(img.shape[1:]))  # spatial dims
+        slices = [slice(None)] + self.slices[:sd]
+        return img[tuple(slices)]
+
+
+class MyCenterSpatialCrop(Transform):
+    """
+    Crop at the center of image with specified ROI size.
+    If a dimension of the expected ROI size is bigger than the input image size, will not crop that dimension.
+    So the cropped result may be smaller than the expected ROI, and the cropped results of several images may
+    not have exactly the same shape.
+
+    Args:
+        roi_size: the spatial size of the crop region e.g. [224,224,128]
+            if a dimension of ROI size is bigger than image size, will not crop that dimension of the image.
+            If its components have non-positive values, the corresponding size of input image will be used.
+            for example: if the spatial size of input data is [40, 40, 40] and `roi_size=[32, 64, -1]`,
+            the spatial size of output data will be [32, 40, 40].
+    """
+
+    def __init__(self, roi_size: Union[Sequence[int], int]) -> None:
+        self.roi_size = roi_size
+
+    def __call__(self, img: torch.Tensor):
+        """
+        Apply the transform to `img`, assuming `img` is channel-first and
+        slicing doesn't apply to the channel dim.
+        """
+        roi_size = fall_back_tuple(self.roi_size, img.shape[1:])
+        center = [i // 2 for i in img.shape[1:]]
+        cropper = SpatialCrop(roi_center=center, roi_size=roi_size)
+        return cropper(img)
+
+
+class MySpatialPad(Transform):
+    """
+    Performs padding to the data, symmetric for all sides or all on one side for each dimension.
+    Uses np.pad so in practice, a mode needs to be provided. See numpy.lib.arraypad.pad
+    for additional details.
+
+    Args:
+        spatial_size: the spatial size of output data after padding, if a dimension of the input
+            data size is bigger than the pad size, will not pad that dimension.
+            If its components have non-positive values, the corresponding size of input image will be used
+            (no padding). for example: if the spatial size of input data is [30, 30, 30] and
+            `spatial_size=[32, 25, -1]`, the spatial size of output data will be [32, 30, 30].
+        method: {``"symmetric"``, ``"end"``}
+            Pad image symmetric on every side or only pad at the end sides. Defaults to ``"symmetric"``.
+        mode: {``"constant"``, ``"edge"``, ``"linear_ramp"``, ``"maximum"``, ``"mean"``,
+            ``"median"``, ``"minimum"``, ``"reflect"``, ``"symmetric"``, ``"wrap"``, ``"empty"``}
+            One of the listed string values or a user supplied function. Defaults to ``"constant"``.
+            See also: https://numpy.org/doc/1.18/reference/generated/numpy.pad.html
+        np_kwargs: other args for `np.pad` API, note that `np.pad` treats channel dimension as the first dimension.
+            more details: https://numpy.org/doc/1.18/reference/generated/numpy.pad.html
+
+    """
+
+    def __init__(
+        self,
+        spatial_size: Union[Sequence[int], int],
+        method: Union[Method, str] = Method.SYMMETRIC,
+        mode: Union[TorchPadMode, str] = TorchPadMode.CONSTANT,
+        **torch_kwargs,
+    ) -> None:
+        self.spatial_size = spatial_size
+        self.method: Method = Method(method)
+        self.mode: TorchPadMode = TorchPadMode(mode)
+        self.np_kwargs = torch_kwargs
+
+    def _determine_data_pad_width(self, data_shape: Sequence[int]) -> List[Tuple[int, int]]:
+        spatial_size = fall_back_tuple(self.spatial_size, data_shape)
+        if self.method == Method.SYMMETRIC:
+            pad_width = []
+            for i, sp_i in enumerate(spatial_size):
+                width = max(sp_i - data_shape[i], 0)
+                pad_width.append((width // 2, width - (width // 2)))
+            return pad_width
+        return [(0, max(sp_i - data_shape[i], 0)) for i, sp_i in enumerate(spatial_size)]
+
+    def __call__(self, img: torch.Tensor, mode: Optional[Union[TorchPadMode, str]] = None) -> torch.Tensor:
+        """
+        Args:
+            img: data to be transformed, assuming `img` is channel-first and
+                padding doesn't apply to the channel dim.
+            mode: {``"constant"``, ``"circular"``, ``"replicate"``, ``"reflect"``}
+                One of the listed string values or a user supplied function. Defaults to ``self.mode``.
+                See also: https://numpy.org/doc/1.18/reference/generated/numpy.pad.html
+        """
+        data_pad_width = self._determine_data_pad_width(img.shape[1:])
+        all_pad_width = [(0, 0)] + data_pad_width
+        if not torch.as_tensor(all_pad_width).any():
+            # all zeros, skip padding
+            return img
+
+        mode = self.mode.value if mode is None else TorchPadMode(mode).value
+        img = pad(img, all_pad_width, mode=mode, value=0)
+        return img
+
+
+class MyNormalizeIntensity(Transform):
     """
     Normalize input based on provided args, using calculated mean and std if not provided.
     This transform can normalize only non-zero values or entire image, and can also calculate
@@ -336,7 +515,7 @@ class MyNormalizeIntensityd(MapTransform):
         allow_missing_keys: bool = False,
     ) -> None:
         super().__init__(keys, allow_missing_keys)
-        self.normalizer = NormalizeIntensity(subtrahend, divisor, nonzero, channel_wise, dtype)
+        self.normalizer = MyNormalizeIntensity(subtrahend, divisor, nonzero, channel_wise, dtype)
 
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Dict[Hashable, torch.Tensor]:
         d = dict(data)
@@ -355,7 +534,7 @@ class PrintDim(MapTransform):
         super().__init__(keys)
         self.msg = msg
 
-    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Dict[Hashable, torch.Tensor]:
         if 'start time' in self.msg.lower():
             global timeziz
             timeziz = time.time()
@@ -374,9 +553,8 @@ class PrintDim(MapTransform):
         for idx, key in enumerate(self.keys):
             s += 'key: {}\n'.format(key)
             s += 'type key: {}\n'.format(type(d[key]))
-            if isinstance(d[key], np.ndarray):
+            if isinstance(d[key], torch.Tensor):
                 s += 'shape: {}\n'.format(d[key].shape)
-
             else:
                 s += 'size: {}\n'.format(d[key].size())
                 print(d[key].size())
@@ -404,7 +582,7 @@ class TorchIOWrapper(Randomizable, MapTransform):
     def randomize(self, data: Optional[Any] = None) -> None:
         self._do_transform = self.R.random() < self.prob
 
-    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Dict[Hashable, torch.Tensor]:
         d = dict(data)
         self.randomize()
         if not self._do_transform:
@@ -452,7 +630,7 @@ class RandTransformWrapper(Randomizable, MapTransform):
     def randomize(self, data: Optional[Any] = None) -> None:
         self._do_transform = self.R.random() < self.prob
 
-    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Dict[Hashable, torch.Tensor]:
         d = dict(data)
         self.randomize()
         if not self._do_transform:
@@ -542,7 +720,7 @@ class ThreeDHaircutd(Randomizable, MapTransform):
             self.prob_y = self.R.random()
             self.prob_z = self.R.random()
 
-    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Dict[Hashable, torch.Tensor]:
         d = dict(data)
         self.randomize(data)
         if not self._do_transform:
@@ -601,7 +779,7 @@ class Anisotropiserd(Randomizable, MapTransform):
         self._do_transform = self.R.random() < self.prob
         self.pick_axis = self.R.random()
 
-    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+    def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Dict[Hashable, torch.Tensor]:
         d = dict(data)
         self.randomize()
         if not self._do_transform:
