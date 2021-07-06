@@ -367,7 +367,7 @@ curated_dict = {
         # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER RESIZE'}},
         {'NormalizeIntensityd': {'keys': ['image']}},
-        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE Binarize'}},
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
     ],
