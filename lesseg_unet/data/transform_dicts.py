@@ -389,11 +389,11 @@ curated_dict = {
         #                       'random_center': True,
         #                       'random_size': False}
         #  },
-        # {'RandHistogramShiftd': {
-        #     'keys': ['image'],
-        #     'num_control_points': (10, 15),
-        #     'prob': low_prob}
-        #  },
+        {'RandHistogramShiftd': {
+            'keys': ['image'],
+            'num_control_points': (10, 15),
+            'prob': low_prob}
+         },
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER HIST SHIFT'}},
         # {'RandBiasFieldd': {
         #     'keys': ['image'],

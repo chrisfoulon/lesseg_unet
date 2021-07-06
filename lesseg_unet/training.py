@@ -250,9 +250,8 @@ def training_loop(img_path_list: Sequence,
         """
         Training loop
         """
+        str_best_epoch = ''
         for epoch in range(epoch_num):
-            # TODO create new controls_loader (shuffled from the whole control dataset) of the
-            #  same size as the train_loader
             print('-' * 10)
             print(f'epoch {epoch + 1}/{epoch_num}')
             best_epoch_count = 0
@@ -296,47 +295,34 @@ def training_loop(img_path_list: Sequence,
                     inputs_controls = batch_data_controls['image'].to(device)
                     labels_controls = batch_data_controls['label'].to(device)
                     outputs_controls = model(inputs_controls)
-                controls_loss_str = ''
                 # TODO smoothing?
                 y = labels[:, :1, :, :, :]
                 if label_smoothing:
                     s = .1
                     y = y * (1 - s) + 0.5 * s
+
                 if training_loss_fct.lower() == 'BCE':
-                    # TODO check if the BCE would work with the controls
-                    controls_loss = 0
-                    if inputs_controls:
-                        controls_loss = BCE(outputs_controls, labels_controls[:, :1, :, :, :])
-                    loss = BCE(outputs, y) + controls_loss
-                    # loss = BCE(outputs, y)
+                    loss = BCE(outputs, y)
                 elif training_loss_fct.lower() == 'tversky_loss':
-                    controls_loss = 0
-                    if controls_lists:
-                        controls_loss = tversky_function(outputs_controls, labels_controls[:, :1, :, :, :])
-                    loss = tversky_function(outputs, y) + controls_loss
+                    loss = tversky_function(outputs, y)
                 elif training_loss_fct.lower() == 'surface_dist_dice':
                     loss = loss_function(outputs, y)
                     # Just trying some dark magic
-                    distance, _ = surface_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
+                    distance, _ = hausdorff_metric(y_pred=post_trans(outputs), y=y)
+                    # distance, _ = surface_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
                     distance = torch.minimum(distance, max_distance)
-                    # TODO check if we can just use the euclidian distance
                     print(f'Distance {distance}')
                     loss += torch.mean(distance)
-                    controls_loss = 0
-                    if controls_lists:
-                        controls_loss = loss_function(outputs_controls, labels_controls[:, :1, :, :, :])
-                        controls_distance, _ = surface_metric(
-                            y_pred=post_trans(outputs_controls), y=labels_controls[:, :1, :, :, :])
-                        controls_distance = torch.minimum(controls_distance, max_distance)
-                        controls_loss = torch.mean(controls_distance) + controls_loss
-                        controls_loss_str = f'Controls loss: {controls_loss}'
-                    loss += controls_loss
                 else:
-                    controls_loss = 0
-                    if controls_lists:
-                        controls_loss = loss_function(outputs_controls, labels_controls[:, :1, :, :, :])
-                        controls_loss_str = f'Controls loss: {controls_loss}'
-                    loss = loss_function(outputs, y) + controls_loss
+                    loss = loss_function(outputs, y)
+                controls_loss = 0
+                controls_loss_str = ''
+                if controls_lists:
+                    control_weight_factor = 0.1  # Experiment with different weightings!
+                    controls_loss = torch.mean(torch.sigmoid(outputs_controls)) * control_weight_factor
+                    # controls_loss = utils.percent_vox_loss(outputs_controls[:, :1, :, :, :])
+                    controls_loss_str = f'Controls loss: {controls_loss}'
+                loss = loss + controls_loss
                 # TODO check that
                 # distance, _ = surface_metric(y_pred=Activations(sigmoid=True)(outputs), y=labels[:, :1, :, :, :])
                 # hausdorff, _ = hausdorff_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
@@ -375,7 +361,6 @@ def training_loop(img_path_list: Sequence,
             """
             Validation loop
             """
-            str_best_epoch = ''
             if (epoch + 1) % val_interval == 0:
                 # for f in val_images_dir.iterdir():
                 #     os.remove(f)
@@ -418,11 +403,11 @@ def training_loop(img_path_list: Sequence,
                             controls_loss = val_loss_function(outputs_controls, labels_controls[:, :1, :, :, :])
                             outputs_controls = post_trans(outputs_controls)
                             controls_value, _ = dice_metric(y_pred=outputs_controls, y=labels_controls[:, :1, :, :, :])
-                            controls_distance, _ = surface_metric(
-                                y_pred=outputs_controls, y=labels_controls[:, :1, :, :, :])
-                            controls_distance = torch.minimum(controls_distance, max_distance)
+                            # controls_distance, _ = surface_metric(
+                            #     y_pred=outputs_controls, y=labels_controls[:, :1, :, :, :])
+                            # controls_distance = torch.minimum(controls_distance, max_distance)
                             controls_mean_loss = torch.mean(torch.Tensor([controls_mean_loss, controls_value]))
-                            controls_mean_dist = torch.mean(torch.Tensor([controls_mean_dist, controls_distance]))
+                            # controls_mean_dist = torch.mean(torch.Tensor([controls_mean_dist, controls_distance]))
                             # print(f'control dice: [{controls_value}]'
                             #       f'\ncontrol distance: [{controls_distance}]')
 

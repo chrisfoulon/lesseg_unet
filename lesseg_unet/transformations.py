@@ -100,7 +100,7 @@ class Binarize(Transform):
     def __init__(self, lower_threshold: float = 0) -> None:
         self.lower_threshold = lower_threshold
 
-    def __call__(self, img: torch.Tensor) -> torch.Tensor:
+    def __call__(self, img: Union[torch.Tensor, np.ndarray]) -> Union[torch.Tensor, np.ndarray]:
         """
         Apply the transform to `img`.
         """
@@ -112,7 +112,10 @@ class Binarize(Transform):
         # else:
         #     # img = np.asarray(img[0, :, :, :])
         #     img = img[0, :, :, :]
-        img[0, :, :, :] = torch.where(img[0, :, :, :] > self.lower_threshold, 1, 0)
+        if isinstance(img, torch.Tensor):
+            img[0, :, :, :] = torch.where(img[0, :, :, :] > self.lower_threshold, 1, 0)
+        else:
+            img[0, :, :, :] = np.where(img[0, :, :, :] > self.lower_threshold, 1, 0)
         # output = torch.tensor(torch.where(img > self.lower_threshold, 1, 0), dtype=img.dtype)
         # if len(tensor_shape) == 4:
         #     output = output.unsqueeze(0)
@@ -134,8 +137,8 @@ class Binarized(MapTransform):
         self.lower_threshold = lower_threshold
         self.binarize = Binarize(lower_threshold)
 
-    def __call__(self, data: Mapping[Hashable, torch.Tensor]
-                 ) -> Dict[Hashable, torch.Tensor]:
+    def __call__(self, data: Mapping[Hashable, Union[torch.Tensor, np.ndarray]]
+                 ) -> Dict[Hashable, Union[torch.Tensor, np.ndarray]]:
         d = dict(data)
         for idx, key in enumerate(self.keys):
             d[key] = self.binarize(d[key])

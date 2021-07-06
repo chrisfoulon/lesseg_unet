@@ -208,3 +208,10 @@ def split_lists_in_folds(img_dict: dict,
     else:
         split_lists = list(np.array_split(np.array(full_file_list), folds_number))
     return split_lists
+
+
+def percent_vox_loss(img, half_total=True):
+    max_vox = torch.prod(torch.as_tensor(img.shape))
+    if half_total:
+        max_vox = max_vox // 2
+    return len(img[torch.where(img != 0)]) / max_vox
