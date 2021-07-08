@@ -170,6 +170,9 @@ def validation_loop(img_path_list: Sequence,
             inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy()
             labels_np = inv_labels[0, :, :, :].cpu().detach().numpy()
             outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy()
+            # inputs_np = inv_inputs[0, :, :, :].detach().numpy()
+            # labels_np = inv_labels[0, :, :, :].detach().numpy()
+            # outputs_np = inv_outputs[0, :, :, :].detach().numpy()
             if value.item() < bad_dice_treshold:
                 trash_count += 1
                 # print('Saving trash image #{}'.format(trash_count))

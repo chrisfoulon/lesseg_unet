@@ -61,7 +61,7 @@ def training_loop(img_path_list: Sequence,
         unet_hyper_params['dropout'] = dropout
     model = net.create_unet_model(device, unet_hyper_params)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
-    surface_metric = SurfaceDistanceMetric(include_background=True, reduction="mean", symmetric=True)
+    # surface_metric = SurfaceDistanceMetric(include_background=True, reduction="mean", symmetric=True)
     hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
     loss_function = DiceLoss(sigmoid=True)
@@ -70,7 +70,8 @@ def training_loop(img_path_list: Sequence,
     # df_loss = DiceFocalLoss(sigmoid=True)
     # dce_loss = DiceCELoss(sigmoid=True, ce_weight=torch.Tensor([1]).cuda())
     # loss_function = BCE
-    val_loss_function = DiceLoss(sigmoid=True)
+    val_loss_function = BCE
+    # val_loss_function = DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
     print('check ok')
 
@@ -144,8 +145,6 @@ def training_loop(img_path_list: Sequence,
     best_distance = -1
     best_avg_loss = -1
     best_metric_epoch = -1
-    epoch_loss_values = list()
-    metric_values = list()
     val_meh_thr = 0.7
     val_trash_thr = 0.3
     if stop_best_epoch != -1:
@@ -169,13 +168,13 @@ def training_loop(img_path_list: Sequence,
     #     best_trash_images_dir.mkdir(exist_ok=True)
     # TODO add the new measures if useful to the csv
     perf_measure_names = ['avg_train_loss',
-                          'val_mean_dice',
-                          'val_median_dice',
-                          'val_std_dice',
+                          'val_mean_metric',
+                          'val_median_metric',
+                          'val_std_metric',
                           'trash_img_nb',
-                          'val_min_dice',
-                          'val_max_dice',
-                          'val_best_mean_dice']
+                          'val_min_metric',
+                          'val_max_metric',
+                          'val_best_mean_metric']
     df = pd.DataFrame(columns=perf_measure_names)
     # Gather data
     img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, seg_path_list, img_pref, default_label)
@@ -216,6 +215,9 @@ def training_loop(img_path_list: Sequence,
         else:
             output_fold_dir = Path(output_dir, f'fold_{fold}')
         writer = SummaryWriter(log_dir=str(output_fold_dir))
+        trash_list_path = Path(output_fold_dir, 'trash_images_list.csv')
+        if trash_list_path.is_file():
+            os.remove(trash_list_path)
         # TODO outdated
         # train_ds, val_ds = data_loading.init_training_data(img_path_list, seg_path_list, img_pref,
         #                                                    transform_dict=transform_dict,
@@ -326,16 +328,6 @@ def training_loop(img_path_list: Sequence,
                 # TODO check that
                 # distance, _ = surface_metric(y_pred=Activations(sigmoid=True)(outputs), y=labels[:, :1, :, :, :])
                 # hausdorff, _ = hausdorff_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
-                # if not torch.isinf(distance):
-                #     dist = distance.item() * len(distance) / len(distance)
-                #     if dist > 1:
-                #         loss = loss * (1 - 1/dist)
-
-                # loss = tversky_function(outputs, y)
-                # print(f'dice: {loss.item():.4f}')
-                # print(f'tversky: {tversky_function.forward(outputs, y):.4f}')
-                # print(f'focal: {focal_function(outputs, y).item():.4f}')
-                # loss = loss_function(outputs, labels[:, :1, :, :, :])
                 loss.backward()
                 optimizer.step()
                 epoch_loss += loss.item()
@@ -354,7 +346,6 @@ def training_loop(img_path_list: Sequence,
                 # print(prof.total_average())
                 # print(prof.key_averages().table(row_limit=0))
             epoch_loss /= step
-            epoch_loss_values.append(epoch_loss)
             print(f'epoch {epoch + 1} average loss: {epoch_loss:.4f}')
 
             # if (epoch + 1) % val_interval == 1:
@@ -362,10 +353,6 @@ def training_loop(img_path_list: Sequence,
             Validation loop
             """
             if (epoch + 1) % val_interval == 0:
-                # for f in val_images_dir.iterdir():
-                #     os.remove(f)
-                # for f in trash_val_images_dir.iterdir():
-                #     os.remove(f)
                 model.eval()
                 with torch.no_grad():
                     metric_sum = 0.0
@@ -375,16 +362,15 @@ def training_loop(img_path_list: Sequence,
                     trash_count = 0
                     distance_sum = 0.0
                     distance_count = 0
-                    # img_max_num = len(train_ds) + len(val_ds)
-                    # inputs = None
-                    # labels = None
-                    # outputs = None
-                    # saver = NiftiSaver(output_dir=output_dir)
+                    controls_vol = None
+                    trash_seg_paths_list = []
+                    if controls_lists:
+                        controls_vol = 0
                     val_score_list = []
                     loss_list = []
                     step = 0
                     inf = ''
-                    pbar = tqdm(val_loader, desc=f'Val[{epoch}] avg_metric:[N/A]')
+                    pbar = tqdm(val_loader, desc=f'Val[{epoch + 1}] avg_metric:[N/A]')
                     controls_mean_loss = 1
                     controls_mean_dist = torch.Tensor([float('Inf')])
                     ctr_val_iter = None
@@ -400,29 +386,22 @@ def training_loop(img_path_list: Sequence,
                             inputs_controls = batch_data_controls['image'].to(device)
                             labels_controls = batch_data_controls['label'].to(device)
                             outputs_controls = model(inputs_controls)
+                            controls_vol += len(torch.where(outputs_controls[0, 0, :, :, :])[0])
                             controls_loss = val_loss_function(outputs_controls, labels_controls[:, :1, :, :, :])
                             outputs_controls = post_trans(outputs_controls)
                             controls_value, _ = dice_metric(y_pred=outputs_controls, y=labels_controls[:, :1, :, :, :])
-                            # controls_distance, _ = surface_metric(
-                            #     y_pred=outputs_controls, y=labels_controls[:, :1, :, :, :])
-                            # controls_distance = torch.minimum(controls_distance, max_distance)
                             controls_mean_loss = torch.mean(torch.Tensor([controls_mean_loss, controls_value]))
-                            # controls_mean_dist = torch.mean(torch.Tensor([controls_mean_dist, controls_distance]))
-                            # print(f'control dice: [{controls_value}]'
-                            #       f'\ncontrol distance: [{controls_distance}]')
 
                         loss = val_loss_function(outputs, labels[:, :1, :, :, :]) + controls_loss
 
                         outputs = post_trans(outputs)
-                        # loss = tversky_function(outputs, labels[:, :1, :, :, :])
-                        # loss.backward()
                         loss_list.append(loss.item())
                         value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
-                        distance, _ = surface_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
+                        distance, _ = hausdorff_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
+                        # distance, _ = surface_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
                         distance = torch.minimum(distance, max_distance)
                         distance_sum += distance.item() * len(distance)
                         distance_count += len(distance)
-                        writer.add_scalar('distance', distance.item(), val_batches_per_epoch * epoch + step)
                         val_score_list.append(value.item())
                         metric_count += len(value)
                         metric_sum += value.item() * len(value)
@@ -431,82 +410,72 @@ def training_loop(img_path_list: Sequence,
                         elif value.item() > val_trash_thr:
                             meh_count += 1
                         else:
+                            if best_metric > 0.75:
+                                trash_seg_paths_list.append(val_data['image_meta_dict']['filename_or_obj'][0])
                             trash_count += 1
                         pbar.set_description(f'Val[{epoch}] avg_loss:[{metric_sum / metric_count}]')
                     metric = metric_sum / metric_count
                     writer.add_scalar('val_loss', metric, val_batches_per_epoch * epoch + step)
-                    metric_values.append(metric)
+                    writer.add_scalar('distance', distance_sum / distance_count, val_batches_per_epoch * epoch + step)
                     val_mean_loss = np.mean(loss_list)
                     median = np.median(np.array(val_score_list))
                     std = np.std(np.array(val_score_list))
                     min_score = np.min(np.array(val_score_list))
                     max_score = np.max(np.array(val_score_list))
+
                     writer.add_scalar('val_mean_loss', val_mean_loss, epoch + 1)
-                    writer.add_scalar('val_mean_dice', metric, epoch + 1)
-                    writer.add_scalar('val_median_dice', median, epoch + 1)
+                    writer.add_scalar('val_mean_metric', metric, epoch + 1)
+                    writer.add_scalar('val_median_metric', median, epoch + 1)
                     writer.add_scalar('trash_img_nb', trash_count, epoch + 1)
-                    writer.add_scalar('val_min_dice', min_score, epoch + 1)
-                    writer.add_scalar('val_max_dice', max_score, epoch + 1)
-                    writer.add_scalar('val_std_dice', std, epoch + 1)
+                    writer.add_scalar('val_min_metric', min_score, epoch + 1)
+                    writer.add_scalar('val_max_metric', max_score, epoch + 1)
+                    writer.add_scalar('val_std_metric', std, epoch + 1)
+
                     df.loc[epoch + 1] = pd.Series({
                         'avg_train_loss': epoch_loss,
                         'val_mean_loss': val_mean_loss,
-                        'val_mean_dice': metric,
-                        'val_median_dice': median,
-                        'val_std_dice': std,
+                        'val_mean_metric': metric,
+                        'val_median_metric': median,
+                        'val_std_metric': std,
                         'trash_img_nb': trash_count,
-                        'val_min_dice': min_score,
-                        'val_max_dice': max_score,
-                        'val_best_mean_dice': 0
+                        'meh_img_nb': meh_count,
+                        'good_img_nb': img_count,
+                        'val_min_metric': min_score,
+                        'val_max_metric': max_score,
+                        'composite1': metric + distance_sum / distance_count,
+                        'controls_metric': controls_mean_loss,
+                        'controls_vol': controls_vol / metric_count,
+                        'val_best_mean_metric': 0
                     })
                     if metric > best_metric:
                         best_metric = metric
                         best_distance = distance_sum / distance_count
                         best_avg_loss = val_mean_loss
                         best_metric_epoch = epoch + 1
-                        # torch.save(model.state_dict(),
-                        #            Path(output_dir,
-                        #                 'best_metric_model_segmentation3d_array_epo_{}.pth'.format(best_metric_epoch)))
                         utils.save_checkpoint(model, epoch + 1, optimizer, output_fold_dir,
                                               'best_metric_model_segmentation3d_array_epo.pth')
                         print('saved new best metric model')
                         str_best_epoch = (
                             f'Best epoch {best_metric_epoch} '
-                            f'dice {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}'
+                            f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}'
                         )
-                        writer.add_scalar('val_best_mean_dice', metric, epoch + 1)
-                        df.at[epoch + 1, 'val_best_mean_dice'] = metric
-                        # if best_metric > val_save_thr:
-                        #     print('Replacing best images')
-                        #     for f in best_val_images_dir.iterdir():
-                        #         os.remove(f)
-                        #     for f in best_trash_images_dir.iterdir():
-                        #         os.remove(f)
-                        #     for f in val_images_dir.iterdir():
-                        #         shutil.copy(f, best_val_images_dir)
-                        #     for f in trash_val_images_dir.iterdir():
-                        #         shutil.copy(f, best_trash_images_dir)
-                        # plot the last model output as GIF image in TensorBoard with the corresponding image and label
-                        # plot_2d_or_3d_image(val_images, epoch + 1, writer, index=0, tag="image")
-                        # plot_2d_or_3d_image(val_labels, epoch + 1, writer, index=0, tag="label")
-                        # plot_2d_or_3d_image(val_outputs, epoch + 1, writer, index=0, tag="output")
-                        # plot_2d_or_3d_image(inputs, epoch + 1, writer, index=0, tag="image")
-                        # plot_2d_or_3d_image(labels, epoch + 1, writer, index=0, tag="label")
-                        # plot_2d_or_3d_image(outputs, epoch + 1, writer, index=0, tag="output")
-                    # else:
-                    #     best_epoch_count += 1
+                        writer.add_scalar('val_best_mean_metric', metric, epoch + 1)
+                        df.at[epoch + 1, 'val_best_mean_metric'] = metric
+                        if trash_seg_paths_list:
+                            with open(trash_list_path, 'a+') as f:
+                                f.write(','.join([str(epoch + 1)] + trash_seg_paths_list) + '\n')
                     best_epoch_count = epoch + 1 - best_metric_epoch
                     str_img_count = (
                             f'Trash (<{val_trash_thr}|'.rjust(12, ' ') +
                             f'Meh (<{val_meh_thr})|'.rjust(12, ' ') + f'Good\n'.rjust(12, ' ') +
                             f'{trash_count}|'.rjust(12, ' ') + f'{meh_count}|'.rjust(12, ' ') +
                             f'{img_count}'.rjust(12, ' ') + '\n\n'
-                            )
+                    )
                     str_current_epoch = (
-                        f'[Fold: {fold}]Current epoch: {epoch + 1} current mean dice: {metric:.4f}\n'
-                        f'and an average distance of [{distance_sum / distance_count}] ({inf});\n'
-                        f'Controls dice / dist [{controls_mean_loss}]/[{controls_mean_dist}] ({inf});\n\n'
-                        + str_img_count + str_best_epoch
+                            f'[Fold: {fold}]Current epoch: {epoch + 1} current mean metric: {metric:.4f}\n'
+                            f'and an average distance of [{distance_sum / distance_count}] ({inf});\n'
+                            f'Controls metric / dist [{controls_mean_loss}]/[{controls_mean_dist}] ({inf});\n\n'
+                            + str_img_count + str_best_epoch
                     )
                     print(str_current_epoch)
                     print(f'It has been [{best_epoch_count}] since a best epoch has been found'
