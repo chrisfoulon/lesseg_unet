@@ -42,7 +42,7 @@ from monai.transforms import (
     AsChannelFirstd,
     RandSpatialCropd,
     RandCropByPosNegLabeld,
-    ResizeWithPadOrCropd
+    ResizeWithPadOrCropd, RandomizableTransform
 )
 import torchio
 from torchio import Subject, ScalarImage
@@ -407,6 +407,9 @@ class MySpatialPad(Transform):
         """
         data_pad_width = self._determine_data_pad_width(img.shape[1:])
         all_pad_width = [(0, 0)] + data_pad_width
+        # torch pad works the other way around with the pad_width
+        all_pad_width.reverse()
+        all_pad_width = [item for tu in all_pad_width for item in tu]
         if not torch.as_tensor(all_pad_width).any():
             # all zeros, skip padding
             return img
@@ -486,7 +489,7 @@ class MyNormalizeIntensity(Transform):
         else:
             img = self._normalize(img, self.subtrahend, self.divisor)
 
-        return img.type(self.dtype)
+        return torch.as_tensor(img, dtype=self.dtype)
 
 
 class MyNormalizeIntensityd(MapTransform):
@@ -524,6 +527,67 @@ class MyNormalizeIntensityd(MapTransform):
         d = dict(data)
         for key in self.key_iterator(d):
             d[key] = self.normalizer(d[key])
+        return d
+
+
+class MyRandHistogramShiftd(RandomizableTransform, MapTransform):
+    """
+    Dictionary-based version :py:class:`monai.transforms.RandHistogramShift`.
+    Apply random nonlinear transform the the image's intensity histogram.
+
+    Args:
+        keys: keys of the corresponding items to be transformed.
+            See also: monai.transforms.MapTransform
+        num_control_points: number of control points governing the nonlinear intensity mapping.
+            a smaller number of control points allows for larger intensity shifts. if two values provided, number of
+            control points selecting from range (min_value, max_value).
+        prob: probability of histogram shift.
+        allow_missing_keys: don't raise exception if key is missing.
+    """
+
+    def __init__(
+        self,
+        keys: KeysCollection,
+        num_control_points: Union[Tuple[int, int], int] = 10,
+        prob: float = 0.1,
+        allow_missing_keys: bool = False,
+    ) -> None:
+        MapTransform.__init__(self, keys, allow_missing_keys)
+        RandomizableTransform.__init__(self, prob)
+        if isinstance(num_control_points, int):
+            if num_control_points <= 2:
+                raise AssertionError("num_control_points should be greater than or equal to 3")
+            self.num_control_points = (num_control_points, num_control_points)
+        else:
+            if len(num_control_points) != 2:
+                raise AssertionError("num_control points should be a number or a pair of numbers")
+            if min(num_control_points) <= 2:
+                raise AssertionError("num_control_points should be greater than or equal to 3")
+            self.num_control_points = (min(num_control_points), max(num_control_points))
+        self.reference_control_points = None
+        self.floating_control_points = None
+
+    def randomize(self, data: Optional[Any] = None) -> None:
+        super().randomize(None)
+        num_control_point = self.R.randint(self.num_control_points[0], self.num_control_points[1] + 1)
+        self.reference_control_points = torch.linspace(0, 1, num_control_point)
+        self.floating_control_points = torch.clone(self.reference_control_points)
+        for i in range(1, num_control_point - 1):
+            self.floating_control_points[i] = self.R.uniform(
+                self.floating_control_points[i - 1], self.floating_control_points[i + 1]
+            )
+
+    def __call__(self, data: Mapping[Hashable, np.ndarray]) -> Dict[Hashable, np.ndarray]:
+        d = dict(data)
+        self.randomize()
+        if not self._do_transform:
+            return d
+        for key in self.key_iterator(d):
+            img_min, img_max = torch.min(d[key]), torch.max(d[key])
+            reference_control_points_scaled = self.reference_control_points * (img_max - img_min) + img_min
+            floating_control_points_scaled = self.floating_control_points * (img_max - img_min) + img_min
+            dtype = d[key].dtype
+            d[key] = np.interp(d[key], reference_control_points_scaled, floating_control_points_scaled).astype(dtype)
         return d
 
 

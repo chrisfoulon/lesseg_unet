@@ -3,6 +3,7 @@ import sys
 import argparse
 from pathlib import Path
 import os
+import json
 
 from monai.config import print_config
 from lesseg_unet import utils, training, segmentation
@@ -21,6 +22,10 @@ def main():
     nifti_paths_group = parser.add_mutually_exclusive_group(required=True)
     nifti_paths_group.add_argument('-p', '--input_path', type=str, help='Root folder of the b1000 dataset')
     nifti_paths_group.add_argument('-li', '--input_list', type=str, help='Text file containing the list of b1000')
+    nifti_paths_group.add_argument('-sid', '--seg_input_dict', type=str,
+                                   help='[Segmentation only] The path to a json dict containing the keys of the '
+                                        'different populations (subfolder names) with the list of images paths'
+                                        '[Cannot be used for Validation]')
     lesion_paths_group = parser.add_mutually_exclusive_group(required=False)
     lesion_paths_group.add_argument('-lp', '--lesion_input_path', type=str,
                                     help='Root folder of the b1000 dataset')
@@ -132,13 +137,17 @@ def main():
         if not output_root.is_dir():
             raise ValueError('{} is not an existing directory and could not be created'.format(output_root))
         logging.info('loading input dwi path list')
+        seg_input_dict = {}
         if args.input_path is not None:
             img_list = utils.create_input_path_list_from_root(args.input_path)
             if args.input_path == args.output:
                 raise ValueError("The output directory CANNOT be the input directory")
         # So args.input_list is not None
-        else:
+        elif args.input_list is not None:
             img_list = file_to_list(args.input_list)
+        else:
+            seg_input_dict = json.load(open(args.seg_input_dict, 'r'))
+            img_list = [img_path for sublist in seg_input_dict for img_path in sublist]
         if args.output in img_list:
             raise ValueError("The output directory CANNOT be one of the input directories")
         logging.info('loading input lesion label path list')
@@ -186,7 +195,7 @@ def main():
         train_val_percentage = None
         if args.train_val is not None:
             train_val_percentage = args.train_val
-        if args.checkpoint is None:
+        if args.checkpoint is None and args.seg_input_dict is None:
             if train_val_percentage is None:
                 train_val_percentage = 75
             if les_list is None and args.default_label is None:
@@ -209,16 +218,31 @@ def main():
                                    folds_number=args.folds_number,
                                    dropout=args.dropout)
         else:
+            if args.checkpoint is None:
+                raise ValueError('A checkpoint must be given for the segmentation or validation')
             if train_val_percentage is None:
                 train_val_percentage = 0
+            if args.seg_input_dict is not None:
+                if les_list is not None:
+                    raise ValueError('seg_input_dict cannot be used for the Validation')
             if les_list is None:
-                segmentation.segmentation_loop(img_list,
-                                               output_root,
-                                               args.checkpoint,
-                                               b1000_pref,
-                                               transform_dict=transform_dict,
-                                               device=args.torch_device,
-                                               dataloader_workers=args.num_workers)
+                if seg_input_dict:
+                    for sub_folder in seg_input_dict:
+                        segmentation.segmentation_loop(seg_input_dict[sub_folder],
+                                                       Path(output_root, sub_folder),
+                                                       args.checkpoint,
+                                                       b1000_pref,
+                                                       transform_dict=transform_dict,
+                                                       device=args.torch_device,
+                                                       dataloader_workers=args.num_workers)
+                else:
+                    segmentation.segmentation_loop(img_list,
+                                                   output_root,
+                                                   args.checkpoint,
+                                                   b1000_pref,
+                                                   transform_dict=transform_dict,
+                                                   device=args.torch_device,
+                                                   dataloader_workers=args.num_workers)
             else:
                 segmentation.validation_loop(img_list, les_list,
                                              output_root,

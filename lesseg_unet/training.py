@@ -263,18 +263,24 @@ def training_loop(img_path_list: Sequence,
             # for batch_data in tqdm(train_loader, desc=f'training_loop{epoch}'):
             # Time test
             # import time
+            # # batch_data = next(iter(train_loader))
+            # # inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
+            # # optimizer.zero_grad()
             # start_time = time.time()
+            # # a bit less that 2sec/loop on laptop cpu
+            # # for i in tqdm(range(100)):
+            # #     outputs = model(inputs)
             # for i in tqdm(range(100)):
             #     next(iter(train_loader))
             # end_time = time.time()
-            # print(f'ITER Time: {end_time - start_time}')
-            # start_time = time.time()
-            # for i, b in enumerate(train_loader):
-            #     if i == 99:
-            #         break
-            #     continue
-            # end_time = time.time()
-            # print(f'Loop Time: {end_time - start_time}')
+            # print(f'model Time: {end_time - start_time}')
+            # # start_time = time.time()
+            # # for i, b in enumerate(train_loader):
+            # #     if i == 99:
+            # #         break
+            # #     continue
+            # # end_time = time.time()
+            # # print(f'Loop Time: {end_time - start_time}')
             # exit()
             ctr_train_iter = None
             if ctr_train_loader:
@@ -486,7 +492,6 @@ def training_loop(img_path_list: Sequence,
                             df.to_csv(Path(output_fold_dir, 'perf_measures.csv'), columns=perf_measure_names)
                             print(f'train completed, best_metric: {best_metric:.4f} at epoch: {best_metric_epoch}')
                             writer.close()
-                            return
                     # utils.save_checkpoint(model, epoch + 1, optimizer, output_dir)
         df.to_csv(Path(output_fold_dir, f'perf_measures_{0}.csv'), columns=perf_measure_names)
         print(f'train completed, best_metric: {best_metric:.4f} at epoch: {best_metric_epoch}')
