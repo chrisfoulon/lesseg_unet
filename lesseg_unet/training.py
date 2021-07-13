@@ -112,8 +112,8 @@ def training_loop(img_path_list: Sequence,
     # df_loss = DiceFocalLoss(sigmoid=True)
     # dce_loss = DiceCELoss(sigmoid=True, ce_weight=torch.Tensor([1]).cuda())
     # loss_function = BCE
-    val_loss_function = BCE
-    # val_loss_function = DiceLoss(sigmoid=True)
+    # val_loss_function = BCE
+    val_loss_function = DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
     print('check ok')
 
@@ -332,7 +332,7 @@ def training_loop(img_path_list: Sequence,
                 if controls_lists:
                     control_weight_factor = 0.1  # Experiment with different weightings!
                     # controls_loss = torch.mean(torch.sigmoid(outputs_controls)) * control_weight_factor
-                    controls_loss = utils.percent_vox_loss(outputs_controls[:, :1, :, :, :])
+                    controls_loss = utils.percent_vox_loss(outputs_controls[:, :1, :, :, :], divide_max_vox=100)
                     controls_loss_str = f'Controls loss: {controls_loss}'
                 loss = loss + controls_loss
                 # TODO check that
