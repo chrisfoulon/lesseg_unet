@@ -22,6 +22,48 @@ from torch.utils.tensorboard import SummaryWriter
 from lesseg_unet import net, utils, data_loading, transformations
 
 
+def testing(train_loader, output_dir):
+    it = iter(train_loader)
+    import nibabel as nib
+    for i in tqdm(range(5)):
+        # input_data = val_ds[i]['image']
+        # print(val_ds[i]['image_meta_dict']['filename_or_obj'])
+        # raw_data = nib.load(val_ds[i]['image_meta_dict']['filename_or_obj']).get_fdata()
+        data = next(it)
+        data_nii = nib.load(data['image_meta_dict']['filename_or_obj'][0])
+        out_affine = data_nii.affine
+        inputs, labels = data['image'], data['label']
+        # i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
+        if inputs.shape[1] > 1:
+            for ind, channel in enumerate(inputs[0, :, :, :, :]):
+                i_data = channel.cpu().detach().numpy()
+                nib.save(nib.Nifti1Image(i_data, out_affine),
+                         filename=f'{Path(output_dir)}/img_test_{i}_{ind}.nii')
+        # print(np.all(i_data == raw_data))
+        # i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
+        # l_data = labels[0, 0, :, :, :].cpu().detach().numpy()
+        # utils.save_img_lbl_seg_to_png(
+        #     i_data, output_dir, 'validation_img_{}'.format(i), l_data, None)
+        out_paths_list = utils.save_img_lbl_seg_to_nifti(
+            inputs, labels, None, output_dir, out_affine, i)
+
+        print(f'fsleyes {data["image_meta_dict"]["filename_or_obj"][0]} {data["label_meta_dict"]["filename_or_obj"][0]}'
+              f' {out_paths_list[0]} {out_paths_list[1]} '
+              f'{"/home/tolhsadum/neuro_apps/data/input_avg152T2_template.nii"}')
+        print('###########VOLUMES#######')
+        orig_label = nib.load(data["label_meta_dict"]["filename_or_obj"][0]).get_fdata()
+        label = nib.load(out_paths_list[1]).get_fdata()
+        print(f'original label volume: {np.count_nonzero(orig_label)}')
+        print(f'Smoothed label volume 0.5: {len(np.where(label > 0.5)[0])}')
+        print(f'Smoothed label volume 0.25: {len(np.where(label > 0.25)[0])}')
+        print('###########ENDVOLUMES#######')
+    # if np.equal(i_data, l_data).all():
+    #     print('ok')
+    # else:
+    #     print('not ok')
+    exit()
+
+
 def training_loop(img_path_list: Sequence,
                   seg_path_list: Sequence,
                   output_dir: Union[str, bytes, os.PathLike],
@@ -74,46 +116,6 @@ def training_loop(img_path_list: Sequence,
     # val_loss_function = DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), 1e-3)
     print('check ok')
-
-    # it = iter(train_loader)
-    # import nibabel as nib
-    # for i in tqdm(range(5)):
-    #     # input_data = val_ds[i]['image']
-    #     # print(val_ds[i]['image_meta_dict']['filename_or_obj'])
-    #     # raw_data = nib.load(val_ds[i]['image_meta_dict']['filename_or_obj']).get_fdata()
-    #     data = next(it)
-    #     data_nii = nib.load(data['image_meta_dict']['filename_or_obj'][0])
-    #     out_affine = data_nii.affine
-    #     inputs, labels = data['image'], data['label']
-    #     # i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
-    #     if inputs.shape[1] > 1:
-    #         for ind, channel in enumerate(inputs[0, :, :, :, :]):
-    #             i_data = channel.cpu().detach().numpy()
-    #             nib.save(nib.Nifti1Image(i_data, out_affine),
-    #                      filename=f'{Path(output_dir)}/img_test_{i}_{ind}.nii')
-    #     # print(np.all(i_data == raw_data))
-    #     # i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
-    #     # l_data = labels[0, 0, :, :, :].cpu().detach().numpy()
-    #     # utils.save_img_lbl_seg_to_png(
-    #     #     i_data, output_dir, 'validation_img_{}'.format(i), l_data, None)
-    #     out_paths_list = utils.save_img_lbl_seg_to_nifti(
-    #         inputs, labels, None, output_dir, out_affine, i)
-    #
-    #     print(f'fsleyes {data["image_meta_dict"]["filename_or_obj"][0]} {data["label_meta_dict"]["filename_or_obj"][0]}'
-    #           f' {out_paths_list[0]} {out_paths_list[1]} '
-    #           f'{"/home/tolhsadum/neuro_apps/data/input_avg152T2_template.nii"}')
-    #     print('###########VOLUMES#######')
-    #     orig_label = nib.load(data["label_meta_dict"]["filename_or_obj"][0]).get_fdata()
-    #     label = nib.load(out_paths_list[1]).get_fdata()
-    #     print(f'original label volume: {np.count_nonzero(orig_label)}')
-    #     print(f'Smoothed label volume 0.5: {len(np.where(label > 0.5)[0])}')
-    #     print(f'Smoothed label volume 0.25: {len(np.where(label > 0.25)[0])}')
-    #     print('###########ENDVOLUMES#######')
-    # # if np.equal(i_data, l_data).all():
-    # #     print('ok')
-    # # else:
-    # #     print('not ok')
-    # exit()
 
     # utils.save_tensor_to_nifti(
     #     inputs, Path('/home/tolhsadum/neuro_apps/data/', 'nib_input_{}.nii'.format('test')), val_output_affine)
@@ -227,6 +229,8 @@ def training_loop(img_path_list: Sequence,
             split_lists, fold, train_img_transforms,
             val_img_transforms, batch_size, dataloader_workers
         )
+        # TESTING FUNCTION EXISTS RIGHT AT THE END OF IT
+        # testing(train_loader, output_dir)
         print(
             f'train loaders and stuff: {train_loader}'
         )
@@ -327,8 +331,8 @@ def training_loop(img_path_list: Sequence,
                 controls_loss_str = ''
                 if controls_lists:
                     control_weight_factor = 0.1  # Experiment with different weightings!
-                    controls_loss = torch.mean(torch.sigmoid(outputs_controls)) * control_weight_factor
-                    # controls_loss = utils.percent_vox_loss(outputs_controls[:, :1, :, :, :])
+                    # controls_loss = torch.mean(torch.sigmoid(outputs_controls)) * control_weight_factor
+                    controls_loss = utils.percent_vox_loss(outputs_controls[:, :1, :, :, :])
                     controls_loss_str = f'Controls loss: {controls_loss}'
                 loss = loss + controls_loss
                 # TODO check that

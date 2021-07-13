@@ -23,21 +23,25 @@ def segmentation_loop(img_path_list: Sequence,
                       transform_dict: dict = None,
                       device: str = None,
                       batch_size: int = 1,
-                      dataloader_workers: int = 8):
+                      dataloader_workers: int = 8,
+                      original_size=True):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
 
-    original_size = True
+    original_size = original_size
     val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
     val_ds = data_loading.init_segmentation(img_path_list, img_pref, transform_dict)
     val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
                                                             dataloader_workers=dataloader_workers)
     unet_hyper_params = net.default_unet_hyper_params
-    for t in val_ds.transform.transforms:
-        if isinstance(t, transformations.CoordConvd):
-            unet_hyper_params = net.coord_conv_unet_hyper_params
+    if transform_dict is not None:
+        for li in transform_dict:
+            for d in transform_dict[li]:
+                for t in d:
+                    if t == 'CoordConvd' or t == 'CoordConvAltd':
+                        unet_hyper_params['in_channels'] = 4
     model = utils.load_eval_from_checkpoint(checkpoint_path, device, unet_hyper_params)
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
     model.eval()
@@ -48,7 +52,7 @@ def segmentation_loop(img_path_list: Sequence,
             inputs = val_data['image'].to(device)
             input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
             outputs = model(inputs)
-            outputs = post_trans(outputs)
+            # outputs = post_trans(outputs)
             if original_size:
                 output_dict_data = deepcopy(val_data)
                 val_data['image'] = val_data['image'].to(device)[0]
@@ -70,6 +74,7 @@ def segmentation_loop(img_path_list: Sequence,
             else:
                 inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy()
                 outputs_np = outputs[0, 0, :, :, :].cpu().detach().numpy()
+                
                 tmp = None
                 utils.save_img_lbl_seg_to_nifti(
                     inputs_np, tmp, outputs_np, output_dir, val_output_affine,
@@ -106,9 +111,12 @@ def validation_loop(img_path_list: Sequence,
     val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
                                                             dataloader_workers=dataloader_workers)
     unet_hyper_params = net.default_unet_hyper_params
-    for t in val_ds.transform.transforms:
-        if isinstance(t, transformations.CoordConvd):
-            unet_hyper_params = net.coord_conv_unet_hyper_params
+    if transform_dict is not None:
+        for li in transform_dict:
+            for d in transform_dict[li]:
+                for t in d:
+                    if t == 'CoordConvd' or t == 'CoordConvAltd':
+                        unet_hyper_params['in_channels'] = 4
     model = utils.load_eval_from_checkpoint(checkpoint_path, device, unet_hyper_params)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])

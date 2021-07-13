@@ -5,6 +5,7 @@ from typing import Union, List
 import json
 import math
 
+import monai.transforms
 from bcblib.tools.nifti_utils import is_nifti, centre_of_mass_difference
 from lesseg_unet.visualisation_utils import plot_seg
 from lesseg_unet.net import create_unet_model
@@ -210,8 +211,12 @@ def split_lists_in_folds(img_dict: dict,
     return split_lists
 
 
-def percent_vox_loss(img, half_total=True):
+def percent_vox_loss(img, sigmoid=True, discrete=True, divide_max_vox=1):
+    if sigmoid:
+        img = torch.sigmoid(img)
+    if discrete:
+        img = monai.transforms.AsDiscrete(threshold_values=True)(img)
     max_vox = torch.prod(torch.as_tensor(img.shape))
-    if half_total:
-        max_vox = max_vox // 2
+    if divide_max_vox != 1:
+        max_vox = max_vox // divide_max_vox
     return len(img[torch.where(img != 0)]) / max_vox

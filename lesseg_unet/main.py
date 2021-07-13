@@ -65,6 +65,9 @@ def main():
     nifti_paths_group.add_argument('-bm', '--benchmark', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('-dropout', type=float, help='Set a dropout value for the model')
     parser.add_argument('-nf', '--folds_number', default=1, type=int, help='Set a dropout value for the model')
+    parser.add_argument('-kmos', '--keep_model_output_size', action='store_true', help='Keep the output of the '
+                                                                                       'segmentation in the '
+                                                                                       'spatial_size of the model')
     args = parser.parse_args()
     # print MONAI config
     print_config()
