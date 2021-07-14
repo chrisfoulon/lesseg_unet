@@ -317,7 +317,7 @@ def training_loop(img_path_list: Sequence,
                     loss = BCE(outputs, y)
                 elif training_loss_fct.lower() == 'tversky_loss':
                     loss = tversky_function(outputs, y)
-                elif training_loss_fct.lower() == 'surface_dist_dice':
+                elif training_loss_fct.lower() == 'dist_dice':
                     loss = loss_function(outputs, y)
                     # Just trying some dark magic
                     distance, _ = hausdorff_metric(y_pred=post_trans(outputs), y=y)
@@ -332,7 +332,8 @@ def training_loop(img_path_list: Sequence,
                 if controls_lists:
                     control_weight_factor = 0.1  # Experiment with different weightings!
                     # controls_loss = torch.mean(torch.sigmoid(outputs_controls)) * control_weight_factor
-                    controls_loss = utils.percent_vox_loss(outputs_controls[:, :1, :, :, :], divide_max_vox=100)
+                    # controls_loss = utils.percent_vox_loss(outputs_controls[:, :1, :, :, :], divide_max_vox=100)
+                    controls_loss = utils.volume_metric(post_trans(outputs_controls[:, :1, :, :, :]), False, False)
                     controls_loss_str = f'Controls loss: {controls_loss}'
                 loss = loss + controls_loss
                 # TODO check that
