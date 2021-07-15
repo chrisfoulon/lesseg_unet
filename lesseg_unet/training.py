@@ -376,8 +376,8 @@ def training_loop(img_path_list: Sequence,
             print(f'epoch {epoch + 1} average loss: {epoch_loss:.4f}')
             # ########## training EPOCH LEVEL WRITER ###########
             writer.add_scalar('epoch_train_loss', epoch_loss, epoch + 1)
-            writer.add_scalar('epoch_ctr_loss', torch.mean(torch.tensor(ctr_loss)), epoch + 1)
-            writer.add_scalar('epoch_ctr_volume', torch.mean(torch.tensor(ctr_vol)), epoch + 1)
+            writer.add_scalar('epoch_ctr_loss', torch.mean(torch.tensor(ctr_loss), dtype=torch.float), epoch + 1)
+            writer.add_scalar('epoch_ctr_volume', torch.mean(torch.tensor(ctr_vol), dtype=torch.float), epoch + 1)
             # if (epoch + 1) % val_interval == 1:
             """
             Validation loop
@@ -472,8 +472,8 @@ def training_loop(img_path_list: Sequence,
                     writer.add_scalar('val_mean_metric', mean_metric, epoch + 1)
                     writer.add_scalar('val_distance', distance_sum / distance_count, epoch + 1)
                     writer.add_scalar('trash_img_nb', trash_count, epoch + 1)
-                    writer.add_scalar('val_ctr_loss', torch.mean(torch.tensor(ctr_loss)), epoch + 1)
-                    writer.add_scalar('val_ctr_volume', torch.mean(torch.tensor(ctr_vol)), epoch + 1)
+                    writer.add_scalar('val_ctr_loss', torch.mean(torch.tensor(ctr_loss), dtype=torch.float), epoch + 1)
+                    writer.add_scalar('val_ctr_volume', torch.mean(torch.tensor(ctr_vol), dtype=torch.float), epoch + 1)
                     writer.add_scalar('val_mean_loss', val_mean_loss, epoch + 1)
                     writer.add_scalar('val_median_metric', median, epoch + 1)
                     writer.add_scalar('val_min_metric', min_score, epoch + 1)
