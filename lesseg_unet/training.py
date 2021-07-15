@@ -348,7 +348,7 @@ def training_loop(img_path_list: Sequence,
                     # controls_loss = controls_vol
                     ctr_loss += [controls_loss]
                     ctr_vol += [controls_vol]
-                    controls_loss_str = f'Controls loss: {controls_loss} + controls volume: {controls_vol}'
+                    controls_loss_str = f'Controls loss: {controls_loss}, controls volume: {controls_vol}'
                     writer.add_scalar('control_loss', controls_loss.item(), batches_per_epoch * epoch + step)
                     writer.add_scalar('mean_control_vol', controls_vol, batches_per_epoch * epoch + step)
                 loss = loss + controls_loss
@@ -494,7 +494,7 @@ def training_loop(img_path_list: Sequence,
                         'val_max_metric': max_score,
                         # 'composite1': mean_metric + distance_sum / distance_count,
                         # 'controls_metric': controls_mean_loss,
-                        'controls_vol': torch.mean(torch.tensor(ctr_vol)),
+                        'controls_vol': torch.mean(torch.tensor(ctr_vol), dtype=torch.float),
                         'val_best_mean_metric': 0
                     })
                     if mean_metric > best_metric:
