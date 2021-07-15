@@ -433,7 +433,7 @@ def training_loop(img_path_list: Sequence,
                         if val_loss_fct == 'dist':
                             metric = distance
                         elif val_loss_fct == 'dist_dice':
-                            metric = distance + dice_value
+                            metric = distance.to(device) + dice_value.to(device)
                         else:
                             # TODO meh!
                             metric = loss + controls_loss
