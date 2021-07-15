@@ -136,10 +136,10 @@ def main():
     else:
         # Gather input data and setup based on script arguments
         output_root = Path(args.output)
-
+        os.makedirs(output_root, exist_ok=True)
+        
         log_file_path = str(Path(output_root, '__logging_training.txt'))
         logging.basicConfig(filename=log_file_path, filemode='w', level=logging.INFO)
-        os.makedirs(output_root, exist_ok=True)
         if args.default_label is not None:
             logging.info(f'{args.default_label} will be used to fill up missing labels')
         if args.create_default_label:
