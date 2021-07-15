@@ -78,7 +78,7 @@ def create_file_dict_lists(raw_img_path_list: Sequence, raw_seg_path_list: Seque
 def create_training_data_loader(train_ds: monai.data.Dataset,
                                 batch_size: int = 10,
                                 dataloader_workers: int = 4):
-    logging.info('Creating training data loader')
+    print('Creating training data loader')
     train_loader = DataLoader(
         train_ds,
         batch_size=batch_size,
@@ -93,7 +93,7 @@ def create_training_data_loader(train_ds: monai.data.Dataset,
 def create_validation_data_loader(val_ds: monai.data.Dataset,
                                   batch_size: int = 1,
                                   dataloader_workers: int = 4):
-    logging.info('Creating validation data loader')
+    print('Creating validation data loader')
     val_loader = DataLoader(val_ds, batch_size=batch_size, num_workers=dataloader_workers,
                             pin_memory=torch.cuda.is_available())
     return val_loader
@@ -120,25 +120,25 @@ def init_training_data(
         transform_dict: dict = None,
         train_val_percentage: float = 75,
         default_label: Union[str, os.PathLike] = None) -> Tuple[monai.data.Dataset, monai.data.Dataset]:
-    logging.info('Listing input files to be loaded')
+    print('Listing input files to be loaded')
     train_files, val_files = create_file_dict_lists(img_path_list, seg_path_list, img_pref,
                                                     train_val_percentage, default_label)
-    logging.info('Create transformations')
+    print('Create transformations')
     train_img_transforms = transformations.segmentation_train_transformd(transform_dict)
     val_img_transforms = transformations.segmentation_val_transformd(transform_dict)
     # define dataset, data loader
-    logging.info('Create training monai datasets')
+    print('Create training monai datasets')
     train_ds = Dataset(train_files, transform=train_img_transforms)
     # define dataset, data loader
     logging.info('Create validation monai datasets')
     val_ds = Dataset(val_files, transform=val_img_transforms)
     # We check if both the training and validation dataloaders can be created and used without immediate errors
-    logging.info('Checking data loading')
+    print('Checking data loading')
     if train_val_percentage:
         data_loader_checker_first(train_ds, 'training')
     if train_val_percentage != 100:
         data_loader_checker_first(val_ds, 'validation')
-    logging.info('Init training done.')
+    print('Init training done.')
     return train_ds, val_ds
 
 
@@ -165,10 +165,10 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
             val_data_list = chunk
         else:
             train_data_list = np.concatenate([train_data_list, chunk])
-    logging.info(f'Create training monai dataset for fold {fold}')
+    print(f'Create training monai dataset for fold {fold}')
     train_ds = Dataset(train_data_list, transform=train_img_transforms)
     # define dataset, data loader
-    logging.info(f'Create validation monai dataset')
+    print(f'Create validation monai dataset')
     val_ds = Dataset(val_data_list, transform=val_img_transforms)
     train_loader = create_training_data_loader(train_ds, batch_size, dataloader_workers)
     val_loader = create_validation_data_loader(val_ds, dataloader_workers=dataloader_workers)
@@ -180,10 +180,10 @@ def init_segmentation(img_path_list: Sequence,
                       transform_dict: dict = None):
     if img_pref is None:
         img_pref = ''
-    logging.info('Listing input files to be loaded')
+    print('Listing input files to be loaded')
     image_list = [{'image': str(img)} for img in img_path_list if img_pref in Path(img).name]
-    logging.info('Create transformations')
-    val_img_transforms = transformations.segmentation_transformd(transform_dict)
-    logging.info('Create monai dataset')
+    print('Create transformations')
+    val_img_transforms = transformations.image_only_transformd(transform_dict)
+    print('Create monai dataset')
     train_ds = Dataset(image_list, transform=val_img_transforms)
     return train_ds

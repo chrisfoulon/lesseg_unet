@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 import os
 import json
+from datetime import datetime
 
 from monai.config import print_config
 from lesseg_unet import utils, training, segmentation
@@ -26,6 +27,8 @@ def main():
                                    help='[Segmentation only] The path to a json dict containing the keys of the '
                                         'different populations (subfolder names) with the list of images paths'
                                         '[Cannot be used for Validation]')
+    # Hidden param, do not use
+    nifti_paths_group.add_argument('-bm', '--benchmark', action='store_true', help=argparse.SUPPRESS)
     lesion_paths_group = parser.add_mutually_exclusive_group(required=False)
     lesion_paths_group.add_argument('-lp', '--lesion_input_path', type=str,
                                     help='Root folder of the b1000 dataset')
@@ -40,6 +43,9 @@ def main():
                                      help='file path to a json dictionary of transformations')
     parser.add_argument('-lfct', '--loss_function', type=str, default='dice',
                         help='Loss function used for training')
+    # TODO add it to the validation pipeline
+    parser.add_argument('-vlfct', '--val_loss_function', type=str, default='dice',
+                        help='Loss function used for validation')
     default_label_group = parser.add_mutually_exclusive_group(required=False)
     default_label_group.add_argument('-cdl', '--create_default_label', action='store_true',
                                      help='Creates a default image filled with zeros for control images label')
@@ -62,7 +68,6 @@ def main():
                                                                     'stops')
     # parser.add_argument('-ns', '--num_nifti_save', default=25, type=int, help='Number of niftis saved '
     #                                                                           'during validation')
-    nifti_paths_group.add_argument('-bm', '--benchmark', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('-dropout', type=float, help='Set a dropout value for the model')
     parser.add_argument('-nf', '--folds_number', default=1, type=int, help='Set a dropout value for the model')
     parser.add_argument('-kmos', '--keep_model_output_size', action='store_true', help='Keep the output of the '
@@ -72,7 +77,6 @@ def main():
     # print MONAI config
     print_config()
     # logs init
-    logging.basicConfig(stream=sys.stdout, level=logging.INFO)
     if args.stop_best_epoch is None:
         stop_best_epoch = -1
     else:
@@ -116,6 +120,7 @@ def main():
                                            stop_best_epoch=stop_best_epoch,
                                            default_label=args.default_label,
                                            training_loss_fct=args.loss_function,
+                                           val_loss_fct=args.val_loss_function,
                                            folds_number=args.folds_number,
                                            dropout=args.dropout)
             else:
@@ -131,15 +136,18 @@ def main():
     else:
         # Gather input data and setup based on script arguments
         output_root = Path(args.output)
+
+        log_file_path = str(Path(output_root, '__logging_training.txt'))
+        logging.basicConfig(filename=log_file_path, filemode='w', level=logging.INFO)
         os.makedirs(output_root, exist_ok=True)
         if args.default_label is not None:
             logging.info(f'{args.default_label} will be used to fill up missing labels')
         if args.create_default_label:
             args.default_label = output_root
-            logging.info(f'Missing labels will be replace by an zero-filled default image')
+            print(f'Missing labels will be replace by an zero-filled default image')
         if not output_root.is_dir():
             raise ValueError('{} is not an existing directory and could not be created'.format(output_root))
-        logging.info('loading input dwi path list')
+        print('loading input dwi path list')
         seg_input_dict = {}
         if args.input_path is not None:
             img_list = utils.create_input_path_list_from_root(args.input_path)
@@ -153,7 +161,7 @@ def main():
             img_list = [img_path for sublist in seg_input_dict for img_path in sublist]
         if args.output in img_list:
             raise ValueError("The output directory CANNOT be one of the input directories")
-        logging.info('loading input lesion label path list')
+        print('loading input lesion label path list')
         if args.lesion_input_path is not None:
             les_list = utils.create_input_path_list_from_root(args.lesion_input_path)
             if args.lesion_input_path == args.output:
@@ -175,7 +183,7 @@ def main():
             ctr_list = None
 
         # match the lesion labels with the images
-        logging.info('Matching the dwi and lesions')
+        print('Matching the dwi and lesions')
         if args.image_prefix is not None:
             b1000_pref = args.image_prefix
         else:
@@ -218,6 +226,7 @@ def main():
                                    stop_best_epoch=stop_best_epoch,
                                    default_label=args.default_label,
                                    training_loss_fct=args.loss_function,
+                                   val_loss_fct=args.val_loss_function,
                                    folds_number=args.folds_number,
                                    dropout=args.dropout)
         else:

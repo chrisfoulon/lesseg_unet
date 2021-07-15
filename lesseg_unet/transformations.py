@@ -964,13 +964,14 @@ def check_imports(hyper_param_dict):
 
 
 def check_hyper_param_dict_shape(hyper_param_dict, print_list=True):
+    full_str = ''
     if print_list:
-        print('######\nList of transformations used:')
+        full_str = '######\nList of transformations used:\n'
     # The main dict
     for k in hyper_param_dict:
         # each sublist (like first_transform or monai_transform)
         if print_list:
-            print(k)
+            full_str += k + '\n'
         if not isinstance(hyper_param_dict[k], list):
             raise ValueError('Hyper param dict values must be lists')
         # Each dict in the sublist
@@ -984,7 +985,8 @@ def check_hyper_param_dict_shape(hyper_param_dict, print_list=True):
                 if not isinstance(d[name], dict):
                     raise ValueError('Transformation dict parameters must be dict (e.g. {keys: ["image", "label"]')
                 if print_list:
-                    print('\t{}'.format(name))
+                    full_str += f'\t{name}\n'
+    logging.info(full_str)
 
 
 """
@@ -1045,17 +1047,19 @@ Transformation compositions for the image segmentation
 
 def setup_coord_conv(hyper_param_dict):
     spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size', 'last_transform')
-    logging.info(f'Spatial resize to {spatial_size}')
     if spatial_size is None:
         spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size')
+    logging.info(f'Spatial resize to {spatial_size}')
 
-    gradients = create_gradient(spatial_size)
+    gradients = None
     for k in hyper_param_dict:
         # Each dict in the sublist
         for d in hyper_param_dict[k]:
             # Each Transformation name in the sublist
             for name in d:
                 if name == 'CoordConvd' or name == 'CoordConv':
+                    if gradients is None:
+                        gradients = create_gradient(spatial_size)
                     d[name]['gradients'] = gradients
 
 
@@ -1088,7 +1092,7 @@ def segmentation_val_transformd(hyper_param_dict=None):
     return val_transd
 
 
-def segmentation_transformd(hyper_param_dict=None):
+def image_only_transformd(hyper_param_dict=None, training=True):
     if hyper_param_dict is None:
         hyper_param_dict = hyper_dict
     setup_coord_conv(hyper_param_dict)
@@ -1110,9 +1114,19 @@ def segmentation_transformd(hyper_param_dict=None):
                     seg_tr_dict[li].append(new_tr)
                 else:
                     seg_tr_dict[li].append(di)
-    hyper_param_dict = seg_tr_dict
-    seg_transd = Compose(
-        trans_list_from_list(hyper_param_dict['first_transform']) +
-        trans_list_from_list(hyper_param_dict['last_transform'])
-    )
-    return seg_transd
+    if training:
+        compose_list = []
+        for d_list_name in seg_tr_dict:
+            trs = trans_list_from_list(seg_tr_dict[d_list_name])
+            if trs is not None:
+                compose_list += trs
+        train_transd = Compose(
+            compose_list
+        )
+        return train_transd
+    else:
+        seg_transd = Compose(
+            trans_list_from_list(seg_tr_dict['first_transform']) +
+            trans_list_from_list(seg_tr_dict['last_transform'])
+        )
+        return seg_transd
