@@ -350,7 +350,7 @@ def training_loop(img_path_list: Sequence,
                     ctr_vol += [controls_vol]
                     controls_loss_str = f'Controls loss: {controls_loss} + controls volume: {controls_vol}'
                     writer.add_scalar('control_loss', controls_loss.item(), batches_per_epoch * epoch + step)
-                    writer.add_scalar('mean_control_vol', controls_vol.item(), batches_per_epoch * epoch + step)
+                    writer.add_scalar('mean_control_vol', controls_vol, batches_per_epoch * epoch + step)
                 loss = loss + controls_loss
                 # TODO check that
                 # distance, _ = surface_metric(y_pred=Activations(sigmoid=True)(outputs), y=labels[:, :1, :, :, :])
