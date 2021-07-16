@@ -81,6 +81,7 @@ def training_loop(img_path_list: Sequence,
                   default_label=None,
                   training_loss_fct='dice',
                   val_loss_fct='dice',
+                  weight_factor=1,
                   folds_number=1,
                   dropout=0):
     if device is None:
@@ -157,7 +158,7 @@ def training_loop(img_path_list: Sequence,
     best_metric_epoch = -1
     val_meh_thr = 0.7
     val_trash_thr = 0.3
-    control_weight_factor = 100000  # Experiment with different weightings!
+    control_weight_factor = weight_factor  # Experiment with different weightings!
     if stop_best_epoch != -1:
         logging.info(f'Will stop after {stop_best_epoch} epochs without improvement')
     if label_smoothing:

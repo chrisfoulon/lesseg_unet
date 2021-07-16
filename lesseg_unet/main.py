@@ -43,6 +43,8 @@ def main():
                                      help='file path to a json dictionary of transformations')
     parser.add_argument('-lfct', '--loss_function', type=str, default='dice',
                         help='Loss function used for training')
+    parser.add_argument('-wf', '--weight_factor', type=float, default=1,
+                        help='Multiply the control loss by this factor')
     # TODO add it to the validation pipeline
     parser.add_argument('-vlfct', '--val_loss_function', type=str, default='dice',
                         help='Loss function used for validation')
@@ -122,6 +124,7 @@ def main():
                                            training_loss_fct=args.loss_function,
                                            val_loss_fct=args.val_loss_function,
                                            folds_number=args.folds_number,
+                                           weight_factor=args.weight_factor,
                                            dropout=args.dropout)
             else:
                 segmentation.validation_loop(img_list, les_list,
@@ -137,7 +140,7 @@ def main():
         # Gather input data and setup based on script arguments
         output_root = Path(args.output)
         os.makedirs(output_root, exist_ok=True)
-        
+
         log_file_path = str(Path(output_root, '__logging_training.txt'))
         logging.basicConfig(filename=log_file_path, filemode='w', level=logging.INFO)
         if args.default_label is not None:
@@ -227,6 +230,7 @@ def main():
                                    default_label=args.default_label,
                                    training_loss_fct=args.loss_function,
                                    val_loss_fct=args.val_loss_function,
+                                   weight_factor=args.weight_factor,
                                    folds_number=args.folds_number,
                                    dropout=args.dropout)
         else:
