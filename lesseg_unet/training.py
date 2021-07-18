@@ -537,6 +537,7 @@ def training_loop(img_path_list: Sequence,
                             df.to_csv(Path(output_fold_dir, 'perf_measures.csv'), columns=perf_measure_names)
                             print(f'train completed, best_metric: {best_metric:.4f} at epoch: {best_metric_epoch}')
                             writer.close()
+                            break
                     # utils.save_checkpoint(model, epoch + 1, optimizer, output_dir)
         df.to_csv(Path(output_fold_dir, f'perf_measures_{fold}.csv'), columns=perf_measure_names)
         with open(Path(output_fold_dir, f'trash_img_count_dict_{fold}.json'), 'w+') as j:
