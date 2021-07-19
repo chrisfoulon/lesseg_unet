@@ -425,16 +425,16 @@ def training_loop(img_path_list: Sequence,
                             batch_mean_sigmoid = torch.sigmoid(batch_mean)
                             # It's basically torch.mean(torch.sigmoid(normal_logits) > 0.5)
                             controls_vol = utils.volume_metric(batch_mean_sigmoid,
-                                                               sigmoid=False, discrete=True).cpu()
-                            controls_loss = torch.mean(batch_mean_sigmoid).cpu() * control_weight_factor
+                                                               sigmoid=False, discrete=True)
+                            controls_loss = torch.mean(batch_mean_sigmoid) * control_weight_factor
                             ctr_loss += [controls_loss]
                             ctr_vol += [controls_vol]
 
                         outputs = post_trans(outputs)
-                        dice_value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :]).cpu()
-                        distance, _ = hausdorff_metric(y_pred=outputs, y=labels[:, :1, :, :, :]).cpu()
+                        dice_value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
+                        distance, _ = hausdorff_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
                         distance = torch.minimum(distance, max_distance)
-                        loss = val_loss_function(outputs, labels[:, :1, :, :, :]).cpu()
+                        loss = val_loss_function(outputs, labels[:, :1, :, :, :])
                         if val_loss_fct == 'dist':
                             # In that case we want the distance to be smaller
                             metric_select_fct = lt
