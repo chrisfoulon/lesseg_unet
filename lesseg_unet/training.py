@@ -434,13 +434,13 @@ def training_loop(img_path_list: Sequence,
                         dice_value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
                         distance, _ = hausdorff_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
                         distance = torch.minimum(distance, max_distance)
-                        loss = val_loss_function(outputs, labels[:, :1, :, :, :])
+                        loss = val_loss_function(outputs, labels[:, :1, :, :, :]).cpu()
                         if val_loss_fct == 'dist':
                             # In that case we want the distance to be smaller
                             metric_select_fct = lt
                             metric = distance
                         elif val_loss_fct == 'dist_dice':
-                            metric = distance.cpu() + loss
+                            metric = distance + loss
                         elif val_loss_fct == 'dice_plus_ctr':
                             # In that case we want the loss to be smaller
                             metric_select_fct = lt
