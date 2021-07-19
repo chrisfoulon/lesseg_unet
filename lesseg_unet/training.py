@@ -445,7 +445,7 @@ def training_loop(img_path_list: Sequence,
                             # In that case we want the loss to be smaller
                             metric_select_fct = lt
                             # TODO meh?
-                            metric = loss + controls_loss
+                            metric = loss + controls_vol
                         else:
                             metric = dice_value.item()
 
