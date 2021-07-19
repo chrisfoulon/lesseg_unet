@@ -440,6 +440,8 @@ def training_loop(img_path_list: Sequence,
                             metric_select_fct = lt
                             metric = distance
                         elif val_loss_fct == 'dist_dice':
+                            # In that case we want the loss to be smaller
+                            metric_select_fct = lt
                             metric = distance + loss
                         elif val_loss_fct == 'dice_plus_ctr':
                             # In that case we want the loss to be smaller
