@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import logging
+from operator import lt, gt
 from pathlib import Path
 from typing import Sequence, Tuple, Union
 
@@ -158,6 +159,7 @@ def training_loop(img_path_list: Sequence,
     best_metric_epoch = -1
     val_meh_thr = 0.7
     val_trash_thr = 0.3
+    metric_select_fct = gt
     control_weight_factor = weight_factor  # Experiment with different weightings!
     if stop_best_epoch != -1:
         logging.info(f'Will stop after {stop_best_epoch} epochs without improvement')
@@ -201,7 +203,7 @@ def training_loop(img_path_list: Sequence,
     else:
         if ctr_path_list is not None and ctr_path_list != []:
             _, controls_2 = data_loading.match_img_seg_by_names(ctr_path_list, [], None,
-            # _, controls_2 = data_loading.match_img_seg_by_names(ctr_path_list, [], img_pref,
+                                                                # _, controls_2 = data_loading.match_img_seg_by_names(ctr_path_list, [], img_pref,
                                                                 default_label=output_dir)
             controls.update(controls_2)
         else:
@@ -253,13 +255,6 @@ def training_loop(img_path_list: Sequence,
         max_distance = None
         batches_per_epoch = len(train_loader)
         val_batches_per_epoch = len(val_loader)
-        ctr_train_loader = None
-        ctr_val_loader = None
-        if controls_lists:
-            ctr_train_loader, ctr_val_loader = data_loading.create_fold_dataloaders(
-                controls_lists, fold, ctr_img_transforms,
-                ctr_val_img_transforms, batch_size, dataloader_workers
-            )
         """
         Training loop
         """
@@ -270,6 +265,14 @@ def training_loop(img_path_list: Sequence,
         for epoch in range(epoch_num):
             print('-' * 10)
             print(f'epoch {epoch + 1}/{epoch_num}')
+            ctr_train_loader = None
+            ctr_val_loader = None
+            if controls_lists:
+                print('Reshuffling control data')
+                ctr_train_loader, ctr_val_loader = data_loading.create_fold_dataloaders(
+                    controls_lists, fold, ctr_img_transforms,
+                    ctr_val_img_transforms, batch_size, dataloader_workers
+                )
             best_epoch_count = 0
             model.train()
             epoch_loss = 0
@@ -403,7 +406,8 @@ def training_loop(img_path_list: Sequence,
                     ctr_vol = []
                     step = 0
                     pbar = tqdm(val_loader, desc=f'Val[{epoch + 1}] avg_metric:[N/A]')
-                    controls_mean_loss = 1
+                    controls_mean_loss = -1
+                    controls_mean_vol = -1
                     ctr_val_iter = None
                     if ctr_val_loader:
                         ctr_val_iter = iter(ctr_val_loader)
@@ -421,29 +425,35 @@ def training_loop(img_path_list: Sequence,
                             batch_mean_sigmoid = torch.sigmoid(batch_mean)
                             # It's basically torch.mean(torch.sigmoid(normal_logits) > 0.5)
                             controls_vol = utils.volume_metric(batch_mean_sigmoid,
-                                                               sigmoid=False, discrete=True)
-                            controls_loss = torch.mean(batch_mean_sigmoid) * control_weight_factor
+                                                               sigmoid=False, discrete=True).cpu()
+                            controls_loss = torch.mean(batch_mean_sigmoid).cpu() * control_weight_factor
                             ctr_loss += [controls_loss]
                             ctr_vol += [controls_vol]
 
                         outputs = post_trans(outputs)
-                        dice_value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
-                        distance, _ = hausdorff_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
+                        dice_value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :]).cpu()
+                        distance, _ = hausdorff_metric(y_pred=outputs, y=labels[:, :1, :, :, :]).cpu()
                         distance = torch.minimum(distance, max_distance)
-                        loss = val_loss_function(outputs, labels[:, :1, :, :, :])
+                        loss = val_loss_function(outputs, labels[:, :1, :, :, :]).cpu()
                         if val_loss_fct == 'dist':
+                            # In that case we want the distance to be smaller
+                            metric_select_fct = lt
                             metric = distance
                         elif val_loss_fct == 'dist_dice':
-                            metric = distance.to(device) + dice_value.to(device)
-                        else:
-                            # TODO meh!
+                            metric = distance + loss
+                        elif val_loss_fct == 'dice_plus_ctr':
+                            # In that case we want the loss to be smaller
+                            metric_select_fct = lt
+                            # TODO meh?
                             metric = loss + controls_loss
+                        else:
+                            metric = dice_value.item()
 
                         # distance, _ = surface_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
                         # TODO the len(value) thing is really confusing and most likely useless here get rid of it!
                         distance_sum += distance.item() * len(distance)
                         distance_count += len(distance)
-                        
+
                         val_score_list.append(dice_value.item())
                         metric_count += len(dice_value)
                         metric_sum += metric.item() * len(dice_value)
@@ -469,6 +479,9 @@ def training_loop(img_path_list: Sequence,
                     std = np.std(np.array(val_score_list))
                     min_score = np.min(np.array(val_score_list))
                     max_score = np.max(np.array(val_score_list))
+                    if ctr_loss:
+                        controls_mean_loss = torch.mean(torch.tensor(ctr_loss, dtype=torch.float))
+                        controls_mean_vol = torch.mean(torch.tensor(ctr_vol, dtype=torch.float))
 
                     writer.add_scalar('val_mean_metric', mean_metric, epoch + 1)
                     writer.add_scalar('val_distance', distance_sum / distance_count, epoch + 1)
@@ -498,7 +511,7 @@ def training_loop(img_path_list: Sequence,
                         'controls_vol': torch.mean(torch.tensor(ctr_vol), dtype=torch.float),
                         'val_best_mean_metric': 0
                     })
-                    if mean_metric > best_metric:
+                    if metric_select_fct(mean_metric, best_metric):
                         best_metric = mean_metric
                         best_distance = distance_sum / distance_count
                         best_avg_loss = val_mean_loss
@@ -525,7 +538,7 @@ def training_loop(img_path_list: Sequence,
                     str_current_epoch = (
                             f'[Fold: {fold}]Current epoch: {epoch + 1} current mean metric: {mean_metric:.4f}\n'
                             f'and an average distance of [{distance_sum / distance_count}];\n'
-                            f'Controls metric / volume[{controls_mean_loss}] ;\n\n'
+                            f'Controls loss [{controls_mean_loss}] / volume[{controls_mean_vol}] ;\n\n'
                             + str_img_count + str_best_epoch
                     )
                     print(str_current_epoch)
