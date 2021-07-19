@@ -171,7 +171,7 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
     # define dataset, data loader
     print(f'Create validation monai dataset')
     val_ds = Dataset(val_data_list, transform=val_img_transforms)
-    data_loader_checker_first(train_ds, 'validation')
+    # data_loader_checker_first(train_ds, 'validation')
     train_loader = create_training_data_loader(train_ds, batch_size, dataloader_workers)
     val_loader = create_validation_data_loader(val_ds, dataloader_workers=dataloader_workers)
     return train_loader, val_loader
