@@ -430,11 +430,11 @@ def training_loop(img_path_list: Sequence,
                             ctr_loss += [controls_loss]
                             ctr_vol += [controls_vol]
 
-                        outputs = post_trans(outputs)
-                        dice_value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
-                        distance, _ = hausdorff_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
-                        distance = torch.minimum(distance, max_distance)
                         loss = val_loss_function(outputs, labels[:, :1, :, :, :]).cpu()
+                        discrete_outputs = post_trans(outputs)
+                        dice_value, _ = dice_metric(y_pred=discrete_outputs, y=labels[:, :1, :, :, :])
+                        distance, _ = hausdorff_metric(y_pred=discrete_outputs, y=labels[:, :1, :, :, :])
+                        distance = torch.minimum(distance, max_distance)
                         if val_loss_fct == 'dist':
                             # In that case we want the distance to be smaller
                             metric_select_fct = lt
@@ -453,12 +453,12 @@ def training_loop(img_path_list: Sequence,
 
                         # distance, _ = surface_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
                         # TODO the len(value) thing is really confusing and most likely useless here get rid of it!
-                        distance_sum += distance.item() * len(distance)
-                        distance_count += len(distance)
+                        distance_sum += distance.item()
+                        distance_count += 1
 
                         val_dice_list.append(dice_value.item())
-                        metric_count += len(dice_value)
-                        metric_sum += metric.item() * len(dice_value)
+                        metric_count += 1
+                        metric_sum += metric.item()
 
                         loss_list.append(loss.item())
                         if dice_value.item() > val_meh_thr:
@@ -474,7 +474,7 @@ def training_loop(img_path_list: Sequence,
                                 else:
                                     trash_seg_path_count_dict[p] = 0
                             trash_count += 1
-                        pbar.set_description(f'Val[{epoch}] avg_loss:[{metric_sum / metric_count}]')
+                        pbar.set_description(f'Val[{epoch + 1}] avg_loss:[{metric_sum / metric_count}]')
                     mean_metric = metric_sum / metric_count
                     val_mean_loss = np.mean(loss_list)
                     mean_dice = np.mean(np.array(val_dice_list))
