@@ -363,7 +363,7 @@ def training_loop(img_path_list: Sequence,
                 optimizer.step()
                 epoch_loss += loss.item()
                 # PRINTS
-                print(f'[{fold}]{step}/{batches_per_epoch}, train {training_loss_fct} loss: {loss.item():.4f}, ' +
+                print(f'[{fold}]{step}/{batches_per_epoch}, train loss: {loss.item():.4f}, ' +
                       controls_loss_str
                       # f'| tversky_loss: {tversky_function(outputs, y).item():.4f}'
                       # f'| dicefocal: {df_loss(outputs, y).item():.4f}'
@@ -400,7 +400,7 @@ def training_loop(img_path_list: Sequence,
                     trash_seg_paths_list = []
                     if controls_lists:
                         controls_vol = 0
-                    val_score_list = []
+                    val_dice_list = []
                     loss_list = []
                     ctr_loss = []
                     ctr_vol = []
@@ -456,7 +456,7 @@ def training_loop(img_path_list: Sequence,
                         distance_sum += distance.item() * len(distance)
                         distance_count += len(distance)
 
-                        val_score_list.append(dice_value.item())
+                        val_dice_list.append(dice_value.item())
                         metric_count += len(dice_value)
                         metric_sum += metric.item() * len(dice_value)
 
@@ -466,7 +466,7 @@ def training_loop(img_path_list: Sequence,
                         elif dice_value.item() > val_trash_thr:
                             meh_count += 1
                         else:
-                            if best_metric > 0.75:
+                            if epoch > 25:
                                 p = val_data['image_meta_dict']['filename_or_obj'][0]
                                 trash_seg_paths_list.append(p)
                                 if p in trash_seg_path_count_dict:
@@ -477,20 +477,22 @@ def training_loop(img_path_list: Sequence,
                         pbar.set_description(f'Val[{epoch}] avg_loss:[{metric_sum / metric_count}]')
                     mean_metric = metric_sum / metric_count
                     val_mean_loss = np.mean(loss_list)
-                    median = np.median(np.array(val_score_list))
-                    std = np.std(np.array(val_score_list))
-                    min_score = np.min(np.array(val_score_list))
-                    max_score = np.max(np.array(val_score_list))
+                    mean_dice = np.mean(np.array(val_dice_list))
+                    median = np.median(np.array(val_dice_list))
+                    std = np.std(np.array(val_dice_list))
+                    min_score = np.min(np.array(val_dice_list))
+                    max_score = np.max(np.array(val_dice_list))
                     if ctr_loss:
                         controls_mean_loss = torch.mean(torch.tensor(ctr_loss, dtype=torch.float))
                         controls_mean_vol = torch.mean(torch.tensor(ctr_vol, dtype=torch.float))
 
                     writer.add_scalar('val_mean_metric', mean_metric, epoch + 1)
+                    writer.add_scalar('val_mean_dict', mean_dice, epoch + 1)
                     writer.add_scalar('val_distance', distance_sum / distance_count, epoch + 1)
+                    writer.add_scalar('val_mean_loss', val_mean_loss, epoch + 1)
                     writer.add_scalar('trash_img_nb', trash_count, epoch + 1)
                     writer.add_scalar('val_ctr_loss', torch.mean(torch.tensor(ctr_loss), dtype=torch.float), epoch + 1)
                     writer.add_scalar('val_ctr_volume', torch.mean(torch.tensor(ctr_vol), dtype=torch.float), epoch + 1)
-                    writer.add_scalar('val_mean_loss', val_mean_loss, epoch + 1)
                     writer.add_scalar('val_median_metric', median, epoch + 1)
                     writer.add_scalar('val_min_metric', min_score, epoch + 1)
                     writer.add_scalar('val_max_metric', max_score, epoch + 1)
@@ -499,6 +501,7 @@ def training_loop(img_path_list: Sequence,
                     df.loc[epoch + 1] = pd.Series({
                         'avg_train_loss': epoch_loss,
                         'val_mean_metric': mean_metric,
+                        'val_mean_dice': mean_dice,
                         'val_distance': distance_sum / distance_count,
                         'trash_img_nb': trash_count,
                         'val_mean_loss': val_mean_loss,
@@ -513,6 +516,9 @@ def training_loop(img_path_list: Sequence,
                         'controls_vol': torch.mean(torch.tensor(ctr_vol), dtype=torch.float),
                         'val_best_mean_metric': 0
                     })
+                    # TODO maybe find a better way so it would also save the first epoch. Even though it is no big deal
+                    if epoch == 0:
+                        best_metric = mean_metric
                     if metric_select_fct(mean_metric, best_metric):
                         best_metric = mean_metric
                         best_distance = distance_sum / distance_count
