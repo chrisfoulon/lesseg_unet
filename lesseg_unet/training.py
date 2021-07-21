@@ -452,7 +452,7 @@ def training_loop(img_path_list: Sequence,
                             metric_select_fct = lt
                             metric = loss + controls_vol
                         else:
-                            metric = dice_value.item()
+                            metric = dice_value
 
                         # distance, _ = surface_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
                         # TODO the len(value) thing is really confusing and most likely useless here get rid of it!
@@ -492,7 +492,7 @@ def training_loop(img_path_list: Sequence,
                         val_ctr_str = f'Controls loss [{controls_mean_loss}] / volume[{controls_mean_vol}] ;\n\n'
 
                     writer.add_scalar('val_mean_metric', mean_metric, epoch + 1)
-                    writer.add_scalar('val_mean_dict', mean_dice, epoch + 1)
+                    writer.add_scalar('val_mean_dice', mean_dice, epoch + 1)
                     writer.add_scalar('val_mean_loss', val_mean_loss, epoch + 1)
                     writer.add_scalar('val_distance', distance_sum / distance_count, epoch + 1)
                     writer.add_scalar('trash_img_nb', trash_count, epoch + 1)
