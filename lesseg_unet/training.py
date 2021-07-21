@@ -439,14 +439,17 @@ def training_loop(img_path_list: Sequence,
                             # In that case we want the distance to be smaller
                             metric_select_fct = lt
                             metric = distance
-                        elif val_loss_fct == 'dist_dice':
+                        elif val_loss_fct == 'dist_loss':
                             # In that case we want the loss to be smaller
                             metric_select_fct = lt
                             metric = distance + loss
-                        elif val_loss_fct == 'dice_plus_ctr':
+                        elif val_loss_fct == 'dice_ctr_loss':
                             # In that case we want the loss to be smaller
                             metric_select_fct = lt
-                            # TODO meh?
+                            metric = loss + controls_loss
+                        elif val_loss_fct == 'dice_ctr_vol':
+                            # In that case we want the loss to be smaller
+                            metric_select_fct = lt
                             metric = loss + controls_vol
                         else:
                             metric = dice_value.item()
@@ -482,17 +485,19 @@ def training_loop(img_path_list: Sequence,
                     std = np.std(np.array(val_dice_list))
                     min_score = np.min(np.array(val_dice_list))
                     max_score = np.max(np.array(val_dice_list))
+                    val_ctr_str = ''
                     if ctr_loss:
                         controls_mean_loss = torch.mean(torch.tensor(ctr_loss, dtype=torch.float))
                         controls_mean_vol = torch.mean(torch.tensor(ctr_vol, dtype=torch.float))
+                        val_ctr_str = f'Controls loss [{controls_mean_loss}] / volume[{controls_mean_vol}] ;\n\n'
 
                     writer.add_scalar('val_mean_metric', mean_metric, epoch + 1)
                     writer.add_scalar('val_mean_dict', mean_dice, epoch + 1)
-                    writer.add_scalar('val_distance', distance_sum / distance_count, epoch + 1)
                     writer.add_scalar('val_mean_loss', val_mean_loss, epoch + 1)
+                    writer.add_scalar('val_distance', distance_sum / distance_count, epoch + 1)
                     writer.add_scalar('trash_img_nb', trash_count, epoch + 1)
-                    writer.add_scalar('val_ctr_loss', torch.mean(torch.tensor(ctr_loss), dtype=torch.float), epoch + 1)
-                    writer.add_scalar('val_ctr_volume', torch.mean(torch.tensor(ctr_vol), dtype=torch.float), epoch + 1)
+                    writer.add_scalar('val_ctr_loss', controls_mean_loss, epoch + 1)
+                    writer.add_scalar('val_ctr_volume', controls_mean_vol, epoch + 1)
                     writer.add_scalar('val_median_metric', median, epoch + 1)
                     writer.add_scalar('val_min_metric', min_score, epoch + 1)
                     writer.add_scalar('val_max_metric', max_score, epoch + 1)
@@ -530,6 +535,8 @@ def training_loop(img_path_list: Sequence,
                         str_best_epoch = (
                             f'Best epoch {best_metric_epoch} '
                             f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}'
+                            f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
+                            + val_ctr_str
                         )
                         writer.add_scalar('val_best_mean_metric', mean_metric, epoch + 1)
                         df.at[epoch + 1, 'val_best_mean_metric'] = mean_metric
