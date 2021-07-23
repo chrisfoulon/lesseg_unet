@@ -52,17 +52,18 @@ def segmentation_loop(img_path_list: Sequence,
             inputs = val_data['image'].to(device)
             input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
             outputs = model(inputs)
-            # outputs = post_trans(outputs)
+            outputs = post_trans(outputs)
             if original_size:
                 output_dict_data = deepcopy(val_data)
-                val_data['image'] = val_data['image'].to(device)[0]
-                inverted_dict = val_ds.transform.inverse(val_data)
-                output_dict_data['image'] = outputs[0]
+                output_dict_data['image'] = val_data['image'].to(device)[0]
+                output_dict_data['label'] = outputs[0]
                 inverted_output_dict = val_ds.transform.inverse(output_dict_data)
-                inv_inputs = inverted_dict['image']
-                inv_outputs = inverted_output_dict['image']
-                inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy()
-                outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy()
+                inv_inputs = inverted_output_dict['image']
+                inv_outputs = inverted_output_dict['label']
+                inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_inputs, torch.Tensor) \
+                    else inv_inputs[0, :, :, :]
+                outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_outputs, torch.Tensor) \
+                    else inv_outputs[0, :, :, :]
                 # TODO This is slow AF because of the imshow, maybe resetting the plot would work
                 # utils.save_img_lbl_seg_to_png(
                 #     inputs_np, output_dir,
@@ -72,9 +73,11 @@ def segmentation_loop(img_path_list: Sequence,
                     inputs_np, tmp, outputs_np, output_dir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(img_count)))
             else:
-                inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy()
-                outputs_np = outputs[0, 0, :, :, :].cpu().detach().numpy()
-                
+                inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy() if isinstance(inputs, torch.Tensor) \
+                    else inputs[0, :, :, :]
+                outputs_np = outputs[0, 0, :, :, :].cpu().detach().numpy() if isinstance(outputs, torch.Tensor) \
+                    else outputs[0, :, :, :]
+
                 tmp = None
                 utils.save_img_lbl_seg_to_nifti(
                     inputs_np, tmp, outputs_np, output_dir, val_output_affine,
@@ -175,9 +178,12 @@ def validation_loop(img_path_list: Sequence,
             inverted_dict = val_ds.transform.inverse(val_data)
             inv_inputs, inv_labels = inverted_dict['image'], inverted_dict['label']
             inv_outputs = val_ds.transform.inverse(output_dict_data)['label']
-            inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy()
-            labels_np = inv_labels[0, :, :, :].cpu().detach().numpy()
-            outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy()
+            inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_inputs, torch.Tensor) \
+                else inv_inputs[0, :, :, :]
+            labels_np = inv_labels[0, :, :, :].cpu().detach().numpy() if isinstance(inv_labels, torch.Tensor) \
+                else inv_labels[0, :, :, :]
+            outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_outputs, torch.Tensor) \
+                else inv_outputs[0, :, :, :]
             # inputs_np = inv_inputs[0, :, :, :].detach().numpy()
             # labels_np = inv_labels[0, :, :, :].detach().numpy()
             # outputs_np = inv_outputs[0, :, :, :].detach().numpy()

@@ -534,7 +534,6 @@ def training_loop(img_path_list: Sequence,
                         print('saved new best metric model')
                         str_best_epoch = (
                             f'Best epoch {best_metric_epoch} '
-                            f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}'
                             f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
                             + val_ctr_str
                         )

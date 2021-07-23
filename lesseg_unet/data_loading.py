@@ -185,7 +185,7 @@ def init_segmentation(img_path_list: Sequence,
     print('Listing input files to be loaded')
     image_list = [{'image': str(img)} for img in img_path_list if img_pref in Path(img).name]
     print('Create transformations')
-    val_img_transforms = transformations.image_only_transformd(transform_dict)
+    val_img_transforms = transformations.image_only_transformd(transform_dict, training=False)
     print('Create monai dataset')
     train_ds = Dataset(image_list, transform=val_img_transforms)
     return train_ds
