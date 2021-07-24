@@ -1,4 +1,5 @@
 import os
+import json
 from pathlib import Path
 from typing import Sequence, Union
 from copy import deepcopy
@@ -46,13 +47,16 @@ def segmentation_loop(img_path_list: Sequence,
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
     model.eval()
     img_count = 0
+    img_vol_dict = {}
     with torch.no_grad():
         for val_data in tqdm(val_loader, desc=f'Segmentation '):
             img_count += 1
             inputs = val_data['image'].to(device)
-            input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
             outputs = model(inputs)
             outputs = post_trans(outputs)
+            input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
+            vol_output = utils.volume_metric(outputs, False, False)
+            input_filename += f'_v{vol_output}v'
             if original_size:
                 output_dict_data = deepcopy(val_data)
                 output_dict_data['image'] = val_data['image'].to(device)[0]
@@ -69,7 +73,7 @@ def segmentation_loop(img_path_list: Sequence,
                 #     inputs_np, output_dir,
                 #     '{}_segmentation_{}'.format(input_filename, img_count), outputs_np)
                 tmp = None
-                utils.save_img_lbl_seg_to_nifti(
+                output_path_list = utils.save_img_lbl_seg_to_nifti(
                     inputs_np, tmp, outputs_np, output_dir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(img_count)))
             else:
@@ -79,9 +83,13 @@ def segmentation_loop(img_path_list: Sequence,
                     else outputs[0, :, :, :]
 
                 tmp = None
-                utils.save_img_lbl_seg_to_nifti(
+                output_path_list = utils.save_img_lbl_seg_to_nifti(
                     inputs_np, tmp, outputs_np, output_dir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(img_count)))
+
+            img_vol_dict[output_path_list[-1]] = vol_output
+            with open(Path(output_dir, f'output_image_volumes.json'), 'w+') as j:
+                json.dump(img_vol_dict, j, indent=4)
             del inputs
             del outputs
             del inputs_np
@@ -151,6 +159,7 @@ def validation_loop(img_path_list: Sequence,
                           'val_min_dice',
                           'val_max_dice']
     df = pd.DataFrame(columns=perf_measure_names)
+    img_vol_dict = {}
     model.eval()
     with torch.no_grad():
         metric_sum = 0.0
@@ -164,6 +173,8 @@ def validation_loop(img_path_list: Sequence,
             input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
             outputs = model(inputs)
             outputs = post_trans(outputs)
+            vol_output = utils.volume_metric(outputs, False, False)
+            input_filename += f'_v{vol_output}v'
             output_dict_data = deepcopy(val_data)
             value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
             val_score_list.append(value.item())
@@ -194,7 +205,7 @@ def validation_loop(img_path_list: Sequence,
                 # utils.save_img_lbl_seg_to_png(
                 #     inputs_np, trash_val_images_dir,
                 #     '{}_trash_img_{}'.format(input_filename, trash_count), labels_np, outputs_np)
-                utils.save_img_lbl_seg_to_nifti(
+                output_path_list = utils.save_img_lbl_seg_to_nifti(
                     inputs_np, labels_np, outputs_np, trash_val_images_dir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(trash_count)))
             else:
@@ -204,9 +215,10 @@ def validation_loop(img_path_list: Sequence,
                 # utils.save_img_lbl_seg_to_png(
                 #     inputs_np, val_images_dir,
                 #     '{}_validation_{}'.format(input_filename, img_count), labels_np, outputs_np)
-                utils.save_img_lbl_seg_to_nifti(
+                output_path_list = utils.save_img_lbl_seg_to_nifti(
                     inputs_np, labels_np, outputs_np, val_images_dir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(img_count)))
+            img_vol_dict[output_path_list[-1]] = vol_output
         metric = metric_sum / metric_count
         metric_values.append(metric)
         median = np.median(np.array(val_score_list))
@@ -222,5 +234,6 @@ def validation_loop(img_path_list: Sequence,
             'val_max_dice': max_score,
             'val_best_mean_dice': 0
         })
-
+    with open(Path(output_dir, f'output_image_volumes.json'), 'w+') as j:
+        json.dump(img_vol_dict, j, indent=4)
     df.to_csv(Path(output_dir, 'val_perf_measures.csv'), columns=perf_measure_names)

@@ -106,7 +106,7 @@ def training_loop(img_path_list: Sequence,
 
     if dropout is not None and dropout == 0:
         unet_hyper_params['dropout'] = dropout
-    model = net.create_unet_model(device, unet_hyper_params)
+
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     # surface_metric = SurfaceDistanceMetric(include_background=True, reduction="mean", symmetric=True)
     hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean")
@@ -119,7 +119,6 @@ def training_loop(img_path_list: Sequence,
     # loss_function = BCE
     # val_loss_function = BCE
     val_loss_function = DiceLoss(sigmoid=True)
-    optimizer = torch.optim.Adam(model.parameters(), 1e-3)
     # Save training parameters info
     logging.info(f'Abnormal images prefix: {img_pref}')
     logging.info(f'Device: {device}')
@@ -234,6 +233,8 @@ def training_loop(img_path_list: Sequence,
         ctr_val_img_transforms = transformations.image_only_transformd(transform_dict, training=False)
         logging.info(f'Control training loss: mean(sigmoid(outputs)) * {control_weight_factor}')
     for fold in range(folds_number):
+        model = net.create_unet_model(device, unet_hyper_params)
+        optimizer = torch.optim.Adam(model.parameters(), 1e-3)
         if folds_number == 1:
             output_fold_dir = output_dir
         else:
