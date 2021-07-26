@@ -157,3 +157,7 @@ def display_one_output(output_dir, number):
                              stderr=subprocess.PIPE,
                              universal_newlines=True)
     return process
+
+
+def sort_output_images(output_dir, number):
+    print()

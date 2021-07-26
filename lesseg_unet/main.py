@@ -244,6 +244,7 @@ def main():
             if les_list is None:
                 if seg_input_dict:
                     for sub_folder in seg_input_dict:
+                        os.makedirs(Path(output_root, sub_folder), exist_ok=True)
                         segmentation.segmentation_loop(seg_input_dict[sub_folder],
                                                        Path(output_root, sub_folder),
                                                        args.checkpoint,
