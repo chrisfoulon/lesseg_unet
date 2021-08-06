@@ -1,3 +1,5 @@
+import os
+import shutil
 import webbrowser
 import subprocess
 from pathlib import Path
@@ -127,37 +129,70 @@ def plot_seg(img, label=None, seg=None, save_path=None):
     return
 
 
-def display_one_output(output_dir, number):
-    f_list = [p for p in Path(output_dir).iterdir() if is_nifti(p) and re.search(r'_{}.nii'.format(number), p.name)]
-    print(f_list)
-    image = None
-    img_opt = []
+def display_img(img, over1=None, over2=None):
+    data = nib.load(img).get_fdata()
+    img_opt = ['-x', '-c', '-0',
+               '-l', '{:.4f}'.format(np.min(data)), '-h', '{:.4f}'.format(np.max(data)), '-b', '60']
+    # img_opt = ['-x', '-c', '-0', '-l', '0', '-h', '1000', '-b', '60']
     label_opt = []
+    change_dir = True
+    current_dir = os.getcwd()
+    relative_dir = Path(img).parent
+    if over1:
+        change_dir = change_dir and Path(over1).parent == Path(img).parent
+    if over2:
+        change_dir = change_dir and Path(over2).parent == Path(img).parent
+    if change_dir:
+        img = Path(img).name
+        over1 = Path(over1).name if over1 else None
+        over2 = Path(over2).name if over2 else None
+    if over1:
+        label_opt = ['-o', str(over1), '-c', '-1', '-t', '-1']
     seg_opt = []
-    for f in f_list:
-        if 'input' in f.name:
-            image = f
-            data = nib.load(image).get_fdata()
-            img_opt = ['-x', '-c', '-0',
-                       '-l', '{:.4f}'.format(np.min(data)), '-h', '{:.4f}'.format(np.max(data)), '-b', '60']
-            # img_opt = ['-x', '-c', '-0', '-l', '0', '-h', '1000', '-b', '60']
-        if 'label' in f.name:
-            label = f
-            label_opt = ['-o', str(label), '-c', '-1', '-t', '-1']
-        if 'output' in f.name:
-            seg = f
-            seg_opt = ['-o', str(seg), '-c', '-3', '-t', '-1']
-    if image is None:
-        raise ValueError('input image not found')
+    if over2:
+        seg_opt = ['-o', str(over2), '-c', '-3', '-t', '-1']
     mricron_options = img_opt + label_opt + seg_opt
-    mricron_command = ['mricron', str(image)] + mricron_options
+    mricron_command = ['mricron', str(img)] + mricron_options
     print('Mricron command: "{}"'.format(mricron_command))
+    os.chdir(relative_dir)
     process = subprocess.run(mricron_command,
                              stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE,
                              universal_newlines=True)
+    os.chdir(current_dir)
     return process
 
 
-def sort_output_images(output_dir, number):
+def display_one_output(output_dir, number=None, string=None):
+    if number is None and string is None:
+        raise ValueError('Provide either an image number or a string to find')
+    if number is not None:
+        f_list = [p for p in Path(output_dir).iterdir() if is_nifti(p) and re.search(r'_{}.nii'.format(number), p.name)]
+    else:
+        f_list = [p for p in Path(output_dir).iterdir() if is_nifti(p) and string in p.name]
+    img = None
+    label = None
+    seg = None
+    for f in f_list:
+        if 'input' in f.name:
+            img = f
+        if 'label' in f.name:
+            label = f
+        if 'output' in f.name:
+            seg = f
+    if img is None:
+        raise ValueError('input image not found')
+    process = display_img(img, over1=label, over2=seg)
+    return process
+
+
+def sort_output_images(looking_dir, dest_dir, number=None, string=None):
+    if not Path(looking_dir).is_dir():
+        raise ValueError(f'{looking_dir} is not an existing directory')
+    os.makedirs(dest_dir, exist_ok=True)
+    display_one_output(looking_dir, number, string)
+    subfolder_list = []
+    resp = input('Select a subfolder to copy the images into:\n'
+                 f'(Current subfolder list: {subfolder_list}')
+    shutil.copy()
     print()

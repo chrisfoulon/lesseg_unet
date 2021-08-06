@@ -167,18 +167,6 @@ def training_loop(img_path_list: Sequence,
     """
     Measure tracking init
     """
-    # val_images_dir = Path(output_dir, 'val_images')
-    # if not val_images_dir.is_dir():
-    #     val_images_dir.mkdir(exist_ok=True)
-    # trash_val_images_dir = Path(output_dir, 'trash_val_images')
-    # if not trash_val_images_dir.is_dir():
-    #     trash_val_images_dir.mkdir(exist_ok=True)
-    # best_val_images_dir = Path(output_dir, 'best_epoch_val_images')
-    # if not best_val_images_dir.is_dir():
-    #     best_val_images_dir.mkdir(exist_ok=True)
-    # best_trash_images_dir = Path(output_dir, 'best_epoch_val_images')
-    # if not best_trash_images_dir.is_dir():
-    #     best_trash_images_dir.mkdir(exist_ok=True)
     # TODO add the new measures if useful to the csv
     perf_measure_names = ['avg_train_loss',
                           'val_mean_metric',
@@ -243,11 +231,6 @@ def training_loop(img_path_list: Sequence,
         trash_list_path = Path(output_fold_dir, 'trash_images_list.csv')
         if trash_list_path.is_file():
             os.remove(trash_list_path)
-        # TODO outdated
-        # train_ds, val_ds = data_loading.init_training_data(img_path_list, seg_path_list, img_pref,
-        #                                                    transform_dict=transform_dict,
-        #                                                    train_val_percentage=train_val_percentage,
-        #                                                    default_label=default_label)
         train_loader, val_loader = data_loading.create_fold_dataloaders(
             split_lists, fold, train_img_transforms,
             val_img_transforms, batch_size, dataloader_workers
@@ -255,7 +238,7 @@ def training_loop(img_path_list: Sequence,
         output_spatial_size = None
         max_distance = None
         batches_per_epoch = len(train_loader)
-        val_batches_per_epoch = len(val_loader)
+        # val_batches_per_epoch = len(val_loader)
         """
         Training loop
         """
@@ -279,6 +262,12 @@ def training_loop(img_path_list: Sequence,
             epoch_loss = 0
             step = 0
             # for batch_data in tqdm(train_loader, desc=f'training_loop{epoch}'):
+            #     # batch_data = next(iter(train_loader))
+            #     step += 1
+            #     if step > 10:
+            #         break
+            #     inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
+            #     print(f'image min/max : {torch.min(inputs)}/{torch.max(inputs)}')
             # Time test
             # import time
             # # batch_data = next(iter(train_loader))
@@ -339,7 +328,8 @@ def training_loop(img_path_list: Sequence,
                 # labels_controls = None
                 # outputs_controls = None
                 if ctr_train_iter:
-                    batch_data_controls = next(ctr_train_iter)
+                    with torch.no_grad():
+                        batch_data_controls = next(ctr_train_iter)
                     inputs_controls = batch_data_controls['image'].to(device)
                     # labels_controls = torch.zeros_like(inputs_controls).to(device)
                     outputs_controls = model(inputs_controls)
@@ -522,6 +512,12 @@ def training_loop(img_path_list: Sequence,
                         'controls_vol': torch.mean(torch.tensor(ctr_vol), dtype=torch.float),
                         'val_best_mean_metric': 0
                     })
+                    str_img_count = (
+                            f'Trash (<{val_trash_thr}|'.rjust(12, ' ') +
+                            f'Meh (<{val_meh_thr})|'.rjust(12, ' ') + f'Good\n'.rjust(12, ' ') +
+                            f'{trash_count}|'.rjust(12, ' ') + f'{meh_count}|'.rjust(12, ' ') +
+                            f'{img_count}'.rjust(12, ' ') + '\n\n'
+                    )
                     # TODO maybe find a better way so it would also save the first epoch. Even though it is no big deal
                     if epoch == 0:
                         best_metric = mean_metric
@@ -536,7 +532,8 @@ def training_loop(img_path_list: Sequence,
                         str_best_epoch = (
                             f'Best epoch {best_metric_epoch} '
                             f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
-                            + val_ctr_str
+                            + val_ctr_str + 'Img count of best epoch: \n'
+                            + str_img_count
                         )
                         writer.add_scalar('val_best_mean_metric', mean_metric, epoch + 1)
                         df.at[epoch + 1, 'val_best_mean_metric'] = mean_metric
@@ -544,12 +541,6 @@ def training_loop(img_path_list: Sequence,
                             with open(trash_list_path, 'a+') as f:
                                 f.write(','.join([str(epoch + 1)] + trash_seg_paths_list) + '\n')
                     best_epoch_count = epoch + 1 - best_metric_epoch
-                    str_img_count = (
-                            f'Trash (<{val_trash_thr}|'.rjust(12, ' ') +
-                            f'Meh (<{val_meh_thr})|'.rjust(12, ' ') + f'Good\n'.rjust(12, ' ') +
-                            f'{trash_count}|'.rjust(12, ' ') + f'{meh_count}|'.rjust(12, ' ') +
-                            f'{img_count}'.rjust(12, ' ') + '\n\n'
-                    )
                     str_current_epoch = (
                             f'[Fold: {fold}]Current epoch: {epoch + 1} current mean metric: {mean_metric:.4f}\n'
                             f'and an average distance of [{distance_sum / distance_count}];\n'
@@ -564,6 +555,7 @@ def training_loop(img_path_list: Sequence,
                             print(f'More than {stop_best_epoch} without improvement')
                             df.to_csv(Path(output_fold_dir, 'perf_measures.csv'), columns=perf_measure_names)
                             print(f'train completed, best_metric: {best_metric:.4f} at epoch: {best_metric_epoch}')
+                            logging.info(str_best_epoch)
                             writer.close()
                             break
                     # utils.save_checkpoint(model, epoch + 1, optimizer, output_dir)
@@ -571,4 +563,5 @@ def training_loop(img_path_list: Sequence,
         with open(Path(output_fold_dir, f'trash_img_count_dict_{fold}.json'), 'w+') as j:
             json.dump(trash_seg_path_count_dict, j, indent=4)
         print(f'train completed, best_metric: {best_metric:.4f} at epoch: {best_metric_epoch}')
+        logging.info(str_best_epoch)
         writer.close()

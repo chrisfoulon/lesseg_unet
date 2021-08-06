@@ -73,6 +73,16 @@ class TorchPadMode(Enum):
     REFLECT = "reflect"
 
 
+def get_data_and_pkg(data, detach=True):
+    if isinstance(data, np.ndarray):
+        return data, np
+    if isinstance(data, torch.Tensor):
+        if detach:
+            data = data.detach()
+        return data, torch
+    raise TypeError('The data does not have the right type. It should either be a numpy array or a torch Tensor')
+
+
 def create_gradient(img_spatial_size, low=-1, high=1):
     x = np.linspace(low, high, img_spatial_size[0])
     y = np.linspace(low, high, img_spatial_size[1])
@@ -428,68 +438,114 @@ class MyNormalizeIntensity(Transform):
     be the number of image channels if they are not None.
 
     Args:
-        subtrahend: the amount to subtract by (usually the mean).
-        divisor: the amount to divide by (usually the standard deviation).
+        out_min_max
+        clamp_quantile
         nonzero: whether only normalize non-zero values.
-        channel_wise: if using calculated mean and std, calculate on each channel separately
-            or calculate on the entire image directly.
-        dtype: output data type, defaults to float32.
+        dtype: str
+            output data type, defaults to float32.
+        in_min_max
     """
 
     def __init__(
         self,
-        subtrahend: Union[Sequence, torch.Tensor, None] = None,
-        divisor: Union[Sequence, torch.Tensor, None] = None,
+        out_min_max: Union[float, Tuple[float, float]] = None,
+        clamp_quantile: Tuple[float, float] = None,
         nonzero: bool = False,
-        channel_wise: bool = False,
-        dtype: torch.dtype = torch.float32,
+        dtype: str = 'float32',
+        in_min_max: Union[float, Tuple[float, float]] = None,
     ) -> None:
-        self.subtrahend = subtrahend
-        self.divisor = divisor
+        self.in_min_max = in_min_max
+        if in_min_max is not None:
+            if len(self.in_min_max) == 2:
+                self.out_min = self.in_min_max[0]
+                self.out_max = self.in_min_max[1]
+            else:
+                raise ValueError('in_min_max must be either a len 2 Tuple')
+        self.clamp_quantile = clamp_quantile
+        if clamp_quantile is not None:
+            if not (0 <= clamp_quantile[0] <= 1) or not (0 <= clamp_quantile[1] <= 1):
+                raise ValueError('Clamping quantile values must be between 0 and 1')
+        self.out_min_max = out_min_max
+        if out_min_max is not None:
+            if isinstance(self.out_min_max, float):
+                self.out_min = -self.out_min_max
+                self.out_max = self.out_min_max
+            elif len(self.out_min_max) == 2:
+                # if self.out_min_max[0] > self.out_min_max[1]:
+                #     raise ValueError('First element of out_min_max range must be lesser or equal than the second one')
+                self.out_min = self.out_min_max[0]
+                self.out_max = self.out_min_max[1]
+            else:
+                raise ValueError('out_min_max must be either a len 2 Tuple or a float')
         self.nonzero = nonzero
-        self.channel_wise = channel_wise
-        self.dtype = dtype
+        self._dtype = dtype
 
-    def _normalize(self, img: torch.Tensor, sub=None, div=None) -> torch.Tensor:
-        slices = (img != 0) if self.nonzero else torch.ones(img.shape, dtype=torch.bool)
+    def _normalize(self, img: Union[torch.Tensor, np.ndarray]) -> Union[torch.Tensor, np.ndarray]:
+        img, pkg = get_data_and_pkg(img)
+        slices = (img != 0) if self.nonzero else pkg.ones(img.shape, dtype=pkg.bool)
         # print(f'slices : {slices.shape}')
-        if not torch.any(slices):
+        if not pkg.any(slices):
             return img
 
-        _sub = sub if sub is not None else torch.mean(img[slices])
-        if _sub.shape != torch.Size([]):
-            _sub = _sub[slices]
-
-        _div = div if div is not None else torch.std(img[slices])
-        if _div.shape == torch.Size([]):
-            if _div == 0.0:
-                _div = 1.0
-        elif isinstance(_div, torch.Tensor):
-            _div = _div[slices]
-            _div[_div == 0.0] = 1.0
+        _sub = pkg.mean(img[slices])
+        if pkg == np:
+            _div = pkg.std(img[slices])
+        else:
+            # torch std is applying a correction that numpy does not. Disabling it to get the same results between the 2
+            _div = pkg.std(img[slices], unbiased=False)
+        if _div == 0.0:
+            _div = 1.0
         img[slices] = (img[slices] - _sub) / _div
         return img
 
+    def _clamp(self, img):
+        img, pkg = get_data_and_pkg(img)
+        if isinstance(img, np.ndarray):
+            cutoff = pkg.quantile(img, self.clamp_quantile)
+        else:
+            cutoff = pkg.quantile(img, torch.tensor(self.clamp_quantile, device=img.device))
+        pkg.clip(img, *cutoff, out=img)
+
+    def _rescale(
+            self,
+            img: Union[torch.Tensor, np.ndarray]
+    ) -> torch.Tensor:
+        array, pkg = get_data_and_pkg(img)
+        if self.in_min_max is None:
+            in_min, in_max = pkg.min(array), pkg.max(array)
+        else:
+            in_min, in_max = self.in_min_max
+        array -= in_min
+        in_range = in_max - in_min
+        if in_range == 0:
+            message = (
+                f'Rescaling image not possible'
+                ' due to division by zero (the image contains only one value)'
+            )
+            logging.warning(message)
+            return img
+        array /= in_range
+        out_range = self.out_max - self.out_min
+        array *= out_range
+        array += self.out_min
+        return torch.as_tensor(array)
+
     def __call__(self, img: torch.Tensor) -> torch.Tensor:
         """
-        Apply the transform to `img`, assuming `img` is a channel-first array if `self.channel_wise` is True,
+        Apply the transform to `img`
         """
-        if self.channel_wise:
-            if self.subtrahend is not None and len(self.subtrahend) != len(img):
-                raise ValueError(f"img has {len(img)} channels, but subtrahend has {len(self.subtrahend)} components.")
-            if self.divisor is not None and len(self.divisor) != len(img):
-                raise ValueError(f"img has {len(img)} channels, but divisor has {len(self.divisor)} components.")
-
-            for i, d in enumerate(img):
-                img[i] = self._normalize(
-                    d,
-                    sub=self.subtrahend[i] if self.subtrahend is not None else None,
-                    div=self.divisor[i] if self.divisor is not None else None,
-                )
+        img, pkg = get_data_and_pkg(img)
+        self.dtype = getattr(pkg, self._dtype)
+        if self.clamp_quantile is not None:
+            self._clamp(img)
+        img = self._normalize(img)
+        if self.out_min_max is not None:
+            self._rescale(img)
+        if isinstance(img, torch.Tensor):
+            img = torch.as_tensor(img, dtype=self.dtype)
         else:
-            img = self._normalize(img, self.subtrahend, self.divisor)
-
-        return torch.as_tensor(img, dtype=self.dtype)
+            img = np.asarray(img, dtype=self.dtype)
+        return img
 
 
 class MyNormalizeIntensityd(MapTransform):
@@ -501,11 +557,7 @@ class MyNormalizeIntensityd(MapTransform):
     Args:
         keys: keys of the corresponding items to be transformed.
             See also: monai.transforms.MapTransform
-        subtrahend: the amount to subtract by (usually the mean)
-        divisor: the amount to divide by (usually the standard deviation)
         nonzero: whether only normalize non-zero values.
-        channel_wise: if using calculated mean and std, calculate on each channel separately
-            or calculate on the entire image directly.
         dtype: output data type, defaults to float32.
         allow_missing_keys: don't raise exception if key is missing.
     """
@@ -513,15 +565,15 @@ class MyNormalizeIntensityd(MapTransform):
     def __init__(
         self,
         keys: KeysCollection,
-        subtrahend: Optional[torch.Tensor] = None,
-        divisor: Optional[torch.Tensor] = None,
+        out_min_max: Union[float, Tuple[float, float]] = None,
+        clamp_quantile: Tuple[float, float] = None,
         nonzero: bool = False,
-        channel_wise: bool = False,
-        dtype: DtypeLike = torch.float32,
+        dtype: str = 'float32',
+        in_min_max: Union[float, Tuple[float, float]] = None,
         allow_missing_keys: bool = False,
     ) -> None:
         super().__init__(keys, allow_missing_keys)
-        self.normalizer = MyNormalizeIntensity(subtrahend, divisor, nonzero, channel_wise, dtype)
+        self.normalizer = MyNormalizeIntensity(out_min_max, clamp_quantile, nonzero, dtype, in_min_max)
 
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Dict[Hashable, torch.Tensor]:
         d = dict(data)
