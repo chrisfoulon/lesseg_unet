@@ -370,7 +370,8 @@ curated_dict = {
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (-1, 1),
-            'clamp_quantile': (.01, .99)}
+            # 'clamp_quantile': (.01, .99)
+            }
          },
         # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE Binarize'}},
