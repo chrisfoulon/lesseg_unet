@@ -1144,7 +1144,7 @@ def segmentation_val_transformd(hyper_param_dict=None):
     return val_transd
 
 
-def image_only_transformd(hyper_param_dict=None, training=True):
+def image_only_transformd(hyper_param_dict=None, training=True, add_clamping=True):
     if hyper_param_dict is None:
         hyper_param_dict = hyper_dict
     setup_coord_conv(hyper_param_dict)
@@ -1155,6 +1155,12 @@ def image_only_transformd(hyper_param_dict=None, training=True):
         seg_tr_dict[li] = []
         for di in hyper_param_dict[li]:
             for tr in di:
+                # TODO make it cleaner!
+                if tr == 'MyNormalizeIntensityd':
+                    if add_clamping and 'clamp_quantile' not in di[tr]:
+                        new_tr = deepcopy(di)
+                        new_tr[tr]['clamp_quantile'] = (.01, .99)
+                        seg_tr_dict[li].append(new_tr)
                 keys_key = 'keys'
                 if 'keys' not in di[tr]:
                     keys_key = 'include'

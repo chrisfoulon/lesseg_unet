@@ -84,7 +84,8 @@ def training_loop(img_path_list: Sequence,
                   val_loss_fct='dice',
                   weight_factor=1,
                   folds_number=1,
-                  dropout=0):
+                  dropout=0,
+                  save_every_decent_best_epoch=True):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -261,12 +262,22 @@ def training_loop(img_path_list: Sequence,
             model.train()
             epoch_loss = 0
             step = 0
+            # testing
+            # val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
             # for batch_data in tqdm(train_loader, desc=f'training_loop{epoch}'):
             #     # batch_data = next(iter(train_loader))
             #     step += 1
             #     if step > 10:
             #         break
             #     inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
+            #
+            #     inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy() if isinstance(inputs, torch.Tensor) \
+            #         else inputs[0, :, :, :]
+            #     labels_np = labels[0, 0, :, :, :].cpu().detach().numpy() if isinstance(labels, torch.Tensor) \
+            #         else labels[0, :, :, :]
+            #     output_path_list = utils.save_img_lbl_seg_to_nifti(
+            #         inputs_np, labels_np, None, output_dir, val_output_affine,
+            #         'input_test_{}'.format(str(step)))
             #     print(f'image min/max : {torch.min(inputs)}/{torch.max(inputs)}')
             # Time test
             # import time
@@ -526,8 +537,12 @@ def training_loop(img_path_list: Sequence,
                         best_distance = distance_sum / distance_count
                         best_avg_loss = val_mean_loss
                         best_metric_epoch = epoch + 1
+                        epoch_suffix = ''
+                        if save_every_decent_best_epoch:
+                            if mean_dice > 0.75:
+                                epoch_suffix = str(epoch)
                         utils.save_checkpoint(model, epoch + 1, optimizer, output_fold_dir,
-                                              'best_metric_model_segmentation3d_array_epo.pth')
+                                              f'best_metric_model_segmentation3d_epo_{epoch_suffix}.pth')
                         print('saved new best metric model')
                         str_best_epoch = (
                             f'Best epoch {best_metric_epoch} '

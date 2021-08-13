@@ -4,6 +4,7 @@ import webbrowser
 import subprocess
 from pathlib import Path
 import re
+from tqdm import tqdm
 
 import numpy as np
 import nibabel as nib
@@ -186,13 +187,33 @@ def display_one_output(output_dir, number=None, string=None):
     return process
 
 
-def sort_output_images(looking_dir, dest_dir, number=None, string=None):
-    if not Path(looking_dir).is_dir():
-        raise ValueError(f'{looking_dir} is not an existing directory')
+def sort_output_images(files, dest_dir, labels=None, tmp_copy=True):
     os.makedirs(dest_dir, exist_ok=True)
-    display_one_output(looking_dir, number, string)
+    tmp_dir = None
+    if tmp_copy:
+        tmp_dir = Path(dest_dir, 'tmp')
+        os.makedirs(tmp_dir, exist_ok=True)
     subfolder_list = []
-    resp = input('Select a subfolder to copy the images into:\n'
-                 f'(Current subfolder list: {subfolder_list}')
-    shutil.copy()
-    print()
+    for i, file in tqdm(enumerate(files)):
+        if tmp_dir:
+            tmp_f = Path(tmp_dir, Path(file).name)
+            shutil.copy(file, tmp_f)
+            file = tmp_f
+        if labels is not None:
+            label = labels[i]
+            if tmp_dir:
+                tmp_f = Path(tmp_dir, Path(label).name)
+                shutil.copy(label, tmp_f)
+                label = tmp_f
+        else:
+            label = None
+        display_img(file, label)
+        resp = input('Select a subfolder to copy the images into:\n'
+                     f'(Current subfolder list: {subfolder_list}\n')
+        if resp not in subfolder_list:
+            subfolder_list.append(resp)
+            os.makedirs(Path(dest_dir, resp), exist_ok=True)
+        shutil.copy(file, Path(dest_dir, resp, Path(file).name))
+        if label is not None:
+            shutil.copy(label, Path(dest_dir, resp, Path(label).name))
+        print(f'Image writen in {Path(dest_dir, resp)}')
