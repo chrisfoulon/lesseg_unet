@@ -1144,7 +1144,7 @@ def segmentation_val_transformd(hyper_param_dict=None):
     return val_transd
 
 
-def image_only_transformd(hyper_param_dict=None, training=True, add_clamping=False):
+def image_only_transformd(hyper_param_dict=None, training=True, add_clamping=True):
     if hyper_param_dict is None:
         hyper_param_dict = hyper_dict
     setup_coord_conv(hyper_param_dict)

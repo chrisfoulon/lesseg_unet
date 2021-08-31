@@ -38,7 +38,7 @@ def main():
     control_paths_group.add_argument('-ctr', '--controls_path', type=str,
                                      help='folder containing the control images (image_prefix not applied)')
     control_paths_group.add_argument('-lctr', '--controls_list', type=str,
-                                     help='paths list to the control images (image_prefix not applied)')
+                                     help='file path of the list of control images (image_prefix not applied)')
     parser.add_argument('-trs', '--transform_dict', type=str,
                                      help='file path to a json dictionary of transformations')
     parser.add_argument('-lfct', '--loss_function', type=str, default='dice',
