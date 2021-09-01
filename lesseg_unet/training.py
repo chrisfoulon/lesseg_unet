@@ -312,7 +312,6 @@ def training_loop(img_path_list: Sequence,
                     output_spatial_size = inputs.shape
                     max_distance = torch.as_tensor(
                         [torch.linalg.norm(torch.as_tensor(output_spatial_size, dtype=torch.float16))])
-                print(model.model.state_dict()['0.conv.unit0.conv.weight'].type())
                 outputs = model(inputs)
                 # TODO smoothing?
                 y = labels[:, :1, :, :, :]
