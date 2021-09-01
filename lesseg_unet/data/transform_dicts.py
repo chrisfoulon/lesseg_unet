@@ -487,6 +487,8 @@ curated_dict = {
             'keys': ['image'],
             'out_min_max': (-1, 1)}
          },
+        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'THE END'}},
     ]
 }
 

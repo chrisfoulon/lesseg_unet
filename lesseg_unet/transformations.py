@@ -228,9 +228,9 @@ class CoordConv(Transform):
             img = create_gradient(img.shape[1:])
         else:
             if isinstance(img, np.ndarray):
-                img = np.concatenate((img, self.gradients), 0)
+                img = np.concatenate((img, self.gradients), 0).astype(np.float32)
             else:
-                img = torch.cat([img, self.gradients], dim=0)
+                img = torch.cat([img, self.gradients], dim=0).type(torch.float32)
         return img
 
 
