@@ -11,11 +11,12 @@ import monai
 from monai.data import list_data_collate, DataLoader
 from monai.data import Dataset
 from monai.data.utils import partition_dataset
-from lesseg_unet import transformations
+from lesseg_unet import transformations, utils
 
 
 def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
-                           img_pref: str = None, default_label=None, sep_controls=True) -> (dict, dict):
+                           img_pref: str = None, default_label=None, sep_controls=True,
+                           check_inputs=True) -> (dict, dict):
     create_default_label = False
     if default_label is not None:
         if Path(default_label).is_dir():
@@ -61,6 +62,10 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
         print(f'First image and label in img_dict: {img_dict[list(img_dict.keys())[0]]}')
     if controls:
         print('Number of controls: {}'.format(len(controls)))
+    if check_inputs:
+        utils.check_inputs(img_dict)
+        utils.check_inputs(controls)
+        print('The inputs passed the checks')
     return img_dict, controls
 
 

@@ -90,7 +90,7 @@ def training_loop(img_path_list: Sequence,
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
-
+    check_files_exist = True
     # val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
     # checking is CoordConv is used and change the input channel dimension
     unet_hyper_params = net.default_unet_hyper_params

@@ -161,6 +161,17 @@ def create_output_dict(output_dir, split_string='_segmentation', reference_centr
 
 
 def get_big_seg(output_dict, vox_nb_thr=80):
+    """
+    Return the paths of the segmentations with more than vox_nb_thr voxels
+    Parameters
+    ----------
+    output_dict
+    vox_nb_thr
+
+    Returns
+    -------
+
+    """
     return np.random.choice(
         [k for k in output_dict if np.count_nonzero(nib.load(output_dict[k]['output']).get_fdata()) > vox_nb_thr])
 
@@ -228,3 +239,56 @@ def volume_metric(img, sigmoid=True, discrete=True):
     if discrete:
         img = monai.transforms.AsDiscrete(threshold_values=True)(img)
     return len(img[torch.where(img)])
+
+
+def check_inputs(inputs, img_string=None, min_file_size=300):
+    """
+
+    Parameters
+    ----------
+    inputs
+    img_string
+    min_file_size : int
+        default == 300B which is lower than an empty image with just a nifti header
+
+    Returns
+    -------
+
+    """
+    if isinstance(inputs, list):
+        if img_string is None:
+            img_string = 'control'
+        for img in inputs:
+            if not Path(img).is_file():
+                raise ValueError(f'The {img_string} image [{img}] does not exist')
+            if Path(img).stat().st_size <= min_file_size:
+                raise ValueError(f'The {img_string} image [{img}] has a size of zero')
+            try:
+                nib.load(img)
+            except Exception as e:
+                print(f'The {img_string} image [{img}] cannot be loaded. See Exception:')
+                raise e
+    elif isinstance(inputs, dict):
+        if img_string is None:
+            img_string = 'input'
+        for img in inputs:
+            if not Path(img).is_file():
+                raise ValueError(f'The {img_string} image [{img}] does not exist')
+            if Path(img).stat().st_size <= min_file_size:
+                raise ValueError(f'The {img_string} image [{img}] has a size of zero')
+            if not Path(inputs[img]).is_file():
+                raise ValueError(f'The {img_string} label [{inputs[img]}] does not exist')
+            if Path(img).stat().st_size <= min_file_size:
+                raise ValueError(f'The {img_string} label [{inputs[img]}] has a size of zero')
+            try:
+                nib.load(img)
+            except Exception as e:
+                print(f'The {img_string} image [{img}] cannot be loaded. See Exception:')
+                raise e
+            try:
+                nib.load(inputs[img])
+            except Exception as e:
+                print(f'The {img_string} label [{inputs[img]}] cannot be loaded. See Exception:')
+                raise e
+    else:
+        raise ValueError('inputs must either be a list of paths or a dict of {image_paths: label_paths}')
