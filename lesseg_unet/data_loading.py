@@ -10,24 +10,19 @@ import torch
 import monai
 from monai.data import list_data_collate, DataLoader
 from monai.data import Dataset
-from monai.data.utils import partition_dataset
 from lesseg_unet import transformations, utils
 
 
 def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
-                           img_pref: str = None, default_label=None, sep_controls=True,
-                           check_inputs=True) -> (dict, dict):
-    create_default_label = False
-    if default_label is not None:
-        if Path(default_label).is_dir():
-            create_default_label = True
-        else:
-            if not Path(default_label).is_file():
-                raise ValueError('fill_up_empty_labels must be an existing nifti file ')
-    controls = None
-    # TODO separate controls and img
-    if sep_controls:
-        controls = {}
+                           img_pref: str = None, check_inputs=True) -> (dict, dict):
+    # create_default_label = False
+    # if default_label is not None:
+    #     if Path(default_label).is_dir():
+    #         create_default_label = True
+    #     else:
+    #         if not Path(default_label).is_file():
+    #             raise ValueError('fill_up_empty_labels must be an existing nifti file ')
+    controls = []
     img_dict = {}
     no_match = False
     if img_pref is not None and img_pref != '':
@@ -38,25 +33,13 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
         else:
             matching_les_list = [str(les) for les in seg_path_list if Path(img).name in Path(les).name]
         if len(matching_les_list) == 0:
-            if default_label is None:
-                raise ValueError('No matching seg file found for {}'.format(img))
-            else:
-                if create_default_label:
-                    default_label = Path(default_label, 'default_label.nii')
-                    nii = nib.load(img)
-                    nib.save(nib.Nifti1Image(np.zeros(nii.shape), nii.affine), default_label)
-                    create_default_label = False
-                no_match = True
-                if sep_controls:
-                    controls[img] = str(default_label)
-                else:
-                    img_dict[img] = str(default_label)
+            controls.append(img)
         elif len(matching_les_list) > 1:
             raise ValueError('Multiple matching seg file found for {}'.format(img))
         else:
             img_dict[img] = matching_les_list[0]
     if no_match:
-        print(f'Some images did not have a label so it has been replaced with {default_label}')
+        print(f'Some images did not have a label ({len(controls)} they have been added to the controls list')
     print('Number of images: {}'.format(len(img_dict)))
     if img_dict:
         print(f'First image and label in img_dict: {img_dict[list(img_dict.keys())[0]]}')
@@ -70,9 +53,8 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
 
 
 def create_file_dict_lists(raw_img_path_list: Sequence, raw_seg_path_list: Sequence,
-                           img_pref: str = None, train_val_percentage: float = 75,
-                           default_label: Union[str, os.PathLike] = None) -> Tuple[list, list]:
-    img_dict, _ = match_img_seg_by_names(raw_img_path_list, raw_seg_path_list, img_pref, default_label)
+                           img_pref: str = None, train_val_percentage: float = 75) -> Tuple[list, list]:
+    img_dict, _ = match_img_seg_by_names(raw_img_path_list, raw_seg_path_list, img_pref)
     training_end_index = math.ceil(train_val_percentage / 100 * len(img_dict))
     full_file_list = [{'image': str(img), 'label': str(img_dict[img])} for img in img_dict]
     train_files = full_file_list[:training_end_index]
@@ -123,11 +105,10 @@ def init_training_data(
         seg_path_list: Sequence,
         img_pref: str = None,
         transform_dict: dict = None,
-        train_val_percentage: float = 75,
-        default_label: Union[str, os.PathLike] = None) -> Tuple[monai.data.Dataset, monai.data.Dataset]:
+        train_val_percentage: float = 75) -> Tuple[monai.data.Dataset, monai.data.Dataset]:
     print('Listing input files to be loaded')
     train_files, val_files = create_file_dict_lists(img_path_list, seg_path_list, img_pref,
-                                                    train_val_percentage, default_label)
+                                                    train_val_percentage)
     print('Create transformations')
     train_img_transforms = transformations.segmentation_train_transformd(transform_dict)
     val_img_transforms = transformations.segmentation_val_transformd(transform_dict)

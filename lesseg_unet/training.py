@@ -79,7 +79,6 @@ def training_loop(img_path_list: Sequence,
                   train_val_percentage=80,
                   label_smoothing=False,
                   stop_best_epoch=-1,
-                  default_label=None,
                   training_loss_fct='dice',
                   val_loss_fct='dice',
                   weight_factor=1,
@@ -90,7 +89,7 @@ def training_loop(img_path_list: Sequence,
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
-    check_files_exist = True
+    logging.info(f'Torch device used for this training: {str(device)}')
     # val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
     # checking is CoordConv is used and change the input channel dimension
     unet_hyper_params = net.default_unet_hyper_params
@@ -179,27 +178,24 @@ def training_loop(img_path_list: Sequence,
                           'val_best_mean_metric']
     df = pd.DataFrame(columns=perf_measure_names)
     # Gather data
-    img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, seg_path_list, img_pref, default_label)
+    img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, seg_path_list, img_pref)
 
-    # If the default_label option is used, we try to find controls images and create a second set of datasets and a
-    # second set of loaders
-    if default_label is not None:
-        if ctr_path_list is not None and ctr_path_list != []:
-            # _, controls_2 = data_loading.match_img_seg_by_names(img_path_list, [], img_pref, default_label)
-            _, controls_2 = data_loading.match_img_seg_by_names(ctr_path_list, [], None, default_label)
-            controls.update(controls_2)
+    # # If the default_label option is used, we try to find controls images and create a second set of datasets and a
+    # # second set of loaders
+    # if default_label is not None:
+    #     if ctr_path_list is not None and ctr_path_list != []:
+    #         # _, controls_2 = data_loading.match_img_seg_by_names(img_path_list, [], img_pref, default_label)
+    #         _, controls_2 = data_loading.match_img_seg_by_names(ctr_path_list, [], None, default_label)
+    #         controls.update(controls_2)
+    # else:
+    if ctr_path_list is not None and ctr_path_list != []:
+        _, controls_2 = data_loading.match_img_seg_by_names(ctr_path_list, [], None)
+        controls += controls_2
     else:
-        if ctr_path_list is not None and ctr_path_list != []:
-            _, controls_2 = data_loading.match_img_seg_by_names(ctr_path_list, [], None,
-                                                                # _, controls_2 = data_loading.match_img_seg_by_names(ctr_path_list, [], img_pref,
-                                                                default_label=output_dir)
-            controls.update(controls_2)
-        else:
-            # If default_label is not given, it is not intended to have unmatched images, thus we throw an error
-            # if some images don't have a match
-            if controls:
-                raise ValueError('The default label for controls was not given but some images do not have a '
-                                 'matched lesion')
+        # If default_label is not given, it is not intended to have unmatched images, thus we throw an error
+        # if some images don't have a match
+        if controls:
+            raise ValueError('Not control file list provided but images with missing labels found')
 
     split_lists = utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage)
     logging.info('Initialisation of the training transformations')

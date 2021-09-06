@@ -27,8 +27,8 @@ def main():
                                    help='[Segmentation only] The path to a json dict containing the keys of the '
                                         'different populations (subfolder names) with the list of images paths'
                                         '[Cannot be used for Validation]')
-    # Hidden param, do not use
-    nifti_paths_group.add_argument('-bm', '--benchmark', action='store_true', help=argparse.SUPPRESS)
+    # # Hidden param, do not use
+    # nifti_paths_group.add_argument('-bm', '--benchmark', action='store_true', help=argparse.SUPPRESS)
     lesion_paths_group = parser.add_mutually_exclusive_group(required=False)
     lesion_paths_group.add_argument('-lp', '--lesion_input_path', type=str,
                                     help='Root folder of the b1000 dataset')
@@ -45,7 +45,6 @@ def main():
                         help='Loss function used for training')
     parser.add_argument('-wf', '--weight_factor', type=float, default=1,
                         help='Multiply the control loss by this factor')
-    # TODO add it to the validation pipeline
     parser.add_argument('-vlfct', '--val_loss_function', type=str, default='dice',
                         help='Loss function used for validation')
     default_label_group = parser.add_mutually_exclusive_group(required=False)
@@ -83,193 +82,150 @@ def main():
         stop_best_epoch = -1
     else:
         stop_best_epoch = args.stop_best_epoch
-    if args.benchmark:
-        output_root = Path(args.output)
-        os.makedirs(output_root, exist_ok=True)
-        if not output_root.is_dir():
-            raise ValueError('{} is not an existing directory and could not be created'.format(output_root))
-        param_dict = {
-            '-o': output_root,
-            '-p': '/media/chrisfoulon/DATA1/z_Zetas/a_pre_processing_lesions_fil_norm/',
-            '-lp': '/media/chrisfoulon/DATA1/z_Zetas/w_les_2mm_H25_kde_zeta/',
-            # '-p': '/data/UCL_Data/a_pre_processing_lesions_fil_norm/',
-            # '-lp': '/data/UCL_Data/w_les_2mm_H25_kde_zeta/',
-            '-nw': 16,
-            '-pref': 'wodctH25_b1000',
-            '-ne': 2000,
-        }
-        value_dict = {
-            '-trs': ['minimal_hyper_dict', 'minimal_hyper_dict_cc', 'full_hyper_dict', 'full_hyper_dict_cc',
-                     'new_full_dict_cc'],
-            '-o': ['minimal', 'minimal_cc', 'full', 'full_cc', 'new_full_dict_cc']
-        }
-        img_list = utils.create_input_path_list_from_root(param_dict['-p'])
-        les_list = utils.create_input_path_list_from_root(param_dict['-lp'])
-        b1000_pref = param_dict['-pref']
-        if args.label_smoothing is None:
-            args.label_smoothing = False
-        for ind, tr_dict in enumerate(value_dict['-trs']):
-            transform_dict = getattr(tr_dicts, tr_dict)
-            output_dir = Path(output_root, value_dict['-o'][ind])
-            checkpoint = Path(output_dir, 'best_metric_model_segmentation3d_array_epo.pth')
-            if args.checkpoint is None:
-                if not checkpoint.is_file():
-                    training.training_loop(img_list, les_list, output_dir, b1000_pref,
-                                           transform_dict=transform_dict,
-                                           epoch_num=param_dict['-ne'],
-                                           dataloader_workers=param_dict['-nw'],
-                                           label_smoothing=False,
-                                           stop_best_epoch=stop_best_epoch,
-                                           default_label=args.default_label,
-                                           training_loss_fct=args.loss_function,
-                                           val_loss_fct=args.val_loss_function,
-                                           folds_number=args.folds_number,
-                                           weight_factor=args.weight_factor,
-                                           dropout=args.dropout)
-            else:
-                segmentation.validation_loop(img_list, les_list,
-                                             output_dir,
-                                             checkpoint,
-                                             b1000_pref,
-                                             transform_dict=transform_dict,
-                                             dataloader_workers=param_dict['-nw'],
-                                             train_val_percentage=75,
-                                             default_label=args.default_label
-                                             )
+
+    # Gather input data and setup based on script arguments
+    output_root = Path(args.output)
+    os.makedirs(output_root, exist_ok=True)
+
+    log_file_path = str(Path(output_root, '__logging_training.txt'))
+    logging.basicConfig(filename=log_file_path, filemode='w', level=logging.INFO)
+    # if args.default_label is not None:
+    #     logging.info(f'{args.default_label} will be used to fill up missing labels')
+    # if args.create_default_label:
+    #     args.default_label = output_root
+    #     print(f'Missing labels will be replace by an zero-filled default image')
+    if not output_root.is_dir():
+        raise ValueError('{} is not an existing directory and could not be created'.format(output_root))
+    print('loading input dwi path list')
+    seg_input_dict = {}
+    if args.input_path is not None:
+        logging.info(f'Input image directory : {args.input_path}')
+        img_list = utils.create_input_path_list_from_root(args.input_path)
+        if args.input_path == args.output:
+            raise ValueError("The output directory CANNOT be the input directory")
+    # So args.input_list is not None
+    elif args.input_list is not None:
+        logging.info(f'Input image list : {args.input_list}')
+        img_list = file_to_list(args.input_list)
     else:
-        # Gather input data and setup based on script arguments
-        output_root = Path(args.output)
-        os.makedirs(output_root, exist_ok=True)
+        seg_input_dict = json.load(open(args.seg_input_dict, 'r'))
+        img_list = [img_path for sublist in seg_input_dict for img_path in sublist]
+    if args.output in img_list:
+        raise ValueError("The output directory CANNOT be one of the input directories")
+    print('loading input lesion label path list')
+    if args.lesion_input_path is not None:
+        logging.info(f'Input lesion directory : {args.lesion_input_path}')
+        les_list = utils.create_input_path_list_from_root(args.lesion_input_path)
+        if args.lesion_input_path == args.output:
+            raise ValueError("The output directory CANNOT be the input directory")
+    # So args.lesion_input_list is not None
+    elif args.lesion_input_list is not None:
+        logging.info(f'Input lesion list : {args.input_list}')
+        les_list = file_to_list(args.lesion_input_list)
+    else:
+        les_list = None
 
-        log_file_path = str(Path(output_root, '__logging_training.txt'))
-        logging.basicConfig(filename=log_file_path, filemode='w', level=logging.INFO)
-        if args.default_label is not None:
-            logging.info(f'{args.default_label} will be used to fill up missing labels')
-        if args.create_default_label:
-            args.default_label = output_root
-            print(f'Missing labels will be replace by an zero-filled default image')
-        if not output_root.is_dir():
-            raise ValueError('{} is not an existing directory and could not be created'.format(output_root))
-        print('loading input dwi path list')
-        seg_input_dict = {}
-        if args.input_path is not None:
-            img_list = utils.create_input_path_list_from_root(args.input_path)
-            if args.input_path == args.output:
-                raise ValueError("The output directory CANNOT be the input directory")
-        # So args.input_list is not None
-        elif args.input_list is not None:
-            img_list = file_to_list(args.input_list)
-        else:
-            seg_input_dict = json.load(open(args.seg_input_dict, 'r'))
-            img_list = [img_path for sublist in seg_input_dict for img_path in sublist]
-        if args.output in img_list:
-            raise ValueError("The output directory CANNOT be one of the input directories")
-        print('loading input lesion label path list')
-        if args.lesion_input_path is not None:
-            les_list = utils.create_input_path_list_from_root(args.lesion_input_path)
-            if args.lesion_input_path == args.output:
-                raise ValueError("The output directory CANNOT be the input directory")
-        # So args.lesion_input_list is not None
-        elif args.lesion_input_list is not None:
-            les_list = file_to_list(args.lesion_input_list)
-        else:
-            les_list = None
+    if args.controls_path is not None:
+        ctr_list = utils.create_input_path_list_from_root(args.controls_path)
+        if args.controls_path == args.output:
+            raise ValueError("The output directory CANNOT be the input directory")
+    # So args.lesion_input_list is not None
+    elif args.controls_list is not None:
+        ctr_list = file_to_list(args.controls_list)
+    else:
+        ctr_list = None
 
-        if args.controls_path is not None:
-            ctr_list = utils.create_input_path_list_from_root(args.controls_path)
-            if args.controls_path == args.output:
-                raise ValueError("The output directory CANNOT be the input directory")
-        # So args.lesion_input_list is not None
-        elif args.controls_list is not None:
-            ctr_list = file_to_list(args.controls_list)
-        else:
-            ctr_list = None
+    # match the lesion labels with the images
+    print('Matching the dwi and lesions')
+    if args.image_prefix is not None:
+        b1000_pref = args.image_prefix
+    else:
+        b1000_pref = None
+        # b1000_pref = 'wodctH25_b1000'
 
-        # match the lesion labels with the images
-        print('Matching the dwi and lesions')
-        if args.image_prefix is not None:
-            b1000_pref = args.image_prefix
+    if args.transform_dict is not None:
+        td = args.transform_dict
+        if Path(td).is_file():
+            transform_dict = utils.load_json_transform_dict(args.transform_dict)
         else:
-            b1000_pref = None
-            # b1000_pref = 'wodctH25_b1000'
-
-        if args.transform_dict is not None:
-            td = args.transform_dict
-            if Path(td).is_file():
-                transform_dict = utils.load_json_transform_dict(args.transform_dict)
+            if td in dir(tr_dicts):
+                transform_dict = getattr(tr_dicts, td)
             else:
-                if td in dir(tr_dicts):
-                    transform_dict = getattr(tr_dicts, td)
-                else:
-                    raise ValueError('{} is not an existing dict file or is not '
-                                     'in lesseg_unet/data/transform_dicts.py'.format(args.transform_dict))
-        else:
-            print('Using default transformation dictionary')
-            transform_dict = transform_dicts.minimal_hyper_dict
-        train_val_percentage = None
-        if args.train_val is not None:
-            train_val_percentage = args.train_val
-        if args.checkpoint is None and args.seg_input_dict is None:
-            if train_val_percentage is None:
-                train_val_percentage = 75
-            if les_list is None and args.default_label is None:
-                parser.error(message='For the training, there must be a list of labels')
-            training.training_loop(img_path_list=img_list,
-                                   seg_path_list=les_list,
-                                   output_dir=output_root,
-                                   ctr_path_list=ctr_list,
-                                   img_pref=b1000_pref,
-                                   transform_dict=transform_dict,
-                                   device=args.torch_device,
-                                   epoch_num=args.num_epochs,
-                                   dataloader_workers=args.num_workers,
-                                   # num_nifti_save=args.num_nifti_save,
-                                   train_val_percentage=train_val_percentage,
-                                   label_smoothing=args.label_smoothing,
-                                   stop_best_epoch=stop_best_epoch,
-                                   default_label=args.default_label,
-                                   training_loss_fct=args.loss_function,
-                                   val_loss_fct=args.val_loss_function,
-                                   weight_factor=args.weight_factor,
-                                   folds_number=args.folds_number,
-                                   dropout=args.dropout)
-        else:
-            if args.checkpoint is None:
-                raise ValueError('A checkpoint must be given for the segmentation or validation')
-            if train_val_percentage is None:
-                train_val_percentage = 0
-            if args.seg_input_dict is not None:
-                if les_list is not None:
-                    raise ValueError('seg_input_dict cannot be used for the Validation')
-            if les_list is None:
-                if seg_input_dict:
-                    for sub_folder in seg_input_dict:
-                        os.makedirs(Path(output_root, sub_folder), exist_ok=True)
-                        segmentation.segmentation_loop(seg_input_dict[sub_folder],
-                                                       Path(output_root, sub_folder),
-                                                       args.checkpoint,
-                                                       b1000_pref,
-                                                       transform_dict=transform_dict,
-                                                       device=args.torch_device,
-                                                       dataloader_workers=args.num_workers)
-                else:
-                    segmentation.segmentation_loop(img_list,
-                                                   output_root,
+                raise ValueError('{} is not an existing dict file or is not '
+                                 'in lesseg_unet/data/transform_dicts.py'.format(args.transform_dict))
+    else:
+        print('Using default transformation dictionary')
+        transform_dict = transform_dicts.minimal_hyper_dict
+    train_val_percentage = None
+    if args.train_val is not None:
+        train_val_percentage = args.train_val
+    if args.checkpoint is None and args.seg_input_dict is None:
+        if train_val_percentage is None:
+            train_val_percentage = 75
+        # if les_list is None and args.default_label is None:
+        #     parser.error(message='For the training, there must be a list of labels')
+        logging.info(f'Output training folder : {output_root}')
+        training.training_loop(img_path_list=img_list,
+                               seg_path_list=les_list,
+                               output_dir=output_root,
+                               ctr_path_list=ctr_list,
+                               img_pref=b1000_pref,
+                               transform_dict=transform_dict,
+                               device=args.torch_device,
+                               epoch_num=args.num_epochs,
+                               dataloader_workers=args.num_workers,
+                               # num_nifti_save=args.num_nifti_save,
+                               train_val_percentage=train_val_percentage,
+                               label_smoothing=args.label_smoothing,
+                               stop_best_epoch=stop_best_epoch,
+                               # default_label=args.default_label,
+                               training_loss_fct=args.loss_function,
+                               val_loss_fct=args.val_loss_function,
+                               weight_factor=args.weight_factor,
+                               folds_number=args.folds_number,
+                               dropout=args.dropout)
+    else:
+        if args.checkpoint is None:
+            raise ValueError('A checkpoint must be given for the segmentation or validation')
+        if train_val_percentage is None:
+            train_val_percentage = 0
+        if args.seg_input_dict is not None:
+            if les_list is not None:
+                raise ValueError('seg_input_dict cannot be used for the Validation')
+        if les_list is None:
+            if seg_input_dict:
+                for sub_folder in seg_input_dict:
+                    logging.info(f'Input image subfolder : {sub_folder}')
+                    logging.info(f'Output segmentation folder : {Path(output_root, sub_folder)}')
+                    os.makedirs(Path(output_root, sub_folder), exist_ok=True)
+                    segmentation.segmentation_loop(seg_input_dict[sub_folder],
+                                                   Path(output_root, sub_folder),
                                                    args.checkpoint,
                                                    b1000_pref,
                                                    transform_dict=transform_dict,
                                                    device=args.torch_device,
                                                    dataloader_workers=args.num_workers)
             else:
-                segmentation.validation_loop(img_list, les_list,
-                                             output_root,
-                                             args.checkpoint,
-                                             b1000_pref,
-                                             transform_dict=transform_dict,
-                                             device=args.torch_device,
-                                             dataloader_workers=args.num_workers,
-                                             train_val_percentage=train_val_percentage,
-                                             default_label=args.default_label)
+                logging.info(f'Output segmentation folder : {output_root}')
+                segmentation.segmentation_loop(img_list,
+                                               output_root,
+                                               args.checkpoint,
+                                               b1000_pref,
+                                               transform_dict=transform_dict,
+                                               device=args.torch_device,
+                                               dataloader_workers=args.num_workers)
+        else:
+            logging.info(f'Output validation folder : {output_root}')
+            segmentation.validation_loop(img_list, les_list,
+                                         output_root,
+                                         args.checkpoint,
+                                         b1000_pref,
+                                         transform_dict=transform_dict,
+                                         device=args.torch_device,
+                                         dataloader_workers=args.num_workers,
+                                         train_val_percentage=train_val_percentage,
+                                         # default_label=args.default_label
+                                         )
 
 
 if __name__ == "__main__":

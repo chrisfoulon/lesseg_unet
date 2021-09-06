@@ -209,10 +209,13 @@ def split_output_files(source_dir, dest_dir, png_split_string='_segmentation', r
     return output_dict
 
 
-def split_lists_in_folds(img_dict: dict,
+def split_lists_in_folds(img_dict: Union[dict, list],
                          folds_number: int = 1,
                          train_val_percentage: float = 80):
-    full_file_list = [{'image': str(img), 'label': str(img_dict[img])} for img in img_dict]
+    if isinstance(img_dict, dict):
+        full_file_list = [{'image': str(img), 'label': str(img_dict[img])} for img in img_dict]
+    else:
+        full_file_list = [{'image': str(img)} for img in img_dict]
     if folds_number == 1:
         training_end_index = math.ceil(train_val_percentage / 100 * len(img_dict))
         # Inverse the order of the splits because the validation chunk in that case will be 0
