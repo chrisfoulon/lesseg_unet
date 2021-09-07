@@ -17,8 +17,8 @@ setup(
     package_data={
         # If any package contains *.txt or *.rst files, include them:
         "": ["*.txt", "*.rst", "*.md"],
-        # Include all the executables from bin
-        "data": ["*"],
+        # Include all the data
+        "data": ["*.*"],
     },
     # https://reinout.vanrees.org/weblog/2010/01/06/zest-releaser-entry-points.html
     # entry_points could be used to automagically download dcm2niix depending on the OS of the user

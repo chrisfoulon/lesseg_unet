@@ -46,58 +46,6 @@ def plot_one_slice(data_to_plot, title=None, rot90=True, normalise=True):
     plt.imshow(current)
 
 
-def plot_3d_recons_v2(data_to_plot, titles, recon_folder, epoch='', subjects_to_show=5, hyper_params=None, prefix='',
-                      per_subject_prefix=None, suppress_progress_bar=False, normalise=True):
-    """
-    Plot 3 slices per axis for each item in the list 'data_to_plot'
-    """
-    plot_types = len(data_to_plot)
-    subjects_to_show = min(int(data_to_plot[0].shape[0]), subjects_to_show)
-    for i in range(subjects_to_show):
-        plt.close("all")
-        if epoch:
-            plt.suptitle("Epoch: " + str(epoch) + "; subject: " + str(i+1), fontsize=10)
-        else:
-            plt.suptitle("Subject: " + str(i + 1), fontsize=10)
-        fig = plt.gcf()
-        fig.set_size_inches(24, 14)
-        fig.tight_layout()
-        plt.subplots_adjust(top=0.95)
-        plt.gray()
-        for j in range(plot_types):
-            current = np.squeeze(data_to_plot[j][i])
-            axis_length = current.shape[0]
-            axis_length = axis_length // 4
-            plt.subplot(plot_types, 9, j * 9 + 1)
-            plot_one_slice(current[axis_length, :, :], normalise=normalise)
-            plt.subplot(plot_types, 9, j * 9 + 2)
-            plot_one_slice(current[2*axis_length, :, :], normalise=normalise)
-            plt.subplot(plot_types, 9, j * 9 + 3)
-            plot_one_slice(current[3*axis_length, :, :], normalise=normalise)
-            axis_length = current.shape[1]
-            axis_length = axis_length // 4
-            plt.subplot(plot_types, 9, j * 9 + 4)
-            plot_one_slice(current[:, axis_length, :], normalise=normalise)
-            plt.subplot(plot_types, 9, j * 9 + 5)
-            plot_one_slice(current[:, 2*axis_length, :], titles[j], normalise=normalise)
-            plt.subplot(plot_types, 9, j * 9 + 6)
-            plot_one_slice(current[:, 3*axis_length, :], normalise=normalise)
-            axis_length = current.shape[2]
-            axis_length = axis_length // 4
-            plt.subplot(plot_types, 9, j * 9 + 7)
-            plot_one_slice(current[:, :, axis_length], normalise=normalise)
-            plt.subplot(plot_types, 9, j * 9 + 8)
-            plot_one_slice(current[:, :, 2*axis_length], normalise=normalise)
-            plt.subplot(plot_types, 9, j * 9 + 9)
-            plot_one_slice(current[:, :, 3*axis_length], normalise=normalise)
-        if per_subject_prefix:
-            plt.savefig(Path(recon_folder, prefix + per_subject_prefix[i] + '.png'))
-        else:
-            plt.savefig(Path(recon_folder, prefix + 'subject_' + str(i+1) + '.png'))
-        # if not suppress_progress_bar:
-        #     progress_bar(i+1, subjects_to_show, prefix='Plotting:')
-
-
 def plot_seg(img, label=None, seg=None, save_path=None):
     if np.isnan(np.sum(img)):
         img = np.nan_to_num(img)
@@ -178,8 +126,10 @@ def display_one_output(output_dir, number=None, string=None):
         if 'input' in f.name:
             img = f
         if 'label' in f.name:
+            print(f'Non zero voxels in the label: {np.count_nonzero(nib.load(f).get_fdata())})')
             label = f
         if 'output' in f.name:
+            print(f'Non zero voxels in the output prediction: {np.count_nonzero(nib.load(f).get_fdata())}')
             seg = f
     if img is None:
         raise ValueError('input image not found')

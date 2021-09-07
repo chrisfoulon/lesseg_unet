@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Union, List
 import json
 import math
+import importlib.resources as rsc
 
 import monai.transforms
 from bcblib.tools.nifti_utils import is_nifti, centre_of_mass_difference
@@ -12,6 +13,7 @@ from lesseg_unet.net import create_unet_model
 import nibabel as nib
 import torch
 import numpy as np
+from bcblib.tools.nifti_utils import load_nifti
 
 
 validation_input_pref = 'nib_input_'
@@ -295,3 +297,20 @@ def check_inputs(inputs, img_string=None, min_file_size=300):
                 raise e
     else:
         raise ValueError('inputs must either be a list of paths or a dict of {image_paths: label_paths}')
+
+
+def filter_outside_brain_voxels(img, output=None, template=None):
+    nii = load_nifti(img)
+    if output is not None:
+        if Path(output).is_dir():
+            output_path = Path(output, Path(img).name)
+        else:
+            output_path = output
+    else:
+        output_path = img
+    if template is None:
+        with rsc.path('lesseg_unet.data', 'avg152T2.nii') as p:
+            template = str(p.resolve())
+    data = nii.get_fdata()
+    data[np.where(nib.load(template).get_fdata() == 0)] = 0
+    nib.save(nib.Nifti1Image(data, nii.affine), output_path)
