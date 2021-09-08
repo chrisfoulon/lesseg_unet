@@ -176,7 +176,7 @@ def validation_loop(img_path_list: Sequence,
             vol_output = utils.volume_metric(outputs, False, False)
             input_filename += f'_v{vol_output}v'
             output_dict_data = deepcopy(val_data)
-            value, _ = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
+            value = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
             val_score_list.append(value.item())
             metric_count += len(value)
             metric_sum += value.item() * len(value)

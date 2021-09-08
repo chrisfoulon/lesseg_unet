@@ -254,7 +254,6 @@ def training_loop(img_path_list: Sequence,
                     controls_lists, fold, ctr_img_transforms,
                     ctr_val_img_transforms, batch_size, dataloader_workers
                 )
-            best_epoch_count = 0
             model.train()
             epoch_loss = 0
             step = 0
@@ -322,8 +321,8 @@ def training_loop(img_path_list: Sequence,
                 elif training_loss_fct.lower() == 'dist_dice':
                     loss = loss_function(outputs, y)
                     # Just trying some dark magic
-                    distance, _ = hausdorff_metric(y_pred=post_trans(outputs), y=y)
-                    # distance, _ = surface_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
+                    distance = hausdorff_metric(y_pred=post_trans(outputs), y=y)
+                    # distance = surface_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
                     distance = torch.minimum(distance, max_distance)
                     print(f'Distance {distance}')
                     loss += torch.mean(distance)
@@ -355,8 +354,8 @@ def training_loop(img_path_list: Sequence,
                     writer.add_scalar('mean_control_vol', controls_vol, batches_per_epoch * epoch + step)
                 loss = loss + controls_loss
                 # TODO check that
-                # distance, _ = surface_metric(y_pred=Activations(sigmoid=True)(outputs), y=labels[:, :1, :, :, :])
-                # hausdorff, _ = hausdorff_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
+                # distance = surface_metric(y_pred=Activations(sigmoid=True)(outputs), y=labels[:, :1, :, :, :])
+                # hausdorff = hausdorff_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
                 loss.backward()
                 optimizer.step()
                 epoch_loss += loss.item()
@@ -430,8 +429,8 @@ def training_loop(img_path_list: Sequence,
 
                         loss = val_loss_function(outputs, labels[:, :1, :, :, :]).cpu()
                         discrete_outputs = post_trans(outputs)
-                        dice_value, _ = dice_metric(y_pred=discrete_outputs, y=labels[:, :1, :, :, :])
-                        distance, _ = hausdorff_metric(y_pred=discrete_outputs, y=labels[:, :1, :, :, :])
+                        dice_value = dice_metric(y_pred=discrete_outputs, y=labels[:, :1, :, :, :])
+                        distance = hausdorff_metric(y_pred=discrete_outputs, y=labels[:, :1, :, :, :])
                         distance = torch.minimum(distance, max_distance)
                         if val_loss_fct == 'dist':
                             # In that case we want the distance to be smaller
@@ -452,7 +451,7 @@ def training_loop(img_path_list: Sequence,
                         else:
                             metric = dice_value
 
-                        # distance, _ = surface_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
+                        # distance = surface_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
                         # TODO the len(value) thing is really confusing and most likely useless here get rid of it!
                         distance_sum += distance.item()
                         distance_count += 1
@@ -528,6 +527,7 @@ def training_loop(img_path_list: Sequence,
                     # TODO maybe find a better way so it would also save the first epoch. Even though it is no big deal
                     if epoch == 0:
                         best_metric = mean_metric
+                        best_metric_epoch = 0
                     if metric_select_fct(mean_metric, best_metric):
                         best_metric = mean_metric
                         best_distance = distance_sum / distance_count
@@ -559,8 +559,9 @@ def training_loop(img_path_list: Sequence,
                             + str_img_count + str_best_epoch
                     )
                     print(str_current_epoch)
-                    print(f'It has been [{best_epoch_count}] since a best epoch has been found'
-                          f'\nThe training will stop after [{stop_best_epoch}] epochs without improvement')
+                    print(f'It has been [{best_epoch_count}] since a best epoch has been found')
+                    if stop_best_epoch > -1:
+                        print(f'The training will stop after [{stop_best_epoch}] epochs without improvement')
                     if stop_best_epoch != -1:
                         if best_epoch_count > stop_best_epoch:
                             print(f'More than {stop_best_epoch} without improvement')
