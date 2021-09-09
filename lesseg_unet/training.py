@@ -232,6 +232,15 @@ def training_loop(img_path_list: Sequence,
             split_lists, fold, train_img_transforms,
             val_img_transforms, batch_size, dataloader_workers
         )
+        ctr_train_loader = None
+        ctr_val_loader = None
+        if controls_lists:
+            print('Reshuffling control data')
+            ctr_train_loader, ctr_val_loader = data_loading.create_fold_dataloaders(
+                controls_lists, fold, ctr_img_transforms,
+                ctr_val_img_transforms, batch_size, dataloader_workers
+            )
+            print('Reshuffling done')
         output_spatial_size = None
         max_distance = None
         batches_per_epoch = len(train_loader)
@@ -246,14 +255,6 @@ def training_loop(img_path_list: Sequence,
         for epoch in range(epoch_num):
             print('-' * 10)
             print(f'epoch {epoch + 1}/{epoch_num}')
-            ctr_train_loader = None
-            ctr_val_loader = None
-            if controls_lists:
-                print('Reshuffling control data')
-                ctr_train_loader, ctr_val_loader = data_loading.create_fold_dataloaders(
-                    controls_lists, fold, ctr_img_transforms,
-                    ctr_val_img_transforms, batch_size, dataloader_workers
-                )
             model.train()
             epoch_loss = 0
             step = 0
@@ -262,18 +263,19 @@ def training_loop(img_path_list: Sequence,
             # for batch_data in tqdm(train_loader, desc=f'training_loop{epoch}'):
             #     # batch_data = next(iter(train_loader))
             #     step += 1
-            #     if step > 10:
+            #     if step > 5:
             #         break
-            #     inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
-            #
-            #     inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy() if isinstance(inputs, torch.Tensor) \
-            #         else inputs[0, :, :, :]
-            #     labels_np = labels[0, 0, :, :, :].cpu().detach().numpy() if isinstance(labels, torch.Tensor) \
-            #         else labels[0, :, :, :]
-            #     output_path_list = utils.save_img_lbl_seg_to_nifti(
-            #         inputs_np, labels_np, None, output_dir, val_output_affine,
-            #         'input_test_{}'.format(str(step)))
-            #     print(f'image min/max : {torch.min(inputs)}/{torch.max(inputs)}')
+            #     # inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
+            #     input_filename = Path(batch_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
+            #     print(f'Step {step}: {input_filename}')
+            # inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy() if isinstance(inputs, torch.Tensor) \
+            #     else inputs[0, :, :, :]
+            # labels_np = labels[0, 0, :, :, :].cpu().detach().numpy() if isinstance(labels, torch.Tensor) \
+            #     else labels[0, :, :, :]
+            # output_path_list = utils.save_img_lbl_seg_to_nifti(
+            #     inputs_np, labels_np, None, output_dir, val_output_affine,
+            #     'input_test_{}'.format(str(step)))
+            # print(f'image min/max : {torch.min(inputs)}/{torch.max(inputs)}')
             # Time test
             # import time
             # # batch_data = next(iter(train_loader))
