@@ -63,6 +63,7 @@ def main():
     # parser.add_argument('-ctr_pref', '--control_image_prefix', type=str,
     #                     help='Define a prefix to filter the control images')
     parser.add_argument('-nw', '--num_workers', default=4, type=int, help='Number of dataloader workers')
+    parser.add_argument('-bs', '--batch_size', default=10, type=int, help='Batch size for the training loop')
     parser.add_argument('-ne', '--num_epochs', default=50, type=int, help='Number of epochs')
     parser.add_argument('-tv', '--train_val', type=int, help='Training / validation percentage cut')
     parser.add_argument('-sbe', '--stop_best_epoch', type=int, help='Number of epochs without improvement before it '
@@ -172,6 +173,7 @@ def main():
                                img_pref=b1000_pref,
                                transform_dict=transform_dict,
                                device=args.torch_device,
+                               batch_size=args.batch_size,
                                epoch_num=args.num_epochs,
                                dataloader_workers=args.num_workers,
                                # num_nifti_save=args.num_nifti_save,

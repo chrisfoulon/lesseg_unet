@@ -324,7 +324,6 @@ def training_loop(img_path_list: Sequence,
                     distance = hausdorff_metric(y_pred=post_trans(outputs), y=y)
                     # distance = surface_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
                     distance = torch.minimum(distance, max_distance)
-                    print(f'Distance {distance}')
                     loss += torch.mean(distance)
                 else:
                     loss = loss_function(outputs, y)
