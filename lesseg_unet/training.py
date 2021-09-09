@@ -74,6 +74,7 @@ def training_loop(img_path_list: Sequence,
                   transform_dict=None,
                   device: str = None,
                   batch_size: int = 10,
+                  val_batch_size: int = 1,
                   epoch_num: int = 50,
                   dataloader_workers: int = 4,
                   train_val_percentage=80,
@@ -230,7 +231,7 @@ def training_loop(img_path_list: Sequence,
             os.remove(trash_list_path)
         train_loader, val_loader = data_loading.create_fold_dataloaders(
             split_lists, fold, train_img_transforms,
-            val_img_transforms, batch_size, dataloader_workers
+            val_img_transforms, batch_size, dataloader_workers, val_batch_size
         )
         ctr_train_loader = None
         ctr_val_loader = None
@@ -238,7 +239,7 @@ def training_loop(img_path_list: Sequence,
             print('Reshuffling control data')
             ctr_train_loader, ctr_val_loader = data_loading.create_fold_dataloaders(
                 controls_lists, fold, ctr_img_transforms,
-                ctr_val_img_transforms, batch_size, dataloader_workers
+                ctr_val_img_transforms, batch_size, dataloader_workers, val_batch_size
             )
             print('Reshuffling done')
         output_spatial_size = None
@@ -430,9 +431,9 @@ def training_loop(img_path_list: Sequence,
 
                         loss = val_loss_function(outputs, labels[:, :1, :, :, :]).cpu()
                         discrete_outputs = post_trans(outputs)
-                        dice_value = dice_metric(y_pred=discrete_outputs, y=labels[:, :1, :, :, :])
-                        distance = hausdorff_metric(y_pred=discrete_outputs, y=labels[:, :1, :, :, :])
-                        distance = torch.minimum(distance, max_distance)
+                        dice_value = dice_metric(y_pred=discrete_outputs, y=labels[:, :1, :, :, :]).mean()
+                        distance = hausdorff_metric(y_pred=discrete_outputs, y=labels[:, :1, :, :, :]).mean()
+                        distance = torch.minimum(distance, max_distance).mean()
                         if val_loss_fct == 'dist':
                             # In that case we want the distance to be smaller
                             metric_select_fct = lt
