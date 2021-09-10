@@ -64,7 +64,8 @@ def create_file_dict_lists(raw_img_path_list: Sequence, raw_seg_path_list: Seque
 
 def create_training_data_loader(train_ds: monai.data.Dataset,
                                 batch_size: int = 10,
-                                dataloader_workers: int = 4):
+                                dataloader_workers: int = 4,
+                                persistent_workers=True):
     print('Creating training data loader')
     train_loader = DataLoader(
         train_ds,
@@ -73,6 +74,7 @@ def create_training_data_loader(train_ds: monai.data.Dataset,
         drop_last=True,
         num_workers=dataloader_workers,
         pin_memory=torch.cuda.is_available(),
+        persistent_workers=True
     )
     return train_loader
 
@@ -82,14 +84,14 @@ def create_validation_data_loader(val_ds: monai.data.Dataset,
                                   dataloader_workers: int = 4):
     print('Creating validation data loader')
     val_loader = DataLoader(val_ds, batch_size=batch_size, num_workers=dataloader_workers,
-                            pin_memory=torch.cuda.is_available())
+                            pin_memory=torch.cuda.is_available(), persistent_workers=True)
     return val_loader
 
 
 def data_loader_checker_first(check_ds, set_name=''):
     # use batch_size=2 to load images and use RandCropByPosNegLabeld to generate 2 x 4 images for network training
     check_loader = DataLoader(check_ds, batch_size=1, num_workers=2, pin_memory=torch.cuda.is_available(),
-                              collate_fn=list_data_collate)
+                              collate_fn=list_data_collate, persistent_workers=True)
     first_dict = monai.utils.misc.first(check_loader)
     img_batch, seg_batch = first_dict['image'], first_dict['label']
     logging.info('First {} loader (total size: {}) batch size: images {}, lesions {}'.format(

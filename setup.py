@@ -12,7 +12,7 @@ setup(
     zip_safe=True,
     include_package_data=True,
     packages=find_packages(exclude=['__pycache__']),
-    install_requires=['nibabel>=3', 'numpy', 'nilearn', 'monai>=0.6', 'bcblib', 'torch', 'torchio',
+    install_requires=['nibabel>=3', 'numpy', 'nilearn', 'monai>=0.6', 'bcblib', 'torch>=1.9', 'torchio',
                       'torchvision', 'matplotlib', 'pandas', 'scipy', 'tqdm'],
     package_data={
         # If any package contains *.txt or *.rst files, include them:
