@@ -639,6 +639,7 @@ class MyRandHistogramShiftd(RandomizableTransform, MapTransform):
             reference_control_points_scaled = self.reference_control_points * (img_max - img_min) + img_min
             floating_control_points_scaled = self.floating_control_points * (img_max - img_min) + img_min
             dtype = d[key].dtype
+            # TODO https://docs.monai.io/en/latest/_modules/monai/transforms/spatial/array.html#Resize might help
             d[key] = np.interp(d[key], reference_control_points_scaled, floating_control_points_scaled).astype(dtype)
         return d
 
@@ -1144,7 +1145,7 @@ def segmentation_val_transformd(hyper_param_dict=None):
     return val_transd
 
 
-def image_only_transformd(hyper_param_dict=None, training=True, add_clamping=True):
+def image_only_transformd(hyper_param_dict=None, training=True, add_clamping=False):
     if hyper_param_dict is None:
         hyper_param_dict = hyper_dict
     setup_coord_conv(hyper_param_dict)

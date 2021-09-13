@@ -309,7 +309,7 @@ def filter_outside_brain_voxels(img, output=None, template=None):
     else:
         output_path = img
     if template is None:
-        with rsc.path('lesseg_unet.data', 'avg152T2.nii') as p:
+        with rsc.path('lesseg_unet.data', 'brain_mask.nii') as p:
             template = str(p.resolve())
     data = nii.get_fdata()
     data[np.where(nib.load(template).get_fdata() == 0)] = 0
