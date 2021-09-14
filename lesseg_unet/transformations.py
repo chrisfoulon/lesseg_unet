@@ -1116,15 +1116,27 @@ def setup_coord_conv(hyper_param_dict):
                     d[name]['gradients'] = gradients
 
 
-def segmentation_train_transformd(hyper_param_dict=None):
+def segmentation_train_transformd(hyper_param_dict=None, clamping=None):
     if hyper_param_dict is None:
         hyper_param_dict = hyper_dict
     setup_coord_conv(hyper_param_dict)
     check_imports(hyper_param_dict)
     check_hyper_param_dict_shape(hyper_param_dict)
+    seg_tr_dict = hyper_param_dict
+    if clamping is not None:
+        for li in hyper_param_dict:
+            seg_tr_dict[li] = []
+            for di in hyper_param_dict[li]:
+                for tr in di:
+                    # TODO make it cleaner!
+                    if tr == 'MyNormalizeIntensityd':
+                        if clamping is not None and 'clamp_quantile' not in di[tr]:
+                            new_tr = deepcopy(di)
+                            new_tr[tr]['clamp_quantile'] = clamping
+                            seg_tr_dict[li].append(new_tr)
     compose_list = []
-    for d_list_name in hyper_param_dict:
-        trs = trans_list_from_list(hyper_param_dict[d_list_name])
+    for d_list_name in seg_tr_dict:
+        trs = trans_list_from_list(seg_tr_dict[d_list_name])
         if trs is not None:
             compose_list += trs
     train_transd = Compose(
@@ -1133,19 +1145,31 @@ def segmentation_train_transformd(hyper_param_dict=None):
     return train_transd
 
 
-def segmentation_val_transformd(hyper_param_dict=None):
+def segmentation_val_transformd(hyper_param_dict=None, clamping=None):
     if hyper_param_dict is None:
         hyper_param_dict = hyper_dict
     setup_coord_conv(hyper_param_dict)
+    seg_tr_dict = hyper_param_dict
+    if clamping is not None:
+        for li in hyper_param_dict:
+            seg_tr_dict[li] = []
+            for di in hyper_param_dict[li]:
+                for tr in di:
+                    # TODO make it cleaner!
+                    if tr == 'MyNormalizeIntensityd':
+                        if clamping is not None and 'clamp_quantile' not in di[tr]:
+                            new_tr = deepcopy(di)
+                            new_tr[tr]['clamp_quantile'] = clamping
+                            seg_tr_dict[li].append(new_tr)
     val_transd = Compose(
-        trans_list_from_list(hyper_param_dict['first_transform']) +
+        trans_list_from_list(seg_tr_dict['first_transform']) +
         # trans_list_from_list(hyper_dict['labelonly_transform']) +
-        trans_list_from_list(hyper_param_dict['last_transform'])
+        trans_list_from_list(seg_tr_dict['last_transform'])
     )
     return val_transd
 
 
-def image_only_transformd(hyper_param_dict=None, training=True, add_clamping=False):
+def image_only_transformd(hyper_param_dict=None, training=True, clamping=None):
     if hyper_param_dict is None:
         hyper_param_dict = hyper_dict
     setup_coord_conv(hyper_param_dict)
@@ -1158,9 +1182,9 @@ def image_only_transformd(hyper_param_dict=None, training=True, add_clamping=Fal
             for tr in di:
                 # TODO make it cleaner!
                 if tr == 'MyNormalizeIntensityd':
-                    if add_clamping and 'clamp_quantile' not in di[tr]:
+                    if clamping is not None and 'clamp_quantile' not in di[tr]:
                         new_tr = deepcopy(di)
-                        new_tr[tr]['clamp_quantile'] = (.01, .99)
+                        new_tr[tr]['clamp_quantile'] = clamping
                         seg_tr_dict[li].append(new_tr)
                 keys_key = 'keys'
                 if 'keys' not in di[tr]:

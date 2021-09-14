@@ -73,6 +73,13 @@ def main():
     #                                                                           'during validation')
     parser.add_argument('-dropout', type=float, help='Set a dropout value for the model')
     parser.add_argument('-nf', '--folds_number', default=1, type=int, help='Set a dropout value for the model')
+    parser.add_argument('-clamp', action='store_true', help='Apply intensity clamping (with default value if not given'
+                                                            ' with --clamp_low and --clamp_high)')
+    parser.add_argument('-cl', '--clamp_low', type=float, help='Defines the low quantile of intensity clamping')
+    parser.add_argument('-ch', '--clamp_high', type=float, help='Defines the high quantile of intensity clamping')
+    parser.add_argument('-clamp_train_set', action='store_true',
+                        help='Apply intensity clamping on the training lesioned set as well'
+                             ' (with default value if not given with --clamp_low and --clamp_high)')
     parser.add_argument('-kmos', '--keep_model_output_size', action='store_true', help='Keep the output of the '
                                                                                        'segmentation in the '
                                                                                        'spatial_size of the model')
@@ -158,6 +165,25 @@ def main():
     else:
         print('Using default transformation dictionary')
         transform_dict = transform_dicts.minimal_hyper_dict
+    # Clamping or not clamping
+    if args.clamp_low is not None:
+        if args.clamp_high is not None:
+            clamp_tuple = (args.clamp_low, args.clamp_high)
+        else:
+            clamp_tuple = (args.clamp_low, 1)
+    elif args.clamp_high is not None:
+        clamp_tuple = (0, args.clamp_high)
+    else:
+        if args.clamp:
+            clamp_tuple = (.0005, .9995)
+        else:
+            clamp_tuple = None
+    clamp_train_set = None
+    if args.clamp_train_set:
+        if clamp_tuple is None:
+            clamp_train_set = (.0005, .9995)
+        else:
+            clamp_train_set = clamp_tuple
     train_val_percentage = None
     if args.train_val is not None:
         train_val_percentage = args.train_val
@@ -180,6 +206,8 @@ def main():
                                dataloader_workers=args.num_workers,
                                # num_nifti_save=args.num_nifti_save,
                                train_val_percentage=train_val_percentage,
+                               train_set_clamp=clamp_train_set,
+                               controls_clamping=clamp_tuple,
                                label_smoothing=args.label_smoothing,
                                stop_best_epoch=stop_best_epoch,
                                # default_label=args.default_label,

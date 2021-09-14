@@ -41,24 +41,25 @@ def testing(train_loader, output_dir):
                 i_data = channel.cpu().detach().numpy()
                 nib.save(nib.Nifti1Image(i_data, out_affine),
                          filename=f'{Path(output_dir)}/img_test_{i}_{ind}.nii')
-        # print(np.all(i_data == raw_data))
-        # i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
-        # l_data = labels[0, 0, :, :, :].cpu().detach().numpy()
-        # utils.save_img_lbl_seg_to_png(
-        #     i_data, output_dir, 'validation_img_{}'.format(i), l_data, None)
-        out_paths_list = utils.save_img_lbl_seg_to_nifti(
-            inputs, labels, None, output_dir, out_affine, i)
+        else:
+            # print(np.all(i_data == raw_data))
+            # i_data = inputs[0, 0, :, :, :].cpu().detach().numpy()
+            # l_data = labels[0, 0, :, :, :].cpu().detach().numpy()
+            # utils.save_img_lbl_seg_to_png(
+            #     i_data, output_dir, 'validation_img_{}'.format(i), l_data, None)
+            out_paths_list = utils.save_img_lbl_seg_to_nifti(
+                inputs, labels, None, output_dir, out_affine, i)
 
         print(f'fsleyes {data["image_meta_dict"]["filename_or_obj"][0]} {data["label_meta_dict"]["filename_or_obj"][0]}'
               f' {out_paths_list[0]} {out_paths_list[1]} '
               f'{"/home/tolhsadum/neuro_apps/data/input_avg152T2_template.nii"}')
         print('###########VOLUMES#######')
-        orig_label = nib.load(data["label_meta_dict"]["filename_or_obj"][0]).get_fdata()
-        label = nib.load(out_paths_list[1]).get_fdata()
-        print(f'original label volume: {np.count_nonzero(orig_label)}')
-        print(f'Smoothed label volume 0.5: {len(np.where(label > 0.5)[0])}')
-        print(f'Smoothed label volume 0.25: {len(np.where(label > 0.25)[0])}')
-        print('###########ENDVOLUMES#######')
+        # orig_label = nib.load(data["label_meta_dict"]["filename_or_obj"][0]).get_fdata()
+        # label = nib.load(out_paths_list[1]).get_fdata()
+        # print(f'original label volume: {np.count_nonzero(orig_label)}')
+        # print(f'Smoothed label volume 0.5: {len(np.where(label > 0.5)[0])}')
+        # print(f'Smoothed label volume 0.25: {len(np.where(label > 0.25)[0])}')
+        # print('###########ENDVOLUMES#######')
     # if np.equal(i_data, l_data).all():
     #     print('ok')
     # else:
@@ -78,6 +79,8 @@ def training_loop(img_path_list: Sequence,
                   epoch_num: int = 50,
                   dataloader_workers: int = 4,
                   train_val_percentage=80,
+                  train_set_clamp=None,
+                  controls_clamping=None,
                   label_smoothing=False,
                   stop_best_epoch=-1,
                   training_loss_fct='dice',
@@ -200,8 +203,8 @@ def training_loop(img_path_list: Sequence,
 
     split_lists = utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage)
     logging.info('Initialisation of the training transformations')
-    train_img_transforms = transformations.segmentation_train_transformd(transform_dict)
-    val_img_transforms = transformations.segmentation_val_transformd(transform_dict)
+    train_img_transforms = transformations.segmentation_train_transformd(transform_dict, train_set_clamp)
+    val_img_transforms = transformations.segmentation_val_transformd(transform_dict, train_set_clamp)
 
     controls_lists = []
     trash_seg_path_count_dict = {}
@@ -214,9 +217,11 @@ def training_loop(img_path_list: Sequence,
         else:
             controls_lists = utils.split_lists_in_folds(controls, folds_number, train_val_percentage)
         logging.info('Initialisation of the control training transformations')
-        ctr_img_transforms = transformations.image_only_transformd(transform_dict, training=True)
+        ctr_img_transforms = transformations.image_only_transformd(transform_dict, training=True,
+                                                                   clamping=controls_clamping)
         logging.info('Initialisation of the control validation transformations')
-        ctr_val_img_transforms = transformations.image_only_transformd(transform_dict, training=False)
+        ctr_val_img_transforms = transformations.image_only_transformd(transform_dict, training=False,
+                                                                   clamping=controls_clamping)
         logging.info(f'Control training loss: mean(sigmoid(outputs)) * {control_weight_factor}')
     for fold in range(folds_number):
         model = net.create_unet_model(device, unet_hyper_params)
@@ -261,6 +266,7 @@ def training_loop(img_path_list: Sequence,
             epoch_loss = 0
             step = 0
             # testing
+            testing(train_loader, output_dir)
             # import time
             # for i in range(5):
             #     step = 0
