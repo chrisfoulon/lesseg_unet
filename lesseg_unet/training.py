@@ -5,6 +5,7 @@ import logging
 from operator import lt, gt
 from pathlib import Path
 from typing import Sequence, Tuple, Union
+import time
 
 import pandas as pd
 from tqdm import tqdm
@@ -79,7 +80,7 @@ def training_loop(img_path_list: Sequence,
                   epoch_num: int = 50,
                   dataloader_workers: int = 4,
                   train_val_percentage=80,
-                  train_set_clamp=None,
+                  lesion_set_clamp=None,
                   controls_clamping=None,
                   label_smoothing=False,
                   stop_best_epoch=-1,
@@ -128,7 +129,6 @@ def training_loop(img_path_list: Sequence,
     logging.info(f'Device: {device}')
     logging.info(f'Training loss fct: {training_loss_fct}')
     logging.info(f'Validation loss fct: {val_loss_fct}')
-    print('check ok')
 
     # utils.save_tensor_to_nifti(
     #     inputs, Path('/home/tolhsadum/neuro_apps/data/', 'nib_input_{}.nii'.format('test')), val_output_affine)
@@ -203,8 +203,8 @@ def training_loop(img_path_list: Sequence,
 
     split_lists = utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage)
     logging.info('Initialisation of the training transformations')
-    train_img_transforms = transformations.segmentation_train_transformd(transform_dict, train_set_clamp)
-    val_img_transforms = transformations.segmentation_val_transformd(transform_dict, train_set_clamp)
+    train_img_transforms = transformations.segmentation_train_transformd(transform_dict, lesion_set_clamp)
+    val_img_transforms = transformations.segmentation_val_transformd(transform_dict, lesion_set_clamp)
 
     controls_lists = []
     trash_seg_path_count_dict = {}
@@ -221,7 +221,7 @@ def training_loop(img_path_list: Sequence,
                                                                    clamping=controls_clamping)
         logging.info('Initialisation of the control validation transformations')
         ctr_val_img_transforms = transformations.image_only_transformd(transform_dict, training=False,
-                                                                   clamping=controls_clamping)
+                                                                       clamping=controls_clamping)
         logging.info(f'Control training loss: mean(sigmoid(outputs)) * {control_weight_factor}')
     for fold in range(folds_number):
         model = net.create_unet_model(device, unet_hyper_params)
@@ -257,7 +257,6 @@ def training_loop(img_path_list: Sequence,
         # Cumulated values might reach max float so storing it into lists
         ctr_loss = []
         ctr_vol = []
-        import time
         time_list = []
         for epoch in range(epoch_num):
             print('-' * 10)
@@ -266,7 +265,7 @@ def training_loop(img_path_list: Sequence,
             epoch_loss = 0
             step = 0
             # testing
-            testing(train_loader, output_dir)
+            # testing(train_loader, output_dir)
             # import time
             # for i in range(5):
             #     step = 0

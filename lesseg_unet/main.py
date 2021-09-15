@@ -77,7 +77,7 @@ def main():
                                                             ' with --clamp_low and --clamp_high)')
     parser.add_argument('-cl', '--clamp_low', type=float, help='Defines the low quantile of intensity clamping')
     parser.add_argument('-ch', '--clamp_high', type=float, help='Defines the high quantile of intensity clamping')
-    parser.add_argument('-clamp_train_set', action='store_true',
+    parser.add_argument('-clamp_lesion_set', action='store_true',
                         help='Apply intensity clamping on the training lesioned set as well'
                              ' (with default value if not given with --clamp_low and --clamp_high)')
     parser.add_argument('-kmos', '--keep_model_output_size', action='store_true', help='Keep the output of the '
@@ -98,6 +98,8 @@ def main():
 
     log_file_path = str(Path(output_root, '__logging_training.txt'))
     logging.basicConfig(filename=log_file_path, filemode='w', level=logging.INFO)
+    file_handler = logging.StreamHandler(sys.stdout)
+    logging.getLogger().addHandler(file_handler)
     # if args.default_label is not None:
     #     logging.info(f'{args.default_label} will be used to fill up missing labels')
     # if args.create_default_label:
@@ -178,12 +180,16 @@ def main():
             clamp_tuple = (.0005, .9995)
         else:
             clamp_tuple = None
-    clamp_train_set = None
-    if args.clamp_train_set:
+    clamp_lesion_set = None
+    if args.clamp_lesion_set:
         if clamp_tuple is None:
-            clamp_train_set = (.0005, .9995)
+            clamp_lesion_set = (.0005, .9995)
         else:
-            clamp_train_set = clamp_tuple
+            clamp_lesion_set = clamp_tuple
+    if clamp_lesion_set is not None:
+        logging.info(f'Clamping of training set : {clamp_tuple}')
+    if clamp_tuple is not None:
+        logging.info(f'Clamping of control set: {clamp_lesion_set}')
     train_val_percentage = None
     if args.train_val is not None:
         train_val_percentage = args.train_val
@@ -206,7 +212,7 @@ def main():
                                dataloader_workers=args.num_workers,
                                # num_nifti_save=args.num_nifti_save,
                                train_val_percentage=train_val_percentage,
-                               train_set_clamp=clamp_train_set,
+                               lesion_set_clamp=clamp_lesion_set,
                                controls_clamping=clamp_tuple,
                                label_smoothing=args.label_smoothing,
                                stop_best_epoch=stop_best_epoch,
