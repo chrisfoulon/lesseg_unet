@@ -12,6 +12,7 @@ from tqdm import tqdm
 import numpy as np
 import monai
 from monai.data import Dataset
+from monai.data import decollate_batch
 import torch
 from torch.nn.functional import binary_cross_entropy_with_logits as BCE
 from monai.metrics import DiceMetric, SurfaceDistanceMetric, HausdorffDistanceMetric
@@ -452,9 +453,11 @@ def training_loop(img_path_list: Sequence,
 
                         loss = val_loss_function(outputs, labels[:, :1, :, :, :]).cpu()
                         discrete_outputs = post_trans(outputs)
-                        for i in range(discrete_outputs.shape[0]):
+                        discrete_outputs = [post_trans(i) for i in decollate_batch(discrete_outputs)]
+                        for output in discrete_outputs:
                             dice_value = dice_metric(y_pred=discrete_outputs[i, :1, :, :, :],
-                                                     y=labels[i, :1, :, :, :]).mean()
+                                                     y=labels[i, :1, :, :, :]) # .mean()
+                            print(dice_value)
                             distance = hausdorff_metric(y_pred=discrete_outputs[i, :1, :, :, :],
                                                         y=labels[i, :1, :, :, :]).mean()
                             # dice_value = dice_metric(y_pred=discrete_outputs, y=labels[:, :1, :, :, :]).mean()

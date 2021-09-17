@@ -107,8 +107,7 @@ def validation_loop(img_path_list: Sequence,
                     dataloader_workers: int = 8,
                     # num_nifti_save: int = -1,
                     bad_dice_treshold: float = 0.1,
-                    train_val_percentage=0,
-                    default_label=None):
+                    train_val_percentage=0):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -117,8 +116,7 @@ def validation_loop(img_path_list: Sequence,
 
     _, val_ds = data_loading.init_training_data(img_path_list, seg_path_list, img_pref,
                                                 transform_dict=transform_dict,
-                                                train_val_percentage=train_val_percentage,
-                                                default_label=default_label)
+                                                train_val_percentage=train_val_percentage)
     val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
                                                             dataloader_workers=dataloader_workers)
     unet_hyper_params = net.default_unet_hyper_params

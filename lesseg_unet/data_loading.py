@@ -91,7 +91,7 @@ def create_validation_data_loader(val_ds: monai.data.Dataset,
 def data_loader_checker_first(check_ds, set_name=''):
     # use batch_size=2 to load images and use RandCropByPosNegLabeld to generate 2 x 4 images for network training
     check_loader = DataLoader(check_ds, batch_size=1, num_workers=2, pin_memory=torch.cuda.is_available(),
-                              collate_fn=list_data_collate, persistent_workers=True)
+                              collate_fn=list_data_collate, persistent_workers=False)
     first_dict = monai.utils.misc.first(check_loader)
     img_batch, seg_batch = first_dict['image'], first_dict['label']
     logging.info('First {} loader (total size: {}) batch size: images {}, lesions {}'.format(
