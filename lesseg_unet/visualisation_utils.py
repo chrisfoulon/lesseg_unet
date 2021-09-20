@@ -96,9 +96,11 @@ def display_img(img, over1=None, over2=None):
         over1 = Path(over1).name if over1 else None
         over2 = Path(over2).name if over2 else None
     if over1:
+        # -c -1 means red
         label_opt = ['-o', str(over1), '-c', '-1', '-t', '-1']
     seg_opt = []
     if over2:
+        # -c -3 means green
         seg_opt = ['-o', str(over2), '-c', '-3', '-t', '-1']
     mricron_options = img_opt + label_opt + seg_opt
     mricron_command = ['mricron', str(img)] + mricron_options

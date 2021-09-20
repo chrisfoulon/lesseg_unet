@@ -203,6 +203,10 @@ def training_loop(img_path_list: Sequence,
             raise ValueError('Not control file list provided but images with missing labels found')
 
     split_lists = utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage)
+    # TESTING
+    for i, li in enumerate(split_lists):
+        split_lists[i] = li[0:20]
+    # TESTING
     logging.info('Initialisation of the training transformations')
     train_img_transforms = transformations.segmentation_train_transformd(transform_dict, lesion_set_clamp)
     val_img_transforms = transformations.segmentation_val_transformd(transform_dict, lesion_set_clamp)
@@ -436,75 +440,90 @@ def training_loop(img_path_list: Sequence,
                         step += 1
                         inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
                         outputs = model(inputs)
+                        # In case CoordConv is used, we only want the measures on the images, not the coordinates
+                        inputs = inputs[:, :1, :, :, :]
+                        labels = labels[:, :1, :, :, :]
+                        outputs = outputs[:, :1, :, :, :]
                         controls_loss = 0
                         if ctr_val_iter:
                             batch_data_controls = next(ctr_val_iter)
                             inputs_controls = batch_data_controls['image'].to(device)
                             # labels_controls = torch.zeros_like(inputs_controls).to(device)
                             outputs_controls = model(inputs_controls)
-                            batch_mean = torch.mean(outputs_controls[:, :1, :, :, :], 0)
-                            batch_mean_sigmoid = torch.sigmoid(batch_mean)
-                            # It's basically torch.mean(torch.sigmoid(normal_logits) > 0.5)
-                            controls_vol = utils.volume_metric(batch_mean_sigmoid,
+                            outputs_batch_images = outputs_controls[:, :1, :, :, :]
+                            outputs_batch_images_sigmoid = torch.sigmoid(outputs_batch_images)
+                            controls_vol = utils.volume_metric(outputs_batch_images_sigmoid,
                                                                sigmoid=False, discrete=True)
-                            controls_loss = torch.mean(batch_mean_sigmoid) * control_weight_factor
-                            ctr_loss += [controls_loss]
                             ctr_vol += [controls_vol]
+                            # It's basically torch.mean(torch.sigmoid(normal_logits) > 0.5)
+                            ctr_loss += [torch.mean(outputs_batch_images_sigmoid) * control_weight_factor]
+                            # TODO clean once above tested
+                            # batch_mean = torch.mean(outputs_controls[:, :1, :, :, :], 0)
+                            # batch_mean_sigmoid = torch.sigmoid(batch_mean)
+                            # controls_vol = utils.volume_metric(batch_mean_sigmoid,
+                            #                                    sigmoid=True, discrete=True)
+                            # controls_loss = torch.mean(batch_mean_sigmoid) * control_weight_factor
+                            #
+                            # ctr_vol += [controls_vol]
 
                         loss = val_loss_function(outputs, labels[:, :1, :, :, :]).cpu()
                         discrete_outputs = post_trans(outputs)
                         discrete_outputs = [post_trans(i) for i in decollate_batch(discrete_outputs)]
-                        for output in discrete_outputs:
-                            dice_value = dice_metric(y_pred=discrete_outputs[i, :1, :, :, :],
-                                                     y=labels[i, :1, :, :, :]) # .mean()
-                            print(dice_value)
-                            distance = hausdorff_metric(y_pred=discrete_outputs[i, :1, :, :, :],
-                                                        y=labels[i, :1, :, :, :]).mean()
-                            # dice_value = dice_metric(y_pred=discrete_outputs, y=labels[:, :1, :, :, :]).mean()
-                            # distance = hausdorff_metric(y_pred=discrete_outputs, y=labels[:, :1, :, :, :]).mean()
-                            distance = torch.minimum(distance, max_distance).mean()
-                            if val_loss_fct == 'dist':
-                                # In that case we want the distance to be smaller
-                                metric_select_fct = lt
-                                metric = distance
-                            elif val_loss_fct == 'dist_loss':
-                                # In that case we want the loss to be smaller
-                                metric_select_fct = lt
-                                metric = distance + loss
-                            elif val_loss_fct == 'dice_ctr_loss':
-                                # In that case we want the loss to be smaller
-                                metric_select_fct = lt
-                                metric = loss + controls_loss
-                            elif val_loss_fct == 'dice_ctr_vol':
-                                # In that case we want the loss to be smaller
-                                metric_select_fct = lt
-                                metric = loss + controls_vol
-                            else:
-                                metric = dice_value
+                        print(inputs.shape)
+                        print(outputs.shape)
+                        dice_value = dice_metric(y_pred=discrete_outputs, y=decollate_batch(labels))
+                        distance = hausdorff_metric(y_pred=discrete_outputs, y=decollate_batch(labels))
+                        print(dice_value)
+                        print(distance)
+                        # dice_value = dice_metric(y_pred=discrete_outputs[i, :1, :, :, :],
+                        #                          y=labels[i, :1, :, :, :]) # .mean()
+                        # distance = hausdorff_metric(y_pred=discrete_outputs[i, :1, :, :, :],
+                        #                             y=labels[i, :1, :, :, :]).mean()
+                        # dice_value = dice_metric(y_pred=discrete_outputs, y=labels[:, :1, :, :, :]).mean()
+                        # distance = hausdorff_metric(y_pred=discrete_outputs, y=labels[:, :1, :, :, :]).mean()
+                        distance = torch.minimum(distance, max_distance).mean()
+                        if val_loss_fct == 'dist':
+                            # In that case we want the distance to be smaller
+                            metric_select_fct = lt
+                            metric = distance
+                        elif val_loss_fct == 'dist_loss':
+                            # In that case we want the loss to be smaller
+                            metric_select_fct = lt
+                            metric = distance + loss
+                        elif val_loss_fct == 'dice_ctr_loss':
+                            # In that case we want the loss to be smaller
+                            metric_select_fct = lt
+                            metric = loss + controls_loss
+                        elif val_loss_fct == 'dice_ctr_vol':
+                            # In that case we want the loss to be smaller
+                            metric_select_fct = lt
+                            metric = loss + controls_vol
+                        else:
+                            metric = dice_value
 
-                            # distance = surface_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
-                            # TODO the len(value) thing is really confusing and most likely useless here get rid of it!
-                            distance_sum += distance.item()
-                            distance_count += 1
+                        # distance = surface_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
+                        # TODO the len(value) thing is really confusing and most likely useless here get rid of it!
+                        distance_sum += distance.item()
+                        distance_count += 1
 
-                            val_dice_list.append(dice_value.item())
-                            metric_count += 1
-                            metric_sum += metric.item()
+                        val_dice_list.append(dice_value.item())
+                        metric_count += 1
+                        metric_sum += metric.item()
 
-                            loss_list.append(loss.item())
-                            if dice_value.item() > val_meh_thr:
-                                img_count += 1
-                            elif dice_value.item() > val_trash_thr:
-                                meh_count += 1
-                            else:
-                                if epoch > 25:
-                                    p = val_data['image_meta_dict']['filename_or_obj'][0]
-                                    trash_seg_paths_list.append(p)
-                                    if p in trash_seg_path_count_dict:
-                                        trash_seg_path_count_dict[p] += 1
-                                    else:
-                                        trash_seg_path_count_dict[p] = 0
-                                trash_count += 1
+                        loss_list.append(loss.item())
+                        if dice_value.item() > val_meh_thr:
+                            img_count += 1
+                        elif dice_value.item() > val_trash_thr:
+                            meh_count += 1
+                        else:
+                            if epoch > 25:
+                                p = val_data['image_meta_dict']['filename_or_obj'][0]
+                                trash_seg_paths_list.append(p)
+                                if p in trash_seg_path_count_dict:
+                                    trash_seg_path_count_dict[p] += 1
+                                else:
+                                    trash_seg_path_count_dict[p] = 0
+                            trash_count += 1
                         pbar.set_description(f'Val[{epoch + 1}] avg_loss:[{metric_sum / metric_count}]')
                     mean_metric = metric_sum / metric_count
                     val_mean_loss = np.mean(loss_list)

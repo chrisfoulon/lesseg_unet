@@ -481,21 +481,24 @@ class MyNormalizeIntensity(Transform):
         self.nonzero = nonzero
         self._dtype = dtype
 
-    def _normalize(self, img: Union[torch.Tensor, np.ndarray]) -> Union[torch.Tensor, np.ndarray]:
+    def _normalize(self, img: Union[torch.Tensor, np.ndarray], no_std: bool = True) -> Union[torch.Tensor, np.ndarray]:
         img, pkg = get_data_and_pkg(img)
         slices = (img != 0) if self.nonzero else pkg.ones(img.shape, dtype=pkg.bool)
-        # print(f'slices : {slices.shape}')
         if not pkg.any(slices):
             return img
 
         _sub = pkg.mean(img[slices])
-        if pkg == np:
-            _div = pkg.std(img[slices])
+        if no_std:
+            _div = 1
         else:
-            # torch std is applying a correction that numpy does not. Disabling it to get the same results between the 2
-            _div = pkg.std(img[slices], unbiased=False)
-        if _div == 0.0:
-            _div = 1.0
+            if pkg == np:
+                _div = pkg.std(img[slices])
+            else:
+                # torch std is applying a correction that numpy does not.
+                # Disabling it to get the same results between the 2
+                _div = pkg.std(img[slices], unbiased=False)
+            if _div == 0.0:
+                _div = 1.0
         img[slices] = (img[slices] - _sub) / _div
         return img
 
