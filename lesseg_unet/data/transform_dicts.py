@@ -409,7 +409,7 @@ curated_dict = {
         # # TODO maybe 'Orientation': {} but it would interact with the flip,
         {'RandAffined': {
             'keys': ['image', 'label'],
-            'prob': high_prob,
+            'prob': low_prob,
             'rotate_range': radians(5),
             'shear_range': radians(5),
             'translate_range': 0.05,
@@ -455,7 +455,7 @@ curated_dict = {
         #  },
         {'RandomBiasField': {
             'include': ['image'],
-            'p': high_prob,
+            'p': low_prob,
             'coefficients': 0.1}
          },
         # {'RandomMotion': {
