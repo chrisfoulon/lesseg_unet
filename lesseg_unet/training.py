@@ -517,7 +517,7 @@ def training_loop(img_path_list: Sequence,
                             metric_select_fct = lt
                             metric = loss + controls_vol
                         else:
-                            metric = dice_value
+                            metric = np.mean(np.array(val_dice_list))
 
                         # The metric is already averaged over the batch so no need to average it further
                         metric_count += 1
