@@ -495,6 +495,12 @@ curated_dict = {
 curated_dict_cc = deepcopy(full_hyper_dict)
 curated_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
 
+std_dict = deepcopy(full_hyper_dict)
+std_dict['first_transform'][3]['MyNormalizeIntensityd']['no_std'] = False
+std_dict['last_transform'][3]['MyNormalizeIntensityd']['no_std'] = False
+std_dict_cc = deepcopy(std_dict)
+std_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
+
 test_dict = {
     'first_transform': [
         {'LoadImaged': {
