@@ -454,6 +454,7 @@ class MyNormalizeIntensity(Transform):
         nonzero: bool = False,
         dtype: str = 'float32',
         in_min_max: Union[float, Tuple[float, float]] = None,
+        no_std: bool = True
     ) -> None:
         self.in_min_max = in_min_max
         if in_min_max is not None:
@@ -480,6 +481,7 @@ class MyNormalizeIntensity(Transform):
                 raise ValueError('out_min_max must be either a len 2 Tuple or a float')
         self.nonzero = nonzero
         self._dtype = dtype
+        self.no_std = no_std
 
     def _normalize(self, img: Union[torch.Tensor, np.ndarray], no_std: bool = True) -> Union[torch.Tensor, np.ndarray]:
         img, pkg = get_data_and_pkg(img)
@@ -542,7 +544,7 @@ class MyNormalizeIntensity(Transform):
         self.dtype = getattr(pkg, self._dtype)
         if self.clamp_quantile is not None:
             self._clamp(img)
-        img = self._normalize(img)
+        img = self._normalize(img, self.no_std)
         if self.out_min_max is not None:
             self._rescale(img)
         if isinstance(img, torch.Tensor):
@@ -574,10 +576,11 @@ class MyNormalizeIntensityd(MapTransform):
         nonzero: bool = False,
         dtype: str = 'float32',
         in_min_max: Union[float, Tuple[float, float]] = None,
+        no_std: bool = True,
         allow_missing_keys: bool = False,
     ) -> None:
         super().__init__(keys, allow_missing_keys)
-        self.normalizer = MyNormalizeIntensity(out_min_max, clamp_quantile, nonzero, dtype, in_min_max)
+        self.normalizer = MyNormalizeIntensity(out_min_max, clamp_quantile, nonzero, dtype, in_min_max, no_std)
 
     def __call__(self, data: Mapping[Hashable, torch.Tensor]) -> Dict[Hashable, torch.Tensor]:
         d = dict(data)

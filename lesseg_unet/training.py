@@ -113,7 +113,7 @@ def training_loop(img_path_list: Sequence,
     if dropout is not None and dropout == 0:
         unet_hyper_params['dropout'] = dropout
 
-    dice_metric = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
+    dice_metric = DiceMetric(include_background=True, reduction="mean")
     # surface_metric = SurfaceDistanceMetric(include_background=True, reduction="mean", symmetric=True)
     hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
@@ -263,6 +263,7 @@ def training_loop(img_path_list: Sequence,
         ctr_loss = []
         batch_ctr_vol = []
         time_list = []
+        epoch_time_list = []
         for epoch in range(epoch_num):
             print('-' * 10)
             print(f'epoch {epoch + 1}/{epoch_num}')
@@ -316,6 +317,7 @@ def training_loop(img_path_list: Sequence,
             # # print(f'Loop Time: {end_time - start_time}')
             # exit()
             start_time = time.time()
+            epoch_start_time = time.time()
             time_loading = True
             ctr_train_iter = None
             if ctr_train_loader:
@@ -441,7 +443,7 @@ def training_loop(img_path_list: Sequence,
                         inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
                         outputs = model(inputs)
                         # In case CoordConv is used, we only want the measures on the images, not the coordinates
-                        inputs = inputs[:, :1, :, :, :]
+                        # inputs = inputs[:, :1, :, :, :]
                         labels = labels[:, :1, :, :, :]
                         outputs = outputs[:, :1, :, :, :]
                         controls_loss = 0
@@ -472,9 +474,12 @@ def training_loop(img_path_list: Sequence,
                         discrete_outputs = [post_trans(i) for i in decollate_batch(discrete_outputs)]
                         decollated_labels = decollate_batch(labels)
                         # TODO break down the metric calculation as we use it to count the good and bad segmentations
+                        # for ind, output in enumerate(discrete_outputs):
+                        batch_dice_metric_list = []
                         for ind, output in enumerate(discrete_outputs):
-                            dice_value = dice_metric(y_pred=output, y=decollated_labels[ind]).mean()
+                            dice_value = dice_metric(y_pred=[output], y=[decollated_labels[ind]])
                             val_dice_list.append(dice_value.item())
+                            batch_dice_metric_list.append(dice_value.item())
                             if dice_value.item() > val_meh_thr:
                                 img_count += 1
                             elif dice_value.item() > val_trash_thr:
@@ -488,7 +493,7 @@ def training_loop(img_path_list: Sequence,
                                     else:
                                         trash_seg_path_count_dict[p] = 0
                                 trash_count += 1
-                            distance = hausdorff_metric(y_pred=output, y=decollated_labels[ind])
+                            distance = hausdorff_metric(y_pred=[output], y=[decollated_labels[ind]])
                             distance = torch.minimum(distance, max_distance).mean()
                             # distance = surface_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
                             distance_sum += distance.item()
@@ -517,15 +522,16 @@ def training_loop(img_path_list: Sequence,
                             metric_select_fct = lt
                             metric = loss + controls_vol
                         else:
-                            metric = np.mean(np.array(val_dice_list))
+                            metric = torch.mean(torch.tensor(batch_dice_metric_list, dtype=torch.float))
 
                         # The metric is already averaged over the batch so no need to average it further
                         metric_count += 1
                         metric_sum += metric.item()
+                        print(f'Metric_sum: {metric_sum}')
 
                         loss_list.append(loss.item())
 
-                        pbar.set_description(f'Val[{epoch + 1}] avg_loss:[{metric_sum / metric_count}]')
+                        pbar.set_description(f'Val[{epoch + 1}] avg_loss:[{np.mean(loss_list)}]')
                     mean_metric = metric_sum / metric_count
                     val_mean_loss = np.mean(loss_list)
                     mean_dice = np.mean(np.array(val_dice_list))
@@ -587,9 +593,9 @@ def training_loop(img_path_list: Sequence,
                         epoch_suffix = ''
                         if save_every_decent_best_epoch:
                             if mean_dice > 0.75:
-                                epoch_suffix = str(epoch)
+                                epoch_suffix = '_' + str(epoch)
                         utils.save_checkpoint(model, epoch + 1, optimizer, output_fold_dir,
-                                              f'best_metric_model_segmentation3d_epo_{epoch_suffix}.pth')
+                                              f'best_metric_model_segmentation3d_epo{epoch_suffix}.pth')
                         print('saved new best metric model')
                         str_best_epoch = (
                             f'Best epoch {best_metric_epoch} '
@@ -613,6 +619,12 @@ def training_loop(img_path_list: Sequence,
                     print(f'It has been [{best_epoch_count}] since a best epoch has been found')
                     if stop_best_epoch > -1:
                         print(f'The training will stop after [{stop_best_epoch}] epochs without improvement')
+                    epoch_end_time = time.time()
+                    epoch_time = epoch_end_time - start_time
+                    print(f'Epoch Time: {epoch_time}')
+                    epoch_time_list.append(epoch_time)
+                    print(f'First epoch time: '
+                          f'{epoch_time_list[0]} and average epoch time {np.mean(epoch_time_list)}')
                     if stop_best_epoch != -1:
                         if best_epoch_count > stop_best_epoch:
                             print(f'More than {stop_best_epoch} without improvement')
