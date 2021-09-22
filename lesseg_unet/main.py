@@ -187,9 +187,9 @@ def main():
         else:
             clamp_lesion_set = clamp_tuple
     if clamp_lesion_set is not None:
-        logging.info(f'Clamping of training set : {clamp_tuple}')
+        logging.info(f'Clamping of training set : {clamp_lesion_set}')
     if clamp_tuple is not None:
-        logging.info(f'Clamping of control set: {clamp_lesion_set}')
+        logging.info(f'Clamping of control set: {clamp_tuple}')
     train_val_percentage = None
     if args.train_val is not None:
         train_val_percentage = args.train_val
