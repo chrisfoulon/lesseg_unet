@@ -385,7 +385,8 @@ def training_loop(img_path_list: Sequence,
                     ctr_loss += [controls_loss]
                     # TODO it's just to save a bit of time
                     # batch_ctr_vol += [controls_vol]
-                    controls_loss_str = f'Controls loss: {controls_loss}, controls volume: {controls_vol}'
+                    # controls_loss_str = f'Controls loss: {controls_loss}, controls volume: {controls_vol}'
+                    controls_loss_str = f'Controls loss: {controls_loss}'
                     # TODO it's just to save a bit of time
                     # writer.add_scalar('batch_control_loss', controls_loss.item(), batches_per_epoch * epoch + step)
                     # writer.add_scalar('batch_control_vol', controls_vol, batches_per_epoch * epoch + step)
