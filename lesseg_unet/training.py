@@ -373,16 +373,16 @@ def training_loop(img_path_list: Sequence,
                     inputs_controls = batch_data_controls['image'].to(device)
                     # labels_controls = torch.zeros_like(inputs_controls).to(device)
                     outputs_controls = model(inputs_controls)
-                    batch_mean = torch.mean(outputs_controls[:, :1, :, :, :], 0)
-                    batch_mean_sigmoid = torch.sigmoid(batch_mean)
-                    # It's basically torch.mean(torch.sigmoid(normal_logits) > 0.5)
-                    # TODO it's just to save a bit of time
-                    # controls_vol = utils.volume_metric(batch_mean_sigmoid,
+                    outputs_batch_images = outputs_controls[:, :1, :, :, :]
+                    outputs_batch_images_sigmoid = torch.sigmoid(outputs_batch_images)
+                    # controls_vol = utils.volume_metric(outputs_batch_images_sigmoid,
                     #                                    sigmoid=False, discrete=True)
-                    controls_loss = torch.mean(batch_mean_sigmoid) * control_weight_factor
+                    # The volume (number of voxels with 1) needs to be averaged on the batch size
+                    # batch_ctr_vol += [controls_vol / outputs_controls.shape[0]]
+                    controls_loss = torch.mean(outputs_batch_images_sigmoid) * control_weight_factor
+                    ctr_loss += [controls_loss]
                     # controls_loss = utils.percent_vox_loss(outputs_controls[:, :1, :, :, :], divide_max_vox=100)
                     # controls_loss = controls_vol
-                    ctr_loss += [controls_loss]
                     # TODO it's just to save a bit of time
                     # batch_ctr_vol += [controls_vol]
                     # controls_loss_str = f'Controls loss: {controls_loss}, controls volume: {controls_vol}'
@@ -480,8 +480,8 @@ def training_loop(img_path_list: Sequence,
                             # ctr_vol += [controls_vol]
 
                         loss = val_loss_function(outputs, labels)
-                        discrete_outputs = post_trans(outputs)
-                        discrete_outputs = [post_trans(i) for i in decollate_batch(discrete_outputs)]
+                        # discrete_outputs = post_trans(outputs)
+                        discrete_outputs = [post_trans(i) for i in decollate_batch(outputs)]
                         decollated_labels = decollate_batch(labels)
                         # TODO break down the metric calculation as we use it to count the good and bad segmentations
                         # for ind, output in enumerate(discrete_outputs):
