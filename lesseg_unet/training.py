@@ -527,10 +527,12 @@ def training_loop(img_path_list: Sequence,
                             # In that case we want the loss to be smaller
                             metric_select_fct = lt
                             metric = loss + controls_loss
+                            print(f'Batch dice metric: {batch_dice_metric_list}')
                         elif val_loss_fct == 'dice_ctr_vol':
                             # In that case we want the loss to be smaller
                             metric_select_fct = lt
                             metric = loss + controls_vol
+                            print(f'Batch dice metric: {batch_dice_metric_list}')
                         else:
                             print(f'Batch dice metric: {batch_dice_metric_list}')
                             metric = torch.mean(torch.tensor(batch_dice_metric_list, dtype=torch.float))
@@ -621,7 +623,8 @@ def training_loop(img_path_list: Sequence,
                                 f.write(','.join([str(epoch + 1)] + trash_seg_paths_list) + '\n')
                     best_epoch_count = epoch + 1 - best_metric_epoch
                     str_current_epoch = (
-                            f'[Fold: {fold}]Current epoch: {epoch + 1} current mean metric: {mean_metric:.4f}\n'
+                            f'[Fold: {fold}]Current epoch: {epoch + 1} current mean metric: {mean_metric:.4f}'
+                            f' current mean dice metric: {mean_dice}\n'
                             # f'and an average distance of [{distance_sum / distance_count}];\n'
                             f'Controls loss [{controls_mean_loss}] / volume[{controls_mean_vol}] ;\n\n'
                             + str_img_count + str_best_epoch
