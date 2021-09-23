@@ -172,68 +172,52 @@ new_full_dict_cc['monai_transform'].append({'Anisotropiserd': {
 
 minimal_hyper_dict = {
     'first_transform': [
-        {'LoadImaged': {'keys': ['image', 'label']}},
-        {'AddChanneld': {'keys': ['image', 'label']}},
-        # {'AsChannelFirstd': {
-        #     'keys': ['image', 'label'],
-        #     'channel_dim': -1}
-        # },
-        # {'Resized': {
-        #     'keys': ['image', 'label'],
-        #     'spatial_size': def_spatial_size,
-        #     # 'mode': 'nearest'
-        # }},
-        {'ResizeWithPadOrCropd': {
-            'keys': ['image', 'label'],
-            'spatial_size': def_spatial_size}
-         },
-        # {'NormalizeIntensityd': {'keys': ['image']}},
-        {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'First resize'}},
-    ],
-    'monai_transform': [
-
-        # {'ScaleIntensityd': {'keys': "image"}},
-
+        {'LoadImaged': {
+            'keys': ['image', 'label']}},
         # {'ToTensord': {'keys': ['image', 'label']}},
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'Fisrt monai'}},
-        # {'RandCropByPosNegLabeld': {
-        #     'keys': ["image", "label"],
-        #     'label_key': "label",
-        #     'spatial_size': def_spatial_size,
-        #     'pos': 1,
-        #     'neg': 1,
-        #     'num_samples': 4
-        # }},
-        # {'RandSpatialCropd': {
-        #     'keys': ["image", "label"],
-        #     'roi_size': min_small_crop_size,
-        #     'random_size': False
-        # }},
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'After RandCrop'}},
-    ],
-    'labelonly_transform': [],
-    'last_transform': [
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'Last binarized'}},
-        # {'Resized': {
-        #     'keys': ['image', 'label'],
-        #     'spatial_size': def_spatial_size,
-        #     'mode': 'nearest'
-        # }},
+        {'AddChanneld': {'keys': ['image', 'label']}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE RESIZE'}},
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
          },
+        # {'ToTensord': {'keys': ['image', 'label']}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER RESIZE'}},
+        # {'NormalizeIntensityd': {'keys': ['image']}},
+        {'MyNormalizeIntensityd': {
+            'keys': ['image'],
+            'out_min_max': (-1, 1),
+            # 'clamp_quantile': (.001, .999)
+            }
+         },
+        # {'ToTensord': {'keys': ['image', 'label']}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE Binarize'}},
+        {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
+    ],
+    'last_transform': [
         # {'GaussianSmoothd': {
         #     'keys': ['label'],
         #     'sigma': .5}
         #  },
-        # {'Binarized': {
-        #     'keys': ['label'],
-        #     'lower_threshold': 0.5
-        # }},
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER binarized'}},
-        {'NormalizeIntensityd': {'keys': ['image']}},
+
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE SECOND F_ING BINARIZE'}},
+        {'Binarized': {
+            'keys': ['label'],
+            'lower_threshold': 0.25}
+         },
+        {'ToNumpyd': {'keys': ['image', 'label']}},
+        {'ResizeWithPadOrCropd': {
+            'keys': ['image', 'label'],
+            'spatial_size': def_spatial_size}
+         },
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER second binarized'}},
+        # {'NormalizeIntensityd': {'keys': ['image']}},
+        {'MyNormalizeIntensityd': {
+            'keys': ['image'],
+            'out_min_max': (-1, 1)}
+         },
+        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'THE END'}},
     ]
 }
 
@@ -500,6 +484,13 @@ std_dict['first_transform'][3]['MyNormalizeIntensityd']['no_std'] = False
 std_dict['last_transform'][3]['MyNormalizeIntensityd']['no_std'] = False
 std_dict_cc = deepcopy(std_dict)
 std_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
+
+
+mod_full_dict = deepcopy(full_hyper_dict)
+mod_full_dict['last_transform'] = curated_dict['last_transform']
+mod_full_dict['first_transform'] = curated_dict['first_transform']
+mod_full_dict_cc = deepcopy(mod_full_dict)
+mod_full_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
 
 test_dict = {
     'first_transform': [

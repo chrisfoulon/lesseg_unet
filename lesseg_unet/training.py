@@ -206,6 +206,11 @@ def training_loop(img_path_list: Sequence,
     # TESTING
     # for i, li in enumerate(split_lists):
     #     split_lists[i] = li[0:20]
+    # split_lists = [split_lists[0], split_lists[0]]
+    # model = utils.load_eval_from_checkpoint(
+    #     '/home/tolhsadum/neuro_apps/data/'
+    #     'filt_zetas_ctr_cc_weight_100_clamp_halfpercent_best_metric_model_segmentation3d_epo.pth',
+    #     device, unet_hyper_params)
     # TESTING
     logging.info('Initialisation of the training transformations')
     train_img_transforms = transformations.segmentation_train_transformd(transform_dict, lesion_set_clamp)
@@ -363,7 +368,7 @@ def training_loop(img_path_list: Sequence,
                 # inputs_controls = None
                 # labels_controls = None
                 # outputs_controls = None
-                if ctr_train_iter:
+                if ctr_train_iter is not None:
                     with torch.no_grad():
                         batch_data_controls = next(ctr_train_iter)
                     inputs_controls = batch_data_controls['image'].to(device)
@@ -478,6 +483,7 @@ def training_loop(img_path_list: Sequence,
                         batch_dice_metric_list = []
                         for ind, output in enumerate(discrete_outputs):
                             dice_value = dice_metric(y_pred=[output], y=[decollated_labels[ind]])
+                            print(dice_value.item())
                             val_dice_list.append(dice_value.item())
                             batch_dice_metric_list.append(dice_value.item())
                             if dice_value.item() > val_meh_thr:
@@ -485,7 +491,7 @@ def training_loop(img_path_list: Sequence,
                             elif dice_value.item() > val_trash_thr:
                                 meh_count += 1
                             else:
-                                if dice_value.item() > .7:
+                                if best_metric > val_meh_thr:
                                     p = val_data['image_meta_dict']['filename_or_obj'][0]
                                     trash_seg_paths_list.append(p)
                                     if p in trash_seg_path_count_dict:
@@ -527,7 +533,6 @@ def training_loop(img_path_list: Sequence,
                         # The metric is already averaged over the batch so no need to average it further
                         metric_count += 1
                         metric_sum += metric.item()
-                        print(f'Metric_sum: {metric_sum}')
 
                         loss_list.append(loss.item())
 
