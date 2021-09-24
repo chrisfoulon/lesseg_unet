@@ -25,7 +25,8 @@ def segmentation_loop(img_path_list: Sequence,
                       device: str = None,
                       batch_size: int = 1,
                       dataloader_workers: int = 8,
-                      original_size=True):
+                      original_size=True,
+                      clamping: tuple = None,):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -33,7 +34,7 @@ def segmentation_loop(img_path_list: Sequence,
 
     original_size = original_size
     val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
-    val_ds = data_loading.init_segmentation(img_path_list, img_pref, transform_dict)
+    val_ds = data_loading.init_segmentation(img_path_list, img_pref, transform_dict, clamping=clamping)
     val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
                                                             dataloader_workers=dataloader_workers)
     unet_hyper_params = net.default_unet_hyper_params
@@ -105,9 +106,9 @@ def validation_loop(img_path_list: Sequence,
                     device: str = None,
                     batch_size: int = 1,
                     dataloader_workers: int = 8,
-                    # num_nifti_save: int = -1,
                     bad_dice_treshold: float = 0.1,
-                    train_val_percentage=0):
+                    clamping: tuple = None):
+                    # train_val_percentage=0):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -116,7 +117,7 @@ def validation_loop(img_path_list: Sequence,
 
     _, val_ds = data_loading.init_training_data(img_path_list, seg_path_list, img_pref,
                                                 transform_dict=transform_dict,
-                                                train_val_percentage=train_val_percentage)
+                                                train_val_percentage=0, clamping=clamping)
     val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
                                                             dataloader_workers=dataloader_workers)
     unet_hyper_params = net.default_unet_hyper_params

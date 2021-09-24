@@ -527,14 +527,12 @@ def training_loop(img_path_list: Sequence,
                             # In that case we want the loss to be smaller
                             metric_select_fct = lt
                             metric = loss + controls_loss
-                            print(f'Batch dice metric: {batch_dice_metric_list}')
+                            # print(f'Batch dice metric: {batch_dice_metric_list}')
                         elif val_loss_fct == 'dice_ctr_vol':
                             # In that case we want the loss to be smaller
                             metric_select_fct = lt
                             metric = loss + controls_vol
-                            print(f'Batch dice metric: {batch_dice_metric_list}')
                         else:
-                            print(f'Batch dice metric: {batch_dice_metric_list}')
                             metric = torch.mean(torch.tensor(batch_dice_metric_list, dtype=torch.float))
 
                         # The metric is already averaged over the batch so no need to average it further
@@ -555,7 +553,7 @@ def training_loop(img_path_list: Sequence,
                     if ctr_loss:
                         controls_mean_loss = torch.mean(torch.tensor(ctr_loss, dtype=torch.float))
                         controls_mean_vol = torch.mean(torch.tensor(batch_ctr_vol, dtype=torch.float))
-                        val_ctr_str = f'Controls loss [{controls_mean_loss}] / volume[{controls_mean_vol}] ;\n\n'
+                        val_ctr_str = f'Controls loss [{controls_mean_loss}] / volume[{controls_mean_vol}];\n\n'
 
                     writer.add_scalar('val_mean_metric', mean_metric, epoch + 1)
                     writer.add_scalar('val_mean_dice', mean_dice, epoch + 1)

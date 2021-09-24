@@ -242,7 +242,8 @@ def main():
                                                    b1000_pref,
                                                    transform_dict=transform_dict,
                                                    device=args.torch_device,
-                                                   dataloader_workers=args.num_workers)
+                                                   dataloader_workers=args.num_workers,
+                                                   clamping=clamp_tuple)
             else:
                 logging.info(f'Output segmentation folder : {output_root}')
                 segmentation.segmentation_loop(img_list,
@@ -251,7 +252,8 @@ def main():
                                                b1000_pref,
                                                transform_dict=transform_dict,
                                                device=args.torch_device,
-                                               dataloader_workers=args.num_workers)
+                                               dataloader_workers=args.num_workers,
+                                               clamping=clamp_tuple)
         else:
             logging.info(f'Output validation folder : {output_root}')
             segmentation.validation_loop(img_list, les_list,
@@ -261,9 +263,9 @@ def main():
                                          transform_dict=transform_dict,
                                          device=args.torch_device,
                                          dataloader_workers=args.num_workers,
-                                         train_val_percentage=train_val_percentage,
+                                         # train_val_percentage=train_val_percentage,
                                          # default_label=args.default_label
-                                         )
+                                         clamping=clamp_tuple)
 
 
 if __name__ == "__main__":

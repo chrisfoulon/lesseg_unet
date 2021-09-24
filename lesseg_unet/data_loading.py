@@ -107,13 +107,14 @@ def init_training_data(
         seg_path_list: Sequence,
         img_pref: str = None,
         transform_dict: dict = None,
-        train_val_percentage: float = 75) -> Tuple[monai.data.Dataset, monai.data.Dataset]:
+        train_val_percentage: float = 75,
+        clamping=None) -> Tuple[monai.data.Dataset, monai.data.Dataset]:
     print('Listing input files to be loaded')
     train_files, val_files = create_file_dict_lists(img_path_list, seg_path_list, img_pref,
                                                     train_val_percentage)
     print('Create transformations')
-    train_img_transforms = transformations.segmentation_train_transformd(transform_dict)
-    val_img_transforms = transformations.segmentation_val_transformd(transform_dict)
+    train_img_transforms = transformations.segmentation_train_transformd(transform_dict, clamping)
+    val_img_transforms = transformations.segmentation_val_transformd(transform_dict, clamping)
     # define dataset, data loader
     print('Create training monai datasets')
     train_ds = Dataset(train_files, transform=train_img_transforms)
@@ -167,13 +168,14 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
 
 def init_segmentation(img_path_list: Sequence,
                       img_pref: str = None,
-                      transform_dict: dict = None):
+                      transform_dict: dict = None,
+                      clamping=None):
     if img_pref is None:
         img_pref = ''
     print('Listing input files to be loaded')
     image_list = [{'image': str(img)} for img in img_path_list if img_pref in Path(img).name]
     print('Create transformations')
-    val_img_transforms = transformations.image_only_transformd(transform_dict, training=False)
+    val_img_transforms = transformations.image_only_transformd(transform_dict, training=False, clamping=clamping)
     print('Create monai dataset')
     train_ds = Dataset(image_list, transform=val_img_transforms)
     return train_ds
