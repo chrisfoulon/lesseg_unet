@@ -177,13 +177,13 @@ def main():
         clamp_tuple = (0, args.clamp_high)
     else:
         if args.clamp:
-            clamp_tuple = (.0005, .9995)
+            clamp_tuple = (.00005, .99995)
         else:
             clamp_tuple = None
     clamp_lesion_set = None
     if args.clamp_lesion_set:
         if clamp_tuple is None:
-            clamp_lesion_set = (.0005, .9995)
+            clamp_lesion_set = (.00005, .99995)
         else:
             clamp_lesion_set = clamp_tuple
     if clamp_lesion_set is not None:
