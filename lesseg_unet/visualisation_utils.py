@@ -139,13 +139,30 @@ def display_one_output(output_dir, number=None, string=None):
     return process
 
 
-def sort_output_images(files, dest_dir, labels=None, tmp_copy=True):
+def sort_output_images(files, dest_dir, labels=None, tmp_copy=True, skip_already_sorted=True):
     os.makedirs(dest_dir, exist_ok=True)
     tmp_dir = None
     if tmp_copy:
         tmp_dir = Path(dest_dir, 'tmp')
         os.makedirs(tmp_dir, exist_ok=True)
     subfolder_list = []
+    if skip_already_sorted:
+        # could do it with tmp but maybe tmp would get deleted at some point so it might be safer this way
+        subfolder_paths = [p for p in Path(dest_dir).iterdir() if p.is_dir() and p.name != 'tmp']
+        subfolder_list = [p.name for p in subfolder_paths]
+        already_sorted_files = [str(f) for d in subfolder_paths for f in d.iterdir()]
+        to_sort_list = []
+        for f in files:
+            if f not in already_sorted_files:
+                to_sort_list.append(f)
+        files = to_sort_list
+        if labels is not None:
+            to_sort_list = []
+            for f in labels:
+                if f not in already_sorted_files:
+                    to_sort_list.append(f)
+            labels = to_sort_list
+
     for i, file in tqdm(enumerate(files)):
         if tmp_dir:
             tmp_f = Path(tmp_dir, Path(file).name)
