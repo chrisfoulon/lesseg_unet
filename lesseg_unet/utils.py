@@ -314,3 +314,18 @@ def filter_outside_brain_voxels(img, output=None, template=None):
     data = nii.get_fdata()
     data[np.where(nib.load(template).get_fdata() == 0)] = 0
     nib.save(nib.Nifti1Image(data, nii.affine), output_path)
+
+
+def sum_non_bias_l2_norms(parameters, multiplier=None):
+    """
+    Given parameters=model.parameters() where model is a PyTorch model, this iterates through the list and tallies
+    the L2 norms of all the non-bias tensors.
+    """
+    l2_reg = 0
+    for param in parameters:
+        if len(list(param.size())) > 1:
+            l2_reg += torch.mean(torch.square(param))
+
+    if multiplier is not None:
+        l2_reg = multiplier * l2_reg
+    return l2_reg
