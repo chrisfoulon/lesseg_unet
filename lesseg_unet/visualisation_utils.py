@@ -150,20 +150,20 @@ def sort_output_images(files, dest_dir, labels=None, tmp_copy=True, skip_already
         # could do it with tmp but maybe tmp would get deleted at some point so it might be safer this way
         subfolder_paths = [p for p in Path(dest_dir).iterdir() if p.is_dir() and p.name != 'tmp']
         subfolder_list = [p.name for p in subfolder_paths]
-        already_sorted_files = [str(f) for d in subfolder_paths for f in d.iterdir()]
+        already_sorted_files = [f.name for d in subfolder_paths for f in d.iterdir()]
         to_sort_list = []
         for f in files:
-            if f not in already_sorted_files:
+            if Path(f).name not in already_sorted_files:
                 to_sort_list.append(f)
         files = to_sort_list
         if labels is not None:
             to_sort_list = []
             for f in labels:
-                if f not in already_sorted_files:
+                if Path(f).name not in already_sorted_files:
                     to_sort_list.append(f)
             labels = to_sort_list
-
     for i, file in tqdm(enumerate(files)):
+        print(f'Image {i}/{len(files)}')
         if tmp_dir:
             tmp_f = Path(tmp_dir, Path(file).name)
             shutil.copy(file, tmp_f)
