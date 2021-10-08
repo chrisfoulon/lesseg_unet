@@ -83,6 +83,7 @@ def main():
     parser.add_argument('-kmos', '--keep_model_output_size', action='store_true', help='Keep the output of the '
                                                                                        'segmentation in the '
                                                                                        'spatial_size of the model')
+    parser.add_argument('--cache', action='store_true', help='Cache the non-random transformation in cache in output')
     args = parser.parse_args()
     # print MONAI config
     print_config()
@@ -107,6 +108,9 @@ def main():
     #     print(f'Missing labels will be replace by an zero-filled default image')
     if not output_root.is_dir():
         raise ValueError('{} is not an existing directory and could not be created'.format(output_root))
+    cache_dir = None
+    if args.cache:
+        cache_dir = Path(output_root, 'cache')
     print('loading input dwi path list')
     seg_input_dict = {}
     if args.input_path is not None:
@@ -221,7 +225,8 @@ def main():
                                val_loss_fct=args.val_loss_function,
                                weight_factor=args.weight_factor,
                                folds_number=args.folds_number,
-                               dropout=args.dropout)
+                               dropout=args.dropout,
+                               cache_dir=cache_dir)
     else:
         if args.checkpoint is None:
             raise ValueError('A checkpoint must be given for the segmentation or validation')

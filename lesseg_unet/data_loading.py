@@ -9,7 +9,7 @@ import nibabel as nib
 import torch
 import monai
 from monai.data import list_data_collate, DataLoader
-from monai.data import Dataset
+from monai.data import Dataset, PersistentDataset, CacheDataset
 from lesseg_unet import transformations, utils
 
 
@@ -146,7 +146,7 @@ def get_data_folds(img_seg_dict: dict,
 
 
 def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_transforms, batch_size,
-                            dataloader_workers, val_batch_size=1):
+                            dataloader_workers, val_batch_size=1, cache_dir=None):
     train_data_list = []
     val_data_list = []
     for ind, chunk in enumerate(split_lists):
@@ -155,11 +155,19 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
         else:
             train_data_list = np.concatenate([train_data_list, chunk])
     print(f'Create training monai dataset for fold {fold}')
-    train_ds = Dataset(train_data_list, transform=train_img_transforms)
+    if cache_dir is not None:
+        train_ds = PersistentDataset(train_data_list, transform=train_img_transforms, cache_dir=cache_dir)
+    else:
+        train_ds = CacheDataset(train_data_list, transform=train_img_transforms)
+    # train_ds = Dataset(train_data_list, transform=train_img_transforms)
     # data_loader_checker_first(train_ds, 'training')
     # define dataset, data loader
     print(f'Create validation monai dataset')
-    val_ds = Dataset(val_data_list, transform=val_img_transforms)
+    if cache_dir is not None:
+        val_ds = PersistentDataset(val_data_list, transform=val_img_transforms, cache_dir=cache_dir)
+    else:
+        val_ds = CacheDataset(val_data_list, transform=val_img_transforms)
+    # val_ds = Dataset(val_data_list, transform=val_img_transforms)
     # data_loader_checker_first(train_ds, 'validation')
     train_loader = create_training_data_loader(train_ds, batch_size, dataloader_workers)
     val_loader = create_validation_data_loader(val_ds, val_batch_size, dataloader_workers)

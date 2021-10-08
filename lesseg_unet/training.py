@@ -90,6 +90,7 @@ def training_loop(img_path_list: Sequence,
                   weight_factor=1,
                   folds_number=1,
                   dropout=0,
+                  cache_dir=None,
                   save_every_decent_best_epoch=True):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -246,7 +247,7 @@ def training_loop(img_path_list: Sequence,
             os.remove(trash_list_path)
         train_loader, val_loader = data_loading.create_fold_dataloaders(
             split_lists, fold, train_img_transforms,
-            val_img_transforms, batch_size, dataloader_workers, val_batch_size
+            val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir
         )
         ctr_train_loader = None
         ctr_val_loader = None
@@ -254,7 +255,7 @@ def training_loop(img_path_list: Sequence,
             print('Creating control data loader')
             ctr_train_loader, ctr_val_loader = data_loading.create_fold_dataloaders(
                 controls_lists, fold, ctr_img_transforms,
-                ctr_val_img_transforms, batch_size, dataloader_workers, val_batch_size
+                ctr_val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir
             )
         output_spatial_size = None
         # max_distance = None
