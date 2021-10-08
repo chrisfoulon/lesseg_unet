@@ -1160,7 +1160,6 @@ def segmentation_val_transformd(hyper_param_dict=None, clamping=None):
                     if tr == 'MyNormalizeIntensityd':
                         if clamping is not None and 'clamp_quantile' not in di[tr]:
                             di[tr]['clamp_quantile'] = clamping
-
     val_transd = Compose(
         trans_list_from_list(seg_tr_dict['first_transform']) +
         # trans_list_from_list(hyper_dict['labelonly_transform']) +

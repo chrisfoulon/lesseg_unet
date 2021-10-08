@@ -61,10 +61,11 @@ def segmentation_loop(img_path_list: Sequence,
             if original_size:
                 output_dict_data = deepcopy(val_data)
                 output_dict_data['image'] = val_data['image'].to(device)[0]
-                output_dict_data['label'] = outputs[0]
                 inverted_output_dict = val_ds.transform.inverse(output_dict_data)
                 inv_inputs = inverted_output_dict['image']
-                inv_outputs = inverted_output_dict['label']
+                output_dict_data['image'] = outputs[0]
+                inverted_output_dict = val_ds.transform.inverse(output_dict_data)
+                inv_outputs = inverted_output_dict['image']
                 inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_inputs, torch.Tensor) \
                     else inv_inputs[0, :, :, :]
                 outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_outputs, torch.Tensor) \

@@ -236,6 +236,24 @@ def training_loop(img_path_list: Sequence,
         logging.info(f'Control training loss: mean(sigmoid(outputs)) * {control_weight_factor}')
     for fold in range(folds_number):
         model = net.create_unet_model(device, unet_hyper_params)
+        params = list(model.model.parameters())
+        # Get model parameters
+        # parameters = list(model.model.parameters())
+        # parameters = list(model.model.named_parameters())
+        # def count_unique_parameters(parameters):
+        #     # Only counts unique params
+        #     count = 0
+        #     list_of_names = []
+        #     for p in parameters:
+        #         name = p[0]
+        #         param = p[1]
+        #         if name not in list_of_names:
+        #             list_of_names.append(name)
+        #             count += np.prod(param.size())
+        #     return count
+        #
+        # print(count_unique_parameters(parameters))
+        # exit()
         optimizer = torch.optim.Adam(model.parameters(), 1e-3)
         if folds_number == 1:
             output_fold_dir = output_dir
@@ -392,6 +410,8 @@ def training_loop(img_path_list: Sequence,
                     # writer.add_scalar('batch_control_loss', controls_loss.item(), batches_per_epoch * epoch + step)
                     # writer.add_scalar('batch_control_vol', controls_vol, batches_per_epoch * epoch + step)
                 loss = loss + controls_loss
+                # Regularisation
+                loss += utils.sum_non_bias_l2_norms(params, 1e-4)
                 # TODO check that
                 # distance = surface_metric(y_pred=Activations(sigmoid=True)(outputs), y=labels[:, :1, :, :, :])
                 # hausdorff = hausdorff_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
