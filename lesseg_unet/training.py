@@ -159,6 +159,7 @@ def training_loop(img_path_list: Sequence,
 
     val_interval = 1
     best_metric = -1
+    best_controls_mean_loss = -1
     # best_distance = -1
     best_avg_loss = -1
     best_metric_epoch = -1
@@ -356,7 +357,8 @@ def training_loop(img_path_list: Sequence,
                 # with torch.autograd.profiler.profile(use_cuda=False) as prof:
                 step += 1
                 optimizer.zero_grad()
-                inputs, labels = batch_data['image'].to(device), batch_data['label'].to(device)
+                inputs, labels = batch_data['image'].to(device, non_blocking=True), batch_data['label'].to(
+                    device, non_blocking=True)
                 if output_spatial_size is None:
                     output_spatial_size = inputs.shape
                     # max_distance = torch.as_tensor(
@@ -389,7 +391,7 @@ def training_loop(img_path_list: Sequence,
                 if ctr_train_iter is not None:
                     with torch.no_grad():
                         batch_data_controls = next(ctr_train_iter)
-                    inputs_controls = batch_data_controls['image'].to(device)
+                    inputs_controls = batch_data_controls['image'].to(device, non_blocking=True)
                     # labels_controls = torch.zeros_like(inputs_controls).to(device)
                     outputs_controls = model(inputs_controls)
                     outputs_batch_images = outputs_controls[:, :1, :, :, :]
@@ -471,7 +473,8 @@ def training_loop(img_path_list: Sequence,
                         ctr_val_iter = iter(ctr_val_loader)
                     for val_data in pbar:
                         step += 1
-                        inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
+                        inputs, labels = val_data['image'].to(device, non_blocking=True), val_data['label'].to(
+                            device, non_blocking=True)
                         outputs = model(inputs)
                         # In case CoordConv is used, we only want the measures on the images, not the coordinates
                         # inputs = inputs[:, :1, :, :, :]
@@ -480,7 +483,7 @@ def training_loop(img_path_list: Sequence,
                         controls_loss = 0
                         if ctr_val_iter:
                             batch_data_controls = next(ctr_val_iter)
-                            inputs_controls = batch_data_controls['image'].to(device)
+                            inputs_controls = batch_data_controls['image'].to(device, non_blocking=True)
                             # labels_controls = torch.zeros_like(inputs_controls).to(device)
                             outputs_controls = model(inputs_controls)
                             outputs_batch_images = outputs_controls[:, :1, :, :, :]
@@ -614,11 +617,17 @@ def training_loop(img_path_list: Sequence,
                     )
                     # TODO maybe find a better way so it would also save the first epoch. Even though it is no big deal
                     if epoch == 0:
-                        best_metric = mean_metric
+                        # best_metric = mean_metric
+                        best_metric = val_mean_loss
                         best_metric_epoch = 0
-                    if metric_select_fct(mean_metric, best_metric):
-                        best_metric = mean_metric
+                        best_controls_mean_loss = controls_mean_loss
+                    # if metric_select_fct(mean_metric, best_metric):
+                    if metric_select_fct(val_mean_loss, best_metric) or metric_select_fct(
+                            controls_mean_loss, best_controls_mean_loss):
+                        # best_metric = mean_metric
+                        best_metric = val_mean_loss
                         # best_distance = distance_sum / distance_count
+                        # TODO clean up all that ....
                         best_avg_loss = val_mean_loss
                         best_metric_epoch = epoch + 1
                         epoch_suffix = ''
