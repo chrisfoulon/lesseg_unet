@@ -115,14 +115,15 @@ def training_loop(img_path_list: Sequence,
     if dropout is not None and dropout == 0:
         unet_hyper_params['dropout'] = dropout
 
+    regularisation = True
     if 'regularisation' in kwargs:
         v = kwargs['regularisation']
-        regularisation = True
         if v == 'False' or v == 0:
             regularisation = False
+
+    non_blocking = True
     if 'non_blocking' in kwargs:
         v = kwargs['non_blocking']
-        non_blocking = True
         if v == 'False' or v == 0:
             non_blocking = False
 
