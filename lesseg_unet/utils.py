@@ -5,6 +5,7 @@ from typing import Union, List
 import json
 import math
 import importlib.resources as rsc
+from tqdm import tqdm
 
 import monai.transforms
 from bcblib.tools.nifti_utils import is_nifti, centre_of_mass_difference
@@ -19,6 +20,30 @@ from bcblib.tools.nifti_utils import load_nifti
 validation_input_pref = 'nib_input_'
 validation_label_pref = 'nib_label_'
 validation_output_pref = 'nib_output_'
+
+
+def kwargs_argparse(unknown_param_list):
+    kwargs_dict = {}
+    key = None
+    for el in unknown_param_list:
+        if '=' in el:
+            spl = el.split('=')
+            try:
+                val = float(spl[1])
+            except ValueError:
+                val = spl[1]
+            kwargs_dict[spl[0]] = val
+        else:
+            if key is not None:
+                try:
+                    val = float(el)
+                except ValueError:
+                    val = el
+                kwargs_dict[key] = val
+                key = None
+            else:
+                key = el
+    return kwargs_dict
 
 
 def create_input_path_list_from_root(root_folder_path, recursive_search=False):
@@ -329,3 +354,40 @@ def sum_non_bias_l2_norms(parameters, multiplier=None):
     if multiplier is not None:
         l2_reg = multiplier * l2_reg
     return l2_reg
+
+
+def prompt_choice(choice1, choice2, previous_choices_list=None):
+    if previous_choices_list is None:
+        previous_choices_list = []
+    if choice1 == choice2:
+        return choice1, previous_choices_list
+    for cell in previous_choices_list:
+        if cell[0] == {choice1, choice2}:
+            return cell[1], previous_choices_list
+    resp = input(f'Item found for both {choice1} and {choice2}')
+    while not (resp == choice1 or resp == choice2):
+        resp = input(f'Item found for both {choice1} and {choice2} (Choose between the 2)')
+    previous_choices_list.append([{choice1, choice2}, resp])
+    return resp, previous_choices_list
+
+
+def get_fname_from_sorted_images(root_dir, pref='', split_suff=None):
+    subdir_fnames_dict = {}
+    for subdir in [p for p in Path(root_dir).iterdir() if p.is_dir()]:
+        subdir_fnames_dict[subdir.name] = {p.name.split(split_suff)[0].split(pref)[-1] for p in subdir.iterdir()
+                                           if p.name.startswith(pref)}
+    for subdir in subdir_fnames_dict:
+        fname_set = subdir_fnames_dict[subdir]
+        for inner_subdir in subdir_fnames_dict:
+            if inner_subdir != subdir:
+                inner_set = subdir_fnames_dict[inner_subdir]
+                intersection = fname_set.intersection(inner_set)
+                if intersection:
+                    resp = input(f'Item found for both {inner_subdir} and {subdir}, which subdir keeps the files?')
+                    while not (resp == inner_subdir or resp == subdir):
+                        resp = input(f'Item found for both {inner_subdir} and {subdir}, which subdir keeps the files?')
+                    if resp == subdir:
+                        subdir_fnames_dict[inner_subdir] = inner_set - intersection
+                    else:
+                        subdir_fnames_dict[subdir] = fname_set - intersection
+    return subdir_fnames_dict

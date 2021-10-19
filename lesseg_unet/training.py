@@ -91,7 +91,8 @@ def training_loop(img_path_list: Sequence,
                   folds_number=1,
                   dropout=0,
                   cache_dir=None,
-                  save_every_decent_best_epoch=True):
+                  save_every_decent_best_epoch=True,
+                  **kwargs):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -113,6 +114,17 @@ def training_loop(img_path_list: Sequence,
 
     if dropout is not None and dropout == 0:
         unet_hyper_params['dropout'] = dropout
+
+    if 'regularisation' in kwargs:
+        v = kwargs['regularisation']
+        regularisation = True
+        if v == 'False' or v == 0:
+            regularisation = False
+    if 'non_blocking' in kwargs:
+        v = kwargs['non_blocking']
+        non_blocking = True
+        if v == 'False' or v == 0:
+            non_blocking = False
 
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     # surface_metric = SurfaceDistanceMetric(include_background=True, reduction="mean", symmetric=True)
@@ -238,6 +250,9 @@ def training_loop(img_path_list: Sequence,
     for fold in range(folds_number):
         model = net.create_unet_model(device, unet_hyper_params)
         params = list(model.model.parameters())
+        regularisation_val = 0
+        if regularisation:
+            regularisation_val = utils.sum_non_bias_l2_norms(params, 1e-4)
         # Get model parameters
         # parameters = list(model.model.parameters())
         # parameters = list(model.model.named_parameters())
@@ -357,8 +372,8 @@ def training_loop(img_path_list: Sequence,
                 # with torch.autograd.profiler.profile(use_cuda=False) as prof:
                 step += 1
                 optimizer.zero_grad()
-                inputs, labels = batch_data['image'].to(device, non_blocking=True), batch_data['label'].to(
-                    device, non_blocking=True)
+                inputs, labels = batch_data['image'].to(device, non_blocking=non_blocking), batch_data['label'].to(
+                    device, non_blocking=non_blocking)
                 if output_spatial_size is None:
                     output_spatial_size = inputs.shape
                     # max_distance = torch.as_tensor(
@@ -391,7 +406,7 @@ def training_loop(img_path_list: Sequence,
                 if ctr_train_iter is not None:
                     with torch.no_grad():
                         batch_data_controls = next(ctr_train_iter)
-                    inputs_controls = batch_data_controls['image'].to(device, non_blocking=True)
+                    inputs_controls = batch_data_controls['image'].to(device, non_blocking=non_blocking)
                     # labels_controls = torch.zeros_like(inputs_controls).to(device)
                     outputs_controls = model(inputs_controls)
                     outputs_batch_images = outputs_controls[:, :1, :, :, :]
@@ -413,7 +428,7 @@ def training_loop(img_path_list: Sequence,
                     # writer.add_scalar('batch_control_vol', controls_vol, batches_per_epoch * epoch + step)
                 loss = loss + controls_loss
                 # Regularisation
-                loss += utils.sum_non_bias_l2_norms(params, 1e-4)
+                loss += regularisation_val
                 # TODO check that
                 # distance = surface_metric(y_pred=Activations(sigmoid=True)(outputs), y=labels[:, :1, :, :, :])
                 # hausdorff = hausdorff_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
@@ -473,8 +488,8 @@ def training_loop(img_path_list: Sequence,
                         ctr_val_iter = iter(ctr_val_loader)
                     for val_data in pbar:
                         step += 1
-                        inputs, labels = val_data['image'].to(device, non_blocking=True), val_data['label'].to(
-                            device, non_blocking=True)
+                        inputs, labels = val_data['image'].to(device, non_blocking=non_blocking), val_data['label'].to(
+                            device, non_blocking=non_blocking)
                         outputs = model(inputs)
                         # In case CoordConv is used, we only want the measures on the images, not the coordinates
                         # inputs = inputs[:, :1, :, :, :]
@@ -483,7 +498,7 @@ def training_loop(img_path_list: Sequence,
                         controls_loss = 0
                         if ctr_val_iter:
                             batch_data_controls = next(ctr_val_iter)
-                            inputs_controls = batch_data_controls['image'].to(device, non_blocking=True)
+                            inputs_controls = batch_data_controls['image'].to(device, non_blocking=non_blocking)
                             # labels_controls = torch.zeros_like(inputs_controls).to(device)
                             outputs_controls = model(inputs_controls)
                             outputs_batch_images = outputs_controls[:, :1, :, :, :]

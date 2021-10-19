@@ -83,8 +83,18 @@ def main():
     parser.add_argument('-kmos', '--keep_model_output_size', action='store_true', help='Keep the output of the '
                                                                                        'segmentation in the '
                                                                                        'spatial_size of the model')
-    parser.add_argument('--cache', action='store_true', help='Cache the non-random transformation in cache in output')
-    args = parser.parse_args()
+    parser.add_argument('--cache', action='store_true', help='Cache the non-random transformation in cache in output'
+                                                             'directory')
+    # args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
+    kwargs = None
+    if unknown:
+        kwargs = utils.kwargs_argparse(unknown)
+        print(f'Unlisted arguments : {kwargs}')
+        resp = input('If the additional parameters you entered are not what you wanted type quit/q/stop/s/no/n')
+        if resp.lower() in ['quit', 'q', 'stop', 's', 'no', 'n']:
+            print('Unwanted arguments')
+            exit()
     # print MONAI config
     print_config()
     # logs init
@@ -226,7 +236,8 @@ def main():
                                weight_factor=args.weight_factor,
                                folds_number=args.folds_number,
                                dropout=args.dropout,
-                               cache_dir=cache_dir)
+                               cache_dir=cache_dir,
+                               **kwargs)
     else:
         if args.checkpoint is None:
             raise ValueError('A checkpoint must be given for the segmentation or validation')
