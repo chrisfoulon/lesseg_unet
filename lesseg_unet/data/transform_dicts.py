@@ -391,6 +391,7 @@ curated_dict = {
         #     'prob': high_prob}
         #  },
         # # TODO maybe 'Orientation': {} but it would interact with the flip,
+        {'ToTensord': {'keys': ['image', 'label']}},
         {'RandAffined': {
             'keys': ['image', 'label'],
             'prob': low_prob,
@@ -573,7 +574,7 @@ time_test = {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
          },
-        # {'ToTensord': {'keys': ['image', 'label']}},
+        {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER RESIZE'}},
         # {'NormalizeIntensityd': {'keys': ['image']}},
         {'MyNormalizeIntensityd': {
@@ -604,11 +605,11 @@ time_test = {
         #                       'random_center': True,
         #                       'random_size': False}
         #  },
-        {'RandHistogramShiftd': {
-            'keys': ['image'],
-            'num_control_points': (10, 15),
-            'prob': low_prob}
-         },
+        # {'RandHistogramShiftd': {
+        #     'keys': ['image'],
+        #     'num_control_points': (10, 15),
+        #     'prob': low_prob}
+        #  },
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER HIST SHIFT'}},
         # {'RandBiasFieldd': {
         #     'keys': ['image'],
@@ -644,7 +645,7 @@ time_test = {
          },
     ],
     'torchio_transform': [
-        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'ToTensord': {'keys': ['image', 'label']}},
         # {'RandomNoise': {
         #     'include': ['image'],
         #     'mean': 0,
@@ -675,7 +676,7 @@ time_test = {
         # {'ToNumpyd': {'keys': ['image', 'label']}},
     ],
     'last_transform': [
-        {'PrintDim': {'keys': ['image', 'label'], 'msg': 'end of augmentations'}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'end of augmentations'}},
         # {'GaussianSmoothd': {
         #     'keys': ['label'],
         #     'sigma': .5}
@@ -691,13 +692,13 @@ time_test = {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
          },
+        {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER second binarized'}},
         # {'NormalizeIntensityd': {'keys': ['image']}},
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (-1, 1)}
          },
-        {'ToTensord': {'keys': ['image', 'label']}},
     ]
 }
 
