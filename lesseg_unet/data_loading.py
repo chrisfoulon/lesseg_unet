@@ -113,8 +113,8 @@ def init_training_data(
     train_files, val_files = create_file_dict_lists(img_path_list, seg_path_list, img_pref,
                                                     train_val_percentage)
     print('Create transformations')
-    train_img_transforms = transformations.segmentation_train_transformd(transform_dict, clamping)
-    val_img_transforms = transformations.segmentation_val_transformd(transform_dict, clamping)
+    train_img_transforms = transformations.train_transformd(transform_dict, clamping)
+    val_img_transforms = transformations.val_transformd(transform_dict, clamping)
     # define dataset, data loader
     print('Create training monai datasets')
     train_ds = Dataset(train_files, transform=train_img_transforms)

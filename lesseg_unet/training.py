@@ -228,8 +228,8 @@ def training_loop(img_path_list: Sequence,
     #     device, unet_hyper_params)
     # TESTING
     logging.info('Initialisation of the training transformations')
-    train_img_transforms = transformations.segmentation_train_transformd(transform_dict, lesion_set_clamp)
-    val_img_transforms = transformations.segmentation_val_transformd(transform_dict, lesion_set_clamp)
+    train_img_transforms = transformations.train_transformd(transform_dict, lesion_set_clamp, device=device)
+    val_img_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp, device=device)
 
     controls_lists = []
     trash_seg_path_count_dict = {}
@@ -243,10 +243,10 @@ def training_loop(img_path_list: Sequence,
             controls_lists = utils.split_lists_in_folds(controls, folds_number, train_val_percentage)
         logging.info('Initialisation of the control training transformations')
         ctr_img_transforms = transformations.image_only_transformd(transform_dict, training=True,
-                                                                   clamping=controls_clamping)
+                                                                   clamping=controls_clamping, device=device)
         logging.info('Initialisation of the control validation transformations')
         ctr_val_img_transforms = transformations.image_only_transformd(transform_dict, training=False,
-                                                                       clamping=controls_clamping)
+                                                                       clamping=controls_clamping, device=device)
         logging.info(f'Control training loss: mean(sigmoid(outputs)) * {control_weight_factor}')
     for fold in range(folds_number):
         model = net.create_unet_model(device, unet_hyper_params)

@@ -400,7 +400,7 @@ curated_dict = {
             'scale_range': 0.05,
             'spatial_size': None,
             'padding_mode': 'border',
-            'as_tensor_output': True}  # was False
+            }  # was False
          },
         {'Rand3DElasticd': {
             'keys': ['image', 'label'],
@@ -415,7 +415,7 @@ curated_dict = {
             'padding_mode': "reflection",
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
-            'as_tensor_output': True}
+            }
          },
     ],
     'torchio_transform': [

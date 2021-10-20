@@ -1123,7 +1123,7 @@ def setup_coord_conv(hyper_param_dict):
                     d[name]['gradients'] = gradients
 
 
-def segmentation_train_transformd(hyper_param_dict=None, clamping=None):
+def train_transformd(hyper_param_dict=None, clamping=None, device=None):
     if hyper_param_dict is None:
         hyper_param_dict = hyper_dict
     setup_coord_conv(hyper_param_dict)
@@ -1134,6 +1134,9 @@ def segmentation_train_transformd(hyper_param_dict=None, clamping=None):
         for li in seg_tr_dict:
             for di in seg_tr_dict[li]:
                 for tr in di:
+                    if tr == 'ToTensord':
+                        if device is not None:
+                            di[tr]['device'] = device
                     if tr == 'MyNormalizeIntensityd':
                         if clamping is not None and 'clamp_quantile' not in di[tr]:
                             di[tr]['clamp_quantile'] = clamping
@@ -1148,7 +1151,7 @@ def segmentation_train_transformd(hyper_param_dict=None, clamping=None):
     return train_transd
 
 
-def segmentation_val_transformd(hyper_param_dict=None, clamping=None):
+def val_transformd(hyper_param_dict=None, clamping=None, device=None):
     if hyper_param_dict is None:
         hyper_param_dict = hyper_dict
     setup_coord_conv(hyper_param_dict)
@@ -1157,6 +1160,9 @@ def segmentation_val_transformd(hyper_param_dict=None, clamping=None):
         for li in seg_tr_dict:
             for di in seg_tr_dict[li]:
                 for tr in di:
+                    if tr == 'ToTensord':
+                        if device is not None:
+                            di[tr]['device'] = device
                     if tr == 'MyNormalizeIntensityd':
                         if clamping is not None and 'clamp_quantile' not in di[tr]:
                             di[tr]['clamp_quantile'] = clamping
@@ -1168,7 +1174,7 @@ def segmentation_val_transformd(hyper_param_dict=None, clamping=None):
     return val_transd
 
 
-def image_only_transformd(hyper_param_dict=None, training=True, clamping=None):
+def image_only_transformd(hyper_param_dict=None, training=True, clamping=None, device=None):
     if hyper_param_dict is None:
         hyper_param_dict = hyper_dict
     setup_coord_conv(hyper_param_dict)
@@ -1179,6 +1185,11 @@ def image_only_transformd(hyper_param_dict=None, training=True, clamping=None):
         seg_tr_dict[li] = []
         for di in hyper_param_dict[li]:
             for tr in di:
+                if tr == 'ToTensord':
+                    if device is not None:
+                        new_tr = deepcopy(di)
+                        new_tr[tr]['device'] = device
+                        seg_tr_dict[li].append(new_tr)
                 # TODO make it cleaner!
                 if tr == 'MyNormalizeIntensityd':
                     if clamping is not None and 'clamp_quantile' not in di[tr]:
