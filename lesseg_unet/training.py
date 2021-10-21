@@ -137,7 +137,16 @@ def training_loop(img_path_list: Sequence,
         if v == 'False' or v == 0:
             transformations_device = None
         if v == 'True' or v == 1:
+            print(f'ToTensord transformation will be called on {device}')
             transformations_device = device
+
+    no_ctr_trainloss = False
+    if 'no_ctr_trainloss' in kwargs:
+        v = kwargs['no_ctr_trainloss']
+        if v == 'False' or v == 0:
+            non_blocking = False
+        if v == 'True' or v == 1:
+            non_blocking = True
 
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     # surface_metric = SurfaceDistanceMetric(include_background=True, reduction="mean", symmetric=True)
@@ -442,7 +451,8 @@ def training_loop(img_path_list: Sequence,
                     # TODO it's just to save a bit of time
                     # writer.add_scalar('batch_control_loss', controls_loss.item(), batches_per_epoch * epoch + step)
                     # writer.add_scalar('batch_control_vol', controls_vol, batches_per_epoch * epoch + step)
-                loss = loss + controls_loss
+                if not no_ctr_trainloss:
+                    loss = loss + controls_loss
                 # Regularisation
                 regularisation_val = utils.sum_non_bias_l2_norms(params, 1e-4)
                 loss += regularisation_val
@@ -651,8 +661,8 @@ def training_loop(img_path_list: Sequence,
                         best_metric_epoch = 0
                         best_controls_mean_loss = controls_mean_loss
                     # if metric_select_fct(mean_metric, best_metric):
-                    if metric_select_fct(val_mean_loss, best_metric) or metric_select_fct(
-                            controls_mean_loss, best_controls_mean_loss):
+                    if metric_select_fct(val_mean_loss, best_metric) or (no_ctr_trainloss and metric_select_fct(
+                            controls_mean_loss, best_controls_mean_loss)):
                         # best_metric = mean_metric
                         best_metric = val_mean_loss
                         # best_distance = distance_sum / distance_count
