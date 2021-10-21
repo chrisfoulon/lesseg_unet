@@ -131,6 +131,14 @@ def training_loop(img_path_list: Sequence,
         if v == 'True' or v == 1:
             non_blocking = True
 
+    transformations_device = None
+    if 'tr_device' in kwargs:
+        v = kwargs['tr_device']
+        if v == 'False' or v == 0:
+            transformations_device = None
+        if v == 'True' or v == 1:
+            transformations_device = device
+
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     # surface_metric = SurfaceDistanceMetric(include_background=True, reduction="mean", symmetric=True)
     hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean")
@@ -232,9 +240,10 @@ def training_loop(img_path_list: Sequence,
     #     device, unet_hyper_params)
     # TESTING
     logging.info('Initialisation of the training transformations')
-    train_img_transforms = transformations.train_transformd(transform_dict, lesion_set_clamp, device=device)
-    val_img_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp, device=device)
-
+    train_img_transforms = transformations.train_transformd(transform_dict, lesion_set_clamp,
+                                                            device=transformations_device)
+    val_img_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp,
+                                                        device=transformations_device)
     controls_lists = []
     trash_seg_path_count_dict = {}
     ctr_img_transforms = None
@@ -247,10 +256,12 @@ def training_loop(img_path_list: Sequence,
             controls_lists = utils.split_lists_in_folds(controls, folds_number, train_val_percentage)
         logging.info('Initialisation of the control training transformations')
         ctr_img_transforms = transformations.image_only_transformd(transform_dict, training=True,
-                                                                   clamping=controls_clamping, device=device)
+                                                                   clamping=controls_clamping,
+                                                                   device=transformations_device)
         logging.info('Initialisation of the control validation transformations')
         ctr_val_img_transforms = transformations.image_only_transformd(transform_dict, training=False,
-                                                                       clamping=controls_clamping, device=device)
+                                                                       clamping=controls_clamping,
+                                                                       device=transformations_device)
         logging.info(f'Control training loss: mean(sigmoid(outputs)) * {control_weight_factor}')
     for fold in range(folds_number):
         model = net.create_unet_model(device, unet_hyper_params)

@@ -686,7 +686,6 @@ class PrintDim(MapTransform):
             # else:
             #     s += 'size: {}\n'.format(d[key].size())
             s += 'dtype: {}\n'.format(d[key].dtype)
-
         s += 'End printdim'
         print('#######PRINTDIM#####\n{}\n#############'.format(s))
         return d

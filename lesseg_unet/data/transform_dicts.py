@@ -481,8 +481,14 @@ curated_dict_cc = deepcopy(curated_dict)
 curated_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
 
 std_dict = deepcopy(curated_dict)
-std_dict['first_transform'][3]['MyNormalizeIntensityd']['no_std'] = False
-std_dict['last_transform'][3]['MyNormalizeIntensityd']['no_std'] = False
+for di in std_dict['first_transform']:
+    for tr in di:
+        if tr == 'MyNormalizeIntensityd':
+            di[tr]['no_std'] = False
+for di in std_dict['last_transform']:
+    for tr in di:
+        if tr == 'MyNormalizeIntensityd':
+            di[tr]['no_std'] = False
 std_dict_cc = deepcopy(std_dict)
 std_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
 
