@@ -1181,32 +1181,29 @@ def image_only_transformd(hyper_param_dict=None, training=True, clamping=None, d
     check_imports(hyper_param_dict)
     check_hyper_param_dict_shape(hyper_param_dict)
     seg_tr_dict = {}
+    # Here we want to get rid of the 'label' operations (because controls datasets don't use labels)
     for li in hyper_param_dict:
         seg_tr_dict[li] = []
         for di in hyper_param_dict[li]:
+            new_di = deepcopy(di)
+            # There should be only one transformation per dict
             for tr in di:
                 if tr == 'ToTensord':
                     if device is not None:
-                        new_tr = deepcopy(di)
-                        new_tr[tr]['device'] = device
-                        seg_tr_dict[li].append(new_tr)
-                # TODO make it cleaner!
+                        new_di[tr]['device'] = device
                 if tr == 'MyNormalizeIntensityd':
                     if clamping is not None and 'clamp_quantile' not in di[tr]:
-                        new_tr = deepcopy(di)
-                        new_tr[tr]['clamp_quantile'] = clamping
-                        seg_tr_dict[li].append(new_tr)
+                        new_di[tr]['clamp_quantile'] = clamping
                 keys_key = 'keys'
-                if 'keys' not in di[tr]:
+                if 'keys' not in new_di[tr]:
                     keys_key = 'include'
-                if 'image' not in di[tr][keys_key]:
+                if 'image' not in new_di[tr][keys_key]:
                     continue
-                if 'label' in di[tr][keys_key]:
-                    new_tr = deepcopy(di)
-                    new_tr[tr][keys_key] = ['image']
-                    seg_tr_dict[li].append(new_tr)
+                if 'label' in new_di[tr][keys_key]:
+                    new_di[tr][keys_key] = ['image']
+                    seg_tr_dict[li].append(new_di)
                 else:
-                    seg_tr_dict[li].append(di)
+                    seg_tr_dict[li].append(new_di)
     if training:
         compose_list = []
         for d_list_name in seg_tr_dict:
