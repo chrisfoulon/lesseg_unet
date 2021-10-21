@@ -87,7 +87,7 @@ def main():
                                                              'directory')
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args()
-    kwargs = None
+    kwargs = {}
     if unknown:
         kwargs = utils.kwargs_argparse(unknown)
         print(f'Unlisted arguments : {kwargs}')

@@ -342,8 +342,8 @@ curated_dict = {
         {'LoadImaged': {
             'keys': ['image', 'label']}},
         # {'ToTensord': {'keys': ['image', 'label']}},
-        {'AddChanneld': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE RESIZE'}},
+        {'AddChanneld': {'keys': ['image', 'label']}},
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
@@ -391,7 +391,7 @@ curated_dict = {
         #     'prob': high_prob}
         #  },
         # # TODO maybe 'Orientation': {} but it would interact with the flip,
-        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'ToTensord': {'keys': ['image', 'label']}},
         {'RandAffined': {
             'keys': ['image', 'label'],
             'prob': low_prob,

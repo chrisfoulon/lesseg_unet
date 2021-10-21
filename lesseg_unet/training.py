@@ -115,17 +115,21 @@ def training_loop(img_path_list: Sequence,
     if dropout is not None and dropout == 0:
         unet_hyper_params['dropout'] = dropout
 
-    regularisation = True
-    if 'regularisation' in kwargs:
-        v = kwargs['regularisation']
-        if v == 'False' or v == 0:
-            regularisation = False
+    # regularisation = True
+    # if 'regularisation' in kwargs:
+    #     v = kwargs['regularisation']
+    #     if v == 'False' or v == 0:
+    #         regularisation = False
+    #     if v == 'True' or v == 1:
+    #         regularisation = True
 
     non_blocking = True
     if 'non_blocking' in kwargs:
         v = kwargs['non_blocking']
         if v == 'False' or v == 0:
             non_blocking = False
+        if v == 'True' or v == 1:
+            non_blocking = True
 
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     # surface_metric = SurfaceDistanceMetric(include_background=True, reduction="mean", symmetric=True)
@@ -251,9 +255,8 @@ def training_loop(img_path_list: Sequence,
     for fold in range(folds_number):
         model = net.create_unet_model(device, unet_hyper_params)
         params = list(model.model.parameters())
-        regularisation_val = 0
-        if regularisation:
-            regularisation_val = utils.sum_non_bias_l2_norms(params, 1e-4)
+        # with torch.no_grad():
+        #     regularisation_val = utils.sum_non_bias_l2_norms(params, 1e-4)
         # Get model parameters
         # parameters = list(model.model.parameters())
         # parameters = list(model.model.named_parameters())
@@ -302,7 +305,7 @@ def training_loop(img_path_list: Sequence,
         str_best_epoch = ''
         # Cumulated values might reach max float so storing it into lists
         ctr_loss = []
-        batch_ctr_vol = []
+        # batch_ctr_vol = []
         time_list = []
         epoch_time_list = []
         for epoch in range(epoch_num):
@@ -375,10 +378,11 @@ def training_loop(img_path_list: Sequence,
                 optimizer.zero_grad()
                 inputs, labels = batch_data['image'].to(device, non_blocking=non_blocking), batch_data['label'].to(
                     device, non_blocking=non_blocking)
-                if output_spatial_size is None:
-                    output_spatial_size = inputs.shape
-                    # max_distance = torch.as_tensor(
-                    #     [torch.linalg.norm(torch.as_tensor(output_spatial_size, dtype=torch.float16))])
+                # exit()
+                # if output_spatial_size is None:
+                #     output_spatial_size = inputs.shape
+                #     max_distance = torch.as_tensor(
+                #         [torch.linalg.norm(torch.as_tensor(output_spatial_size, dtype=torch.float16))])
                 outputs = model(inputs)
                 # TODO smoothing?
                 y = labels[:, :1, :, :, :]
@@ -429,10 +433,8 @@ def training_loop(img_path_list: Sequence,
                     # writer.add_scalar('batch_control_vol', controls_vol, batches_per_epoch * epoch + step)
                 loss = loss + controls_loss
                 # Regularisation
+                regularisation_val = utils.sum_non_bias_l2_norms(params, 1e-4)
                 loss += regularisation_val
-                # TODO check that
-                # distance = surface_metric(y_pred=Activations(sigmoid=True)(outputs), y=labels[:, :1, :, :, :])
-                # hausdorff = hausdorff_metric(y_pred=post_trans(outputs), y=labels[:, :1, :, :, :])
                 loss.backward()
                 optimizer.step()
                 epoch_loss += loss.item()

@@ -680,11 +680,11 @@ class PrintDim(MapTransform):
         for idx, key in enumerate(self.keys):
             s += 'key: {}\n'.format(key)
             s += 'type key: {}\n'.format(type(d[key]))
-            if isinstance(d[key], torch.Tensor):
-                s += 'shape: {}\n'.format(d[key].shape)
-            else:
-                s += 'size: {}\n'.format(d[key].size())
-                print(d[key].size())
+            s += 'shape: {}\n'.format(d[key].shape)
+            # if isinstance(d[key], torch.Tensor):
+            #     s += 'shape: {}\n'.format(d[key].shape)
+            # else:
+            #     s += 'size: {}\n'.format(d[key].size())
             s += 'dtype: {}\n'.format(d[key].dtype)
 
         s += 'End printdim'
