@@ -144,9 +144,9 @@ def training_loop(img_path_list: Sequence,
     if 'no_ctr_trainloss' in kwargs:
         v = kwargs['no_ctr_trainloss']
         if v == 'False' or v == 0:
-            non_blocking = False
+            no_ctr_trainloss = False
         if v == 'True' or v == 1:
-            non_blocking = True
+            no_ctr_trainloss = True
 
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     # surface_metric = SurfaceDistanceMetric(include_background=True, reduction="mean", symmetric=True)
