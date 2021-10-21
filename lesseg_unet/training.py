@@ -115,13 +115,13 @@ def training_loop(img_path_list: Sequence,
     if dropout is not None and dropout == 0:
         unet_hyper_params['dropout'] = dropout
 
-    # regularisation = True
-    # if 'regularisation' in kwargs:
-    #     v = kwargs['regularisation']
-    #     if v == 'False' or v == 0:
-    #         regularisation = False
-    #     if v == 'True' or v == 1:
-    #         regularisation = True
+    regularisation = True
+    if 'regularisation' in kwargs:
+        v = kwargs['regularisation']
+        if v == 'False' or v == 0:
+            regularisation = False
+        if v == 'True' or v == 1:
+            regularisation = True
 
     non_blocking = True
     if 'non_blocking' in kwargs:
@@ -454,8 +454,9 @@ def training_loop(img_path_list: Sequence,
                 if not no_ctr_trainloss:
                     loss = loss + controls_loss
                 # Regularisation
-                regularisation_val = utils.sum_non_bias_l2_norms(params, 1e-4)
-                loss += regularisation_val
+                if regularisation:
+                    # regularisation_val = utils.sum_non_bias_l2_norms(params, 1e-4)
+                    loss += utils.sum_non_bias_l2_norms(params, 1e-4)
                 loss.backward()
                 optimizer.step()
                 epoch_loss += loss.item()
