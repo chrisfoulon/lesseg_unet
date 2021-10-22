@@ -431,26 +431,38 @@ def training_loop(img_path_list: Sequence,
                 if ctr_train_iter is not None:
                     with torch.no_grad():
                         batch_data_controls = next(ctr_train_iter)
-                    inputs_controls = batch_data_controls['image'].to(device, non_blocking=non_blocking)
-                    # labels_controls = torch.zeros_like(inputs_controls).to(device)
-                    outputs_controls = model(inputs_controls)
-                    outputs_batch_images = outputs_controls[:, :1, :, :, :]
-                    outputs_batch_images_sigmoid = torch.sigmoid(outputs_batch_images)
-                    # controls_vol = utils.volume_metric(outputs_batch_images_sigmoid,
-                    #                                    sigmoid=False, discrete=True)
-                    # The volume (number of voxels with 1) needs to be averaged on the batch size
-                    # batch_ctr_vol += [controls_vol / outputs_controls.shape[0]]
-                    controls_loss = torch.mean(outputs_batch_images_sigmoid) * control_weight_factor
-                    ctr_loss += [controls_loss]
-                    # controls_loss = utils.percent_vox_loss(outputs_controls[:, :1, :, :, :], divide_max_vox=100)
-                    # controls_loss = controls_vol
-                    # TODO it's just to save a bit of time
-                    # batch_ctr_vol += [controls_vol]
-                    # controls_loss_str = f'Controls loss: {controls_loss}, controls volume: {controls_vol}'
-                    controls_loss_str = f'Controls loss: {controls_loss}'
-                    # TODO it's just to save a bit of time
-                    # writer.add_scalar('batch_control_loss', controls_loss.item(), batches_per_epoch * epoch + step)
-                    # writer.add_scalar('batch_control_vol', controls_vol, batches_per_epoch * epoch + step)
+                    if not no_ctr_trainloss:
+
+                        inputs_controls = batch_data_controls['image'].to(device, non_blocking=non_blocking)
+                        # labels_controls = torch.zeros_like(inputs_controls).to(device)
+                        outputs_controls = model(inputs_controls)
+                        outputs_batch_images = outputs_controls[:, :1, :, :, :]
+                        outputs_batch_images_sigmoid = torch.sigmoid(outputs_batch_images)
+                        # controls_vol = utils.volume_metric(outputs_batch_images_sigmoid,
+                        #                                    sigmoid=False, discrete=True)
+                        # The volume (number of voxels with 1) needs to be averaged on the batch size
+                        # batch_ctr_vol += [controls_vol / outputs_controls.shape[0]]
+                        controls_loss = torch.mean(outputs_batch_images_sigmoid) * control_weight_factor
+                        ctr_loss += [controls_loss]
+                        # controls_loss = utils.percent_vox_loss(outputs_controls[:, :1, :, :, :], divide_max_vox=100)
+                        # controls_loss = controls_vol
+                        # TODO it's just to save a bit of time
+                        # batch_ctr_vol += [controls_vol]
+                        # controls_loss_str = f'Controls loss: {controls_loss}, controls volume: {controls_vol}'
+                        controls_loss_str = f'Controls loss: {controls_loss}'
+                        # TODO it's just to save a bit of time
+                        # writer.add_scalar('batch_control_loss', controls_loss.item(), batches_per_epoch * epoch + step)
+                        # writer.add_scalar('batch_control_vol', controls_vol, batches_per_epoch * epoch + step)
+                    else:
+                        # In that case the control_loss does not pass through the backward function and overloads memory
+                        with torch.no_grad():
+                            inputs_controls = batch_data_controls['image'].to(device, non_blocking=non_blocking)
+                            outputs_controls = model(inputs_controls)
+                            outputs_batch_images = outputs_controls[:, :1, :, :, :]
+                            outputs_batch_images_sigmoid = torch.sigmoid(outputs_batch_images)
+                            controls_loss = torch.mean(outputs_batch_images_sigmoid) * control_weight_factor
+                            ctr_loss += [controls_loss]
+                            controls_loss_str = f'Controls loss: {controls_loss}'
                 if not no_ctr_trainloss:
                     loss = loss + controls_loss
                 # Regularisation
@@ -662,7 +674,7 @@ def training_loop(img_path_list: Sequence,
                         best_metric_epoch = 0
                         best_controls_mean_loss = controls_mean_loss
                     # if metric_select_fct(mean_metric, best_metric):
-                    if metric_select_fct(val_mean_loss, best_metric) or (no_ctr_trainloss and metric_select_fct(
+                    if metric_select_fct(val_mean_loss, best_metric) or (not no_ctr_trainloss and metric_select_fct(
                             controls_mean_loss, best_controls_mean_loss)):
                         # best_metric = mean_metric
                         best_metric = val_mean_loss
