@@ -674,8 +674,8 @@ def training_loop(img_path_list: Sequence,
                         best_metric_epoch = 0
                         best_controls_mean_loss = controls_mean_loss
                     # if metric_select_fct(mean_metric, best_metric):
-                    if metric_select_fct(val_mean_loss, best_metric) or (not no_ctr_trainloss and metric_select_fct(
-                            controls_mean_loss, best_controls_mean_loss)):
+                    if metric_select_fct(val_mean_loss, best_metric) or (
+                            not no_ctr_trainloss and controls_mean_loss < best_controls_mean_loss):
                         # best_metric = mean_metric
                         best_metric = val_mean_loss
                         # best_distance = distance_sum / distance_count
