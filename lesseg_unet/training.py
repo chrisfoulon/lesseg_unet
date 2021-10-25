@@ -146,6 +146,8 @@ def training_loop(img_path_list: Sequence,
         if v == 'False' or v == 0:
             no_ctr_trainloss = False
         if v == 'True' or v == 1:
+            if ctr_path_list is not None and ctr_path_list != []:
+                print('The control loss is tracked but not computed within the model')
             no_ctr_trainloss = True
 
     dice_metric = DiceMetric(include_background=True, reduction="mean")
@@ -608,6 +610,9 @@ def training_loop(img_path_list: Sequence,
                             # In that case we want the loss to be smaller
                             metric_select_fct = lt
                             metric = loss + controls_vol
+                        elif val_loss_fct == 'dice_loss':
+                            metric_select_fct = lt
+                            metric = loss
                         else:
                             metric = torch.mean(torch.tensor(batch_dice_metric_list, dtype=torch.float))
 
@@ -673,9 +678,9 @@ def training_loop(img_path_list: Sequence,
                         best_metric = val_mean_loss
                         best_metric_epoch = 0
                         best_controls_mean_loss = controls_mean_loss
-                    # if metric_select_fct(mean_metric, best_metric):
-                    if metric_select_fct(val_mean_loss, best_metric) or (
-                            not no_ctr_trainloss and controls_mean_loss < best_controls_mean_loss):
+                    # if metric_select_fct(val_mean_loss, best_metric) or (
+                    #         not no_ctr_trainloss and controls_mean_loss < best_controls_mean_loss):
+                    if metric_select_fct(mean_metric, best_metric):
                         # best_metric = mean_metric
                         best_metric = val_mean_loss
                         # best_distance = distance_sum / distance_count
