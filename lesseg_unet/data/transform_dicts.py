@@ -569,7 +569,7 @@ test_dict = {
     ]
 }
 
-time_test = {
+crop_test = {
     'first_transform': [
         {'LoadImaged': {
             'keys': ['image', 'label']}},
@@ -623,6 +623,15 @@ time_test = {
         #     'prob': high_prob}
         #  },
         # # TODO maybe 'Orientation': {} but it would interact with the flip,
+        {'RandCropByPosNegLabeld': {
+            'keys': ['image', 'label'],
+            'label_key': 'label',
+            'spatial_size': min_small_crop_size,
+            # 'spatial_size': [96, 96, 96],
+            'pos': 1,
+            'neg': 1,
+            'num_samples': 4}
+         },
         {'RandAffined': {
             'keys': ['image', 'label'],
             'prob': low_prob,
@@ -708,5 +717,5 @@ time_test = {
     ]
 }
 
-time_test_cc = deepcopy(time_test)
-time_test_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
+crop_test_cc = deepcopy(crop_test)
+crop_test_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
