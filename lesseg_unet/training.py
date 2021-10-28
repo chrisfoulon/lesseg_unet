@@ -406,6 +406,9 @@ def training_loop(img_path_list: Sequence,
                 #     max_distance = torch.as_tensor(
                 #         [torch.linalg.norm(torch.as_tensor(output_spatial_size, dtype=torch.float16))])
                 outputs = model(inputs)
+                # print(f'Inputs size: {inputs.shape}')
+                # print(f'Labels size: {labels.shape}')
+                # print(f'Outputs size: {outputs.shape}')
                 # TODO smoothing?
                 y = labels[:, :1, :, :, :]
                 if label_smoothing:

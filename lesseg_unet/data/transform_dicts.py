@@ -576,11 +576,11 @@ crop_test = {
         # {'ToTensord': {'keys': ['image', 'label']}},
         {'AddChanneld': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE RESIZE'}},
-        {'ResizeWithPadOrCropd': {
-            'keys': ['image', 'label'],
-            'spatial_size': def_spatial_size}
-         },
-        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'ResizeWithPadOrCropd': {
+        #     'keys': ['image', 'label'],
+        #     'spatial_size': def_spatial_size}
+        #  },
+        # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER RESIZE'}},
         # {'NormalizeIntensityd': {'keys': ['image']}},
         {'MyNormalizeIntensityd': {
@@ -611,11 +611,11 @@ crop_test = {
         #                       'random_center': True,
         #                       'random_size': False}
         #  },
-        # {'RandHistogramShiftd': {
-        #     'keys': ['image'],
-        #     'num_control_points': (10, 15),
-        #     'prob': low_prob}
-        #  },
+        {'RandHistogramShiftd': {
+            'keys': ['image'],
+            'num_control_points': (10, 15),
+            'prob': low_prob}
+         },
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER HIST SHIFT'}},
         # {'RandBiasFieldd': {
         #     'keys': ['image'],
@@ -623,15 +623,6 @@ crop_test = {
         #     'prob': high_prob}
         #  },
         # # TODO maybe 'Orientation': {} but it would interact with the flip,
-        {'RandCropByPosNegLabeld': {
-            'keys': ['image', 'label'],
-            'label_key': 'label',
-            'spatial_size': min_small_crop_size,
-            # 'spatial_size': [96, 96, 96],
-            'pos': 1,
-            'neg': 1,
-            'num_samples': 4}
-         },
         {'RandAffined': {
             'keys': ['image', 'label'],
             'prob': low_prob,
@@ -660,7 +651,7 @@ crop_test = {
          },
     ],
     'torchio_transform': [
-        # {'ToTensord': {'keys': ['image', 'label']}},
+        {'ToTensord': {'keys': ['image', 'label']}},
         # {'RandomNoise': {
         #     'include': ['image'],
         #     'mean': 0,
@@ -702,11 +693,10 @@ crop_test = {
             'keys': ['label'],
             'lower_threshold': 0.25}
          },
-        {'ToNumpyd': {'keys': ['image', 'label']}},
-        {'ResizeWithPadOrCropd': {
-            'keys': ['image', 'label'],
-            'spatial_size': def_spatial_size}
-         },
+        # {'ResizeWithPadOrCropd': {
+        #     'keys': ['image', 'label'],
+        #     'spatial_size': def_spatial_size}
+        #  },
         {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER second binarized'}},
         # {'NormalizeIntensityd': {'keys': ['image']}},
@@ -714,6 +704,17 @@ crop_test = {
             'keys': ['image'],
             'out_min_max': (-1, 1)}
          },
+        {'ToNumpyd': {'keys': ['image', 'label']}},
+        {'RandCropByPosNegLabeld': {
+            'keys': ['image', 'label'],
+            'label_key': 'label',
+            'spatial_size': [32, 32, 32],
+            # 'spatial_size': [96, 96, 96],
+            'pos': 1,
+            'neg': 1,
+            'num_samples': 36}
+         },
+        {'ToTensord': {'keys': ['image', 'label']}},
     ]
 }
 
