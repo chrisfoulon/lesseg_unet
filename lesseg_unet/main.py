@@ -272,8 +272,8 @@ def main():
                                                    device=args.torch_device,
                                                    dataloader_workers=args.num_workers,
                                                    clamping=clamp_tuple)
-                    if args.overlap:
-                        overlaps_subfolders(output_root, 'output_')
+                if args.overlap:
+                    overlaps_subfolders(output_root, 'output_')
             else:
                 logging.info(f'Output segmentation folder : {output_root}')
                 segmentation.segmentation_loop(img_list,
