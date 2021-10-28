@@ -693,17 +693,19 @@ crop_test = {
             'keys': ['label'],
             'lower_threshold': 0.25}
          },
-        # {'ResizeWithPadOrCropd': {
-        #     'keys': ['image', 'label'],
-        #     'spatial_size': def_spatial_size}
-        #  },
-        {'ToTensord': {'keys': ['image', 'label']}},
+        {'ResizeWithPadOrCropd': {
+            'keys': ['image', 'label'],
+            'spatial_size': def_spatial_size}
+         },
+        # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER second binarized'}},
         # {'NormalizeIntensityd': {'keys': ['image']}},
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (-1, 1)}
          },
+    ],
+    'crop': [
         {'ToNumpyd': {'keys': ['image', 'label']}},
         {'RandCropByPosNegLabeld': {
             'keys': ['image', 'label'],
@@ -715,7 +717,7 @@ crop_test = {
             'num_samples': 36}
          },
         {'ToTensord': {'keys': ['image', 'label']}},
-    ]
+    ],
 }
 
 crop_test_cc = deepcopy(crop_test)

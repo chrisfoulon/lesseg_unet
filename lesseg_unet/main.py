@@ -9,8 +9,9 @@ from datetime import datetime
 from monai.config import print_config
 from lesseg_unet import utils, training, segmentation
 from lesseg_unet.data import transform_dicts
-from bcblib.tools.nifti_utils import file_to_list
+from bcblib.tools.nifti_utils import file_to_list, overlaps_subfolders, nifti_overlap_images
 import lesseg_unet.data.transform_dicts as tr_dicts
+import nibabel as nib
 
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 
@@ -55,7 +56,9 @@ def main():
                                           'lesion mask is found for the b1000')
     parser.add_argument('-lab_smo', '--label_smoothing', action='store_true',
                         help='Apply a label smoothing during the training')
-    parser.add_argument('-pt', '--checkpoint', type=str, help='file path to a torch checkpoint file')
+    parser.add_argument('-pt', '--checkpoint', type=str, help='file path to a torch checkpoint file'
+                                                              ' or directory (in that case, the most recent '
+                                                              'checkpoint will be used)')
     parser.add_argument('-d', '--torch_device', type=str, help='Device type and number given to'
                                                                'torch.device()')
     parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
@@ -75,16 +78,17 @@ def main():
     parser.add_argument('-nf', '--folds_number', default=1, type=int, help='Set a dropout value for the model')
     parser.add_argument('-clamp', action='store_true', help='Apply intensity clamping (with default value if not given'
                                                             ' with --clamp_low and --clamp_high)')
-    parser.add_argument('-cl', '--clamp_low', type=float, help='Defines the low quantile of intensity clamping')
-    parser.add_argument('-ch', '--clamp_high', type=float, help='Defines the high quantile of intensity clamping')
+    parser.add_argument('-cl', '--clamp_low', type=float, help='Define the low quantile of intensity clamping')
+    parser.add_argument('-ch', '--clamp_high', type=float, help='Define the high quantile of intensity clamping')
+    parser.add_argument('-overlap', action='store_true', help='Create the overlap of the segmentations')
     parser.add_argument('-clamp_lesion_set', action='store_true',
                         help='Apply intensity clamping on the training lesioned set as well'
                              ' (with default value if not given with --clamp_low and --clamp_high)')
     parser.add_argument('-kmos', '--keep_model_output_size', action='store_true', help='Keep the output of the '
                                                                                        'segmentation in the '
                                                                                        'spatial_size of the model')
-    parser.add_argument('--cache', action='store_true', help='Cache the non-random transformation in cache in output'
-                                                             'directory')
+    parser.add_argument('-cache', '--cache', action='store_true',
+                        help='Cache the non-random transformation in cache in output directory')
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args()
     kwargs = {}
@@ -93,7 +97,7 @@ def main():
         print(f'Unlisted arguments : {kwargs}')
         resp = input('If the additional parameters you entered are not what you wanted type quit/q/stop/s/no/n')
         if resp.lower() in ['quit', 'q', 'stop', 's', 'no', 'n']:
-            print('Unwanted arguments')
+            print('Sorry little parameter but, your parents never wanted you. Good bye.')
             exit()
     # print MONAI config
     print_config()
@@ -241,6 +245,14 @@ def main():
     else:
         if args.checkpoint is None:
             raise ValueError('A checkpoint must be given for the segmentation or validation')
+        else:
+            if Path(args.checkpoint).is_dir():
+                checkpoint = utils.get_best_epoch_from_folder(args.checkpoint)
+                if checkpoint == '':
+                    raise ValueError(f'Checkpoint could not be found in {args.checkpoint}')
+            else:
+                # So it quickly breaks if the checkpoint does not exist
+                checkpoint = str(Path(args.checkpoint))
         if train_val_percentage is None:
             train_val_percentage = 0
         if args.seg_input_dict is not None:
@@ -254,27 +266,32 @@ def main():
                     os.makedirs(Path(output_root, sub_folder), exist_ok=True)
                     segmentation.segmentation_loop(seg_input_dict[sub_folder],
                                                    Path(output_root, sub_folder),
-                                                   args.checkpoint,
+                                                   checkpoint,
                                                    b1000_pref,
                                                    transform_dict=transform_dict,
                                                    device=args.torch_device,
                                                    dataloader_workers=args.num_workers,
                                                    clamping=clamp_tuple)
+                    if args.overlap:
+                        overlaps_subfolders(output_root, 'output_')
             else:
                 logging.info(f'Output segmentation folder : {output_root}')
                 segmentation.segmentation_loop(img_list,
                                                output_root,
-                                               args.checkpoint,
+                                               checkpoint,
                                                b1000_pref,
                                                transform_dict=transform_dict,
                                                device=args.torch_device,
                                                dataloader_workers=args.num_workers,
                                                clamping=clamp_tuple)
+                if args.overlap:
+                    nib.save(nifti_overlap_images(output_root, 'output_'),
+                             Path(output_root, 'overlap_segmentation.nii'))
         else:
             logging.info(f'Output validation folder : {output_root}')
             segmentation.validation_loop(img_list, les_list,
                                          output_root,
-                                         args.checkpoint,
+                                         checkpoint,
                                          b1000_pref,
                                          transform_dict=transform_dict,
                                          device=args.torch_device,
@@ -282,6 +299,9 @@ def main():
                                          # train_val_percentage=train_val_percentage,
                                          # default_label=args.default_label
                                          clamping=clamp_tuple)
+            if args.overlap:
+                nib.save(nifti_overlap_images(output_root, 'output_'),
+                         Path(output_root, 'overlap_segmentation.nii'))
 
 
 if __name__ == "__main__":
