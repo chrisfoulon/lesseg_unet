@@ -250,6 +250,8 @@ def main():
                 checkpoint = utils.get_best_epoch_from_folder(args.checkpoint)
                 if checkpoint == '':
                     raise ValueError(f'Checkpoint could not be found in {args.checkpoint}')
+                else:
+                    print(f'Latest checkpoint found is: {checkpoint}')
             else:
                 # So it quickly breaks if the checkpoint does not exist
                 checkpoint = str(Path(args.checkpoint))
