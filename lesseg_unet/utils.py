@@ -6,8 +6,10 @@ import json
 import math
 import importlib.resources as rsc
 from tqdm import tqdm
+from operator import lt, gt
 
 import monai.transforms
+from monai.metrics import HausdorffDistanceMetric, DiceMetric
 from bcblib.tools.nifti_utils import is_nifti, centre_of_mass_difference
 from lesseg_unet.visualisation_utils import plot_seg
 from lesseg_unet.net import create_unet_model
@@ -402,3 +404,64 @@ def get_best_epoch_from_folder(folder):
             best_epoch_time = t
             best_epoch_path = str(p)
     return best_epoch_path
+
+
+def compare_img_to_cluster(img, cluster, comp_meth='dice', cluster_thr=0.1, flip=False):
+    img = load_nifti(img)
+    img_data = img.get_fdata()
+    if len(np.unique(img_data)) > 2:
+        ValueError(f'The image must contain binary values')
+    cluster = load_nifti(cluster)
+    cluster_data = cluster.get_fdata()
+    if flip:
+        cluster_data = np.flip(cluster_data, 0)
+    if len(np.unique(cluster_data)) > 2:
+        cluster_data[cluster_data < cluster_thr] = 0
+        cluster_data[cluster_data >= cluster_thr] = 1
+    img_data = torch.tensor([img_data])
+    cluster_data = torch.tensor([cluster_data])
+    if comp_meth == 'distance':
+        hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean")
+        return hausdorff_metric(y_pred=[img_data], y=[cluster_data]).item()
+    elif comp_meth == 'dice':
+        dice_metric = DiceMetric(include_background=True, reduction="mean")
+        return dice_metric(y_pred=[img_data], y=[cluster_data]).item()
+    else:
+        raise ValueError(f'{comp_meth} not recognized (available: "distance" or "dice")')
+
+
+def get_image_area(img, comp_meth='dice', cluster_thr=0.1):
+    with rsc.path('lesseg_unet.data', 'Final_lesion_clusters') as p:
+        clusters_dir = str(p.resolve())
+    best_val = None
+    best_clu = None
+    best_is_flipped = False
+    if comp_meth == 'distance':
+        op = lt
+    else:
+        op = gt
+    for clu in [p for p in Path(clusters_dir).iterdir() if is_nifti(p)]:
+        comp_val = compare_img_to_cluster(img, clu, comp_meth=comp_meth, cluster_thr=cluster_thr)
+        flipped_comp_val = compare_img_to_cluster(img, clu, comp_meth=comp_meth, cluster_thr=cluster_thr, flip=True)
+        if op(flipped_comp_val, comp_val):
+            comp_val = flipped_comp_val
+            flipped = True
+        else:
+            flipped = False
+        if best_val is None or op(comp_val, best_val):
+            best_val = comp_val
+            best_clu = clu
+            best_is_flipped = flipped
+    return best_clu, best_is_flipped
+
+
+def get_segmentation_areas(img_list, comp_meth='dice', cluster_thr=0.1, root_dir_path=None):
+    img_cluster_isflipped_dict = {}
+    for img in img_list:
+        clu, flipped = get_image_area(img, comp_meth=comp_meth, cluster_thr=cluster_thr)
+        path = img
+        if root_dir_path is not None:
+            path = Path(img).relative_to(root_dir_path)
+        img_cluster_isflipped_dict[path] = {'cluster': Path(clu).name.split('.nii')[0],
+                                            'flipped': flipped}
+    return img_cluster_isflipped_dict

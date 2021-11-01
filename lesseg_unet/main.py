@@ -6,6 +6,8 @@ import os
 import json
 from datetime import datetime
 
+import bcblib.tools.nifti_utils
+import pandas as pd
 from monai.config import print_config
 from lesseg_unet import utils, training, segmentation
 from lesseg_unet.data import transform_dicts
@@ -59,6 +61,8 @@ def main():
     parser.add_argument('-pt', '--checkpoint', type=str, help='file path to a torch checkpoint file'
                                                               ' or directory (in that case, the most recent '
                                                               'checkpoint will be used)')
+    parser.add_argument('-sa', '--segmentation_area', action='store_true', help='Associate the segmentated masks'
+                                                                                ' to lesion areas in a csv file')
     parser.add_argument('-d', '--torch_device', type=str, help='Device type and number given to'
                                                                'torch.device()')
     parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
@@ -289,6 +293,13 @@ def main():
                 if args.overlap:
                     nib.save(nifti_overlap_images(output_root, 'output_'),
                              Path(output_root, 'overlap_segmentation.nii'))
+            if args.segmentation_area:
+                output_img_list = [p for p in Path(output_root).rglob('*')
+                                   if p.name.startswith('output_') and bcblib.tools.nifti_utils.is_nifti(p)]
+                segmentation_areas_dict = utils.get_segmentation_areas(
+                    output_img_list, comp_meth='dice', cluster_thr=0.1, root_dir_path=output_root)
+                pd.DataFrame().from_dict(segmentation_areas_dict).to_csv(Path(output_root, 'segmentation_areas.csv'))
+
         else:
             logging.info(f'Output validation folder : {output_root}')
             segmentation.validation_loop(img_list, les_list,

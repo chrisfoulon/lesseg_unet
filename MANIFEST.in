@@ -1,1 +1,2 @@
 include lesseg_unet/data/*
+include lesseg_unet/data/Final_lesion_clusters/*

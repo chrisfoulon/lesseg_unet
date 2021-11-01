@@ -90,8 +90,10 @@ def segmentation_loop(img_path_list: Sequence,
                     '{}_{}'.format(str(input_filename), str(img_count)))
 
             img_vol_dict[output_path_list[-1]] = vol_output
-            with open(Path(output_dir, f'output_image_volumes.json'), 'w+') as j:
+            with open(Path(output_dir, f'__output_image_volumes.json'), 'w+') as j:
                 json.dump(img_vol_dict, j, indent=4)
+            pd.DataFrame().from_dict(img_vol_dict, orient='index').to_csv(
+                Path(output_dir, f'__output_image_volumes.csv'))
             del inputs
             del outputs
             del inputs_np
@@ -234,6 +236,7 @@ def validation_loop(img_path_list: Sequence,
             'val_max_dice': max_score,
             'val_best_mean_dice': 0
         })
-    with open(Path(output_dir, f'output_image_volumes.json'), 'w+') as j:
+    with open(Path(output_dir, f'__output_image_volumes.json'), 'w+') as j:
         json.dump(img_vol_dict, j, indent=4)
+    pd.DataFrame().from_dict(img_vol_dict, orient='index').to_csv(Path(output_dir, f'__output_image_volumes.csv'))
     df.to_csv(Path(output_dir, 'val_perf_measures.csv'), columns=perf_measure_names)
