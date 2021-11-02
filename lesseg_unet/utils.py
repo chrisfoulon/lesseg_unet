@@ -7,6 +7,8 @@ import math
 import importlib.resources as rsc
 from tqdm import tqdm
 from operator import lt, gt
+from multiprocessing.dummy import Pool
+import multiprocessing
 
 import monai.transforms
 from monai.metrics import HausdorffDistanceMetric, DiceMetric
@@ -406,7 +408,7 @@ def get_best_epoch_from_folder(folder):
     return best_epoch_path
 
 
-def compare_img_to_cluster(img, cluster, comp_meth='dice', cluster_thr=0.1, flip=False):
+def compare_img_to_cluster(img, cluster, comp_meth='dice', cluster_thr=None, flip=False):
     if is_nifti(img):
         img = load_nifti(img)
         img_data = img.get_fdata()
@@ -416,11 +418,16 @@ def compare_img_to_cluster(img, cluster, comp_meth='dice', cluster_thr=0.1, flip
         raise TypeError('img must be a path or a numpy array')
     if len(np.unique(img_data)) > 2:
         ValueError(f'The image must contain binary values')
-    cluster = load_nifti(cluster)
-    cluster_data = cluster.get_fdata()
+    if is_nifti(cluster):
+        cluster = load_nifti(cluster)
+        cluster_data = cluster.get_fdata()
+    elif isinstance(cluster, np.ndarray):
+        cluster_data = cluster
+    else:
+        raise TypeError('img must be a path or a numpy array')
     if flip:
         cluster_data = np.flip(cluster_data, 0)
-    if len(np.unique(cluster_data)) > 2:
+    if cluster_thr is not None and len(np.unique(cluster_data)) > 2:
         cluster_data[cluster_data < cluster_thr] = 0
         cluster_data[cluster_data >= cluster_thr] = 1
     img_data = torch.tensor([img_data])
@@ -458,6 +465,46 @@ def get_image_area(img, comp_meth='dice', cluster_thr=0.1):
             best_clu = clu
             best_is_flipped = flipped
     return Path(best_clu.stem).stem, best_is_flipped
+
+
+class LesionAreaFinder:
+    def __init__(self, cluster_thr=0.1, cluster_list=None):
+        if cluster_list is None:
+            with rsc.path('lesseg_unet.data', 'Final_lesion_clusters') as p:
+                clusters_dir = str(p.resolve())
+            cluster_list = list(Path(clusters_dir).iterdir())
+        else:
+            if not isinstance(cluster_list, list):
+                if Path(cluster_list).is_dir():
+                    cluster_list = list(Path(cluster_list).iterdir())
+                elif Path(cluster_list).is_file():
+                    cluster_list = [cluster_list]
+                else:
+                    ValueError('If cluster_list given, it must be a list of files, a folder or a file path')
+        data_names_dict = {Path(p.stem).stem: nib.load(p).get_fdata() for p in
+                           cluster_list if is_nifti(p)}
+        self.cluster_data_names_dict = {}
+        for clu_name in data_names_dict:
+            cluster_data = data_names_dict[clu_name]
+            cluster_data[cluster_data < cluster_thr] = 0
+            cluster_data[cluster_data >= cluster_thr] = 1
+            self.cluster_data_names_dict['R_' + clu_name] = cluster_data
+            self.cluster_data_names_dict['L_' + clu_name] = np.flip(cluster_data, 0)
+
+    def get_img_area(self, img, comp_meth='dice', nb_cores=-1):
+        def partial_compare(clu):
+            return compare_img_to_cluster(img, clu, comp_meth=comp_meth, cluster_thr=None)
+        if nb_cores == -1:
+            nb_cores = multiprocessing.cpu_count()
+        pool_obj = Pool(nb_cores)
+        sim_val_list = pool_obj.map(partial_compare, self.cluster_data_names_dict.values())
+        pool_obj.close()
+        pool_obj.join()
+        if comp_meth == 'distance':
+            best_clu_ind = np.argmin(np.array(sim_val_list))
+        else:
+            best_clu_ind = np.argmax(np.array(sim_val_list))
+        return list(self.cluster_data_names_dict.keys())[best_clu_ind]
 
 
 def get_segmentation_areas(img_list, comp_meth='dice', cluster_thr=0.1, root_dir_path=None):

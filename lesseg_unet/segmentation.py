@@ -48,6 +48,9 @@ def segmentation_loop(img_path_list: Sequence,
     model = utils.load_eval_from_checkpoint(checkpoint_path, device, unet_hyper_params)
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
     model.eval()
+    les_area_finder = None
+    if segmentation_area:
+        les_area_finder = utils.LesionAreaFinder()
     img_count = 0
     img_vol_dict = {}
     with torch.no_grad():
@@ -76,13 +79,9 @@ def segmentation_loop(img_path_list: Sequence,
                 #     inputs_np, output_dir,
                 #     '{}_segmentation_{}'.format(input_filename, img_count), outputs_np)
                 tmp = None
-                if segmentation_area:
-                    cluster_name, flipped = utils.get_image_area(outputs_np)
-                    # Meaning the lesion is on the left side
-                    if flipped:
-                        output_subdir = Path(output_dir, 'L_' + cluster_name)
-                    else:
-                        output_subdir = Path(output_dir, 'R_' + cluster_name)
+                if les_area_finder is not None:
+                    cluster_name = les_area_finder.get_img_area(outputs_np)
+                    output_subdir = Path(output_dir, cluster_name)
                     os.makedirs(output_subdir, exist_ok=True)
                 else:
                     output_subdir = output_dir
@@ -123,7 +122,6 @@ def validation_loop(img_path_list: Sequence,
                     bad_dice_treshold: float = 0.1,
                     clamping: tuple = None,
                     segmentation_area=True):
-                    # train_val_percentage=0):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -146,6 +144,9 @@ def validation_loop(img_path_list: Sequence,
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
 
+    les_area_finder = None
+    if segmentation_area:
+        les_area_finder = utils.LesionAreaFinder()
     # start a typical PyTorch training
     # val_interval = 1
     # best_metric = -1
@@ -219,13 +220,9 @@ def validation_loop(img_path_list: Sequence,
                 # utils.save_img_lbl_seg_to_png(
                 #     inputs_np, trash_val_images_dir,
                 #     '{}_trash_img_{}'.format(input_filename, trash_count), labels_np, outputs_np)
-                if segmentation_area:
-                    cluster_name, flipped = utils.get_image_area(outputs_np)
-                    # Meaning the lesion is on the left side
-                    if flipped:
-                        output_subdir = Path(trash_val_images_dir, 'L_' + cluster_name)
-                    else:
-                        output_subdir = Path(trash_val_images_dir, 'R_' + cluster_name)
+                if les_area_finder is not None:
+                    cluster_name = les_area_finder.get_img_area(outputs_np)
+                    output_subdir = Path(trash_val_images_dir, cluster_name)
                     os.makedirs(output_subdir, exist_ok=True)
                 else:
                     output_subdir = trash_val_images_dir
@@ -239,13 +236,9 @@ def validation_loop(img_path_list: Sequence,
                 # utils.save_img_lbl_seg_to_png(
                 #     inputs_np, val_images_dir,
                 #     '{}_validation_{}'.format(input_filename, img_count), labels_np, outputs_np)
-                if segmentation_area:
-                    cluster_name, flipped = utils.get_image_area(outputs_np)
-                    # Meaning the lesion is on the left side
-                    if flipped:
-                        output_subdir = Path(val_images_dir, 'L_' + cluster_name)
-                    else:
-                        output_subdir = Path(val_images_dir, 'R_' + cluster_name)
+                if les_area_finder is not None:
+                    cluster_name = les_area_finder.get_img_area(outputs_np)
+                    output_subdir = Path(val_images_dir, cluster_name)
                     os.makedirs(output_subdir, exist_ok=True)
                 else:
                     output_subdir = val_images_dir
