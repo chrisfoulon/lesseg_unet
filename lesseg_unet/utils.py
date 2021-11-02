@@ -407,8 +407,13 @@ def get_best_epoch_from_folder(folder):
 
 
 def compare_img_to_cluster(img, cluster, comp_meth='dice', cluster_thr=0.1, flip=False):
-    img = load_nifti(img)
-    img_data = img.get_fdata()
+    if is_nifti(img):
+        img = load_nifti(img)
+        img_data = img.get_fdata()
+    elif isinstance(img, np.ndarray):
+        img_data = img
+    else:
+        raise TypeError('img must be a path or a numpy array')
     if len(np.unique(img_data)) > 2:
         ValueError(f'The image must contain binary values')
     cluster = load_nifti(cluster)
@@ -452,7 +457,7 @@ def get_image_area(img, comp_meth='dice', cluster_thr=0.1):
             best_val = comp_val
             best_clu = clu
             best_is_flipped = flipped
-    return best_clu, best_is_flipped
+    return Path(best_clu.stem).stem, best_is_flipped
 
 
 def get_segmentation_areas(img_list, comp_meth='dice', cluster_thr=0.1, root_dir_path=None):

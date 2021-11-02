@@ -277,7 +277,8 @@ def main():
                                                    transform_dict=transform_dict,
                                                    device=args.torch_device,
                                                    dataloader_workers=args.num_workers,
-                                                   clamping=clamp_tuple)
+                                                   clamping=clamp_tuple,
+                                                   segmentation_area=args.segmentation_area)
                 if args.overlap:
                     overlaps_subfolders(output_root, 'output_')
             else:
@@ -289,7 +290,8 @@ def main():
                                                transform_dict=transform_dict,
                                                device=args.torch_device,
                                                dataloader_workers=args.num_workers,
-                                               clamping=clamp_tuple)
+                                               clamping=clamp_tuple,
+                                               segmentation_area=args.segmentation_area)
                 if args.overlap:
                     nib.save(nifti_overlap_images(output_root, 'output_'),
                              Path(output_root, 'overlap_segmentation.nii'))
@@ -311,7 +313,8 @@ def main():
                                          dataloader_workers=args.num_workers,
                                          # train_val_percentage=train_val_percentage,
                                          # default_label=args.default_label
-                                         clamping=clamp_tuple)
+                                         clamping=clamp_tuple,
+                                         segmentation_area=args.segmentation_area)
             if args.overlap:
                 nib.save(nifti_overlap_images(output_root, 'output_'),
                          Path(output_root, 'overlap_segmentation.nii'))

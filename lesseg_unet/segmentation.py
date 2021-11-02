@@ -26,7 +26,8 @@ def segmentation_loop(img_path_list: Sequence,
                       batch_size: int = 1,
                       dataloader_workers: int = 8,
                       original_size=True,
-                      clamping: tuple = None,):
+                      clamping: tuple = None,
+                      segmentation_area=True):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -75,8 +76,18 @@ def segmentation_loop(img_path_list: Sequence,
                 #     inputs_np, output_dir,
                 #     '{}_segmentation_{}'.format(input_filename, img_count), outputs_np)
                 tmp = None
+                if segmentation_area:
+                    cluster_name, flipped = utils.get_image_area(outputs_np)
+                    # Meaning the lesion is on the left side
+                    if flipped:
+                        output_subdir = Path(output_dir, 'L_' + cluster_name)
+                    else:
+                        output_subdir = Path(output_dir, 'R_' + cluster_name)
+                    os.makedirs(output_subdir, exist_ok=True)
+                else:
+                    output_subdir = output_dir
                 output_path_list = utils.save_img_lbl_seg_to_nifti(
-                    inputs_np, tmp, outputs_np, output_dir, val_output_affine,
+                    inputs_np, tmp, outputs_np, output_subdir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(img_count)))
             else:
                 inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy() if isinstance(inputs, torch.Tensor) \
@@ -110,7 +121,8 @@ def validation_loop(img_path_list: Sequence,
                     batch_size: int = 1,
                     dataloader_workers: int = 8,
                     bad_dice_treshold: float = 0.1,
-                    clamping: tuple = None):
+                    clamping: tuple = None,
+                    segmentation_area=True):
                     # train_val_percentage=0):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -207,8 +219,18 @@ def validation_loop(img_path_list: Sequence,
                 # utils.save_img_lbl_seg_to_png(
                 #     inputs_np, trash_val_images_dir,
                 #     '{}_trash_img_{}'.format(input_filename, trash_count), labels_np, outputs_np)
+                if segmentation_area:
+                    cluster_name, flipped = utils.get_image_area(outputs_np)
+                    # Meaning the lesion is on the left side
+                    if flipped:
+                        output_subdir = Path(trash_val_images_dir, 'L_' + cluster_name)
+                    else:
+                        output_subdir = Path(trash_val_images_dir, 'R_' + cluster_name)
+                    os.makedirs(output_subdir, exist_ok=True)
+                else:
+                    output_subdir = trash_val_images_dir
                 output_path_list = utils.save_img_lbl_seg_to_nifti(
-                    inputs_np, labels_np, outputs_np, trash_val_images_dir, val_output_affine,
+                    inputs_np, labels_np, outputs_np, output_subdir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(trash_count)))
             else:
                 img_count += 1
@@ -217,8 +239,18 @@ def validation_loop(img_path_list: Sequence,
                 # utils.save_img_lbl_seg_to_png(
                 #     inputs_np, val_images_dir,
                 #     '{}_validation_{}'.format(input_filename, img_count), labels_np, outputs_np)
+                if segmentation_area:
+                    cluster_name, flipped = utils.get_image_area(outputs_np)
+                    # Meaning the lesion is on the left side
+                    if flipped:
+                        output_subdir = Path(val_images_dir, 'L_' + cluster_name)
+                    else:
+                        output_subdir = Path(val_images_dir, 'R_' + cluster_name)
+                    os.makedirs(output_subdir, exist_ok=True)
+                else:
+                    output_subdir = val_images_dir
                 output_path_list = utils.save_img_lbl_seg_to_nifti(
-                    inputs_np, labels_np, outputs_np, val_images_dir, val_output_affine,
+                    inputs_np, labels_np, outputs_np, output_subdir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(img_count)))
             img_vol_dict[output_path_list[-1]] = vol_output
         metric = metric_sum / metric_count
