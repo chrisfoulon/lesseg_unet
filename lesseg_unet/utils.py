@@ -504,6 +504,8 @@ class LesionAreaFinder:
             best_clu_ind = np.argmin(np.array(sim_val_list))
         else:
             best_clu_ind = np.argmax(np.array(sim_val_list))
+            if sim_val_list[best_clu_ind] == 0:
+                return 'outside_clusters'
         return list(self.cluster_data_names_dict.keys())[best_clu_ind]
 
 
