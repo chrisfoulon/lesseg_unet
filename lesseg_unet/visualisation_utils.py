@@ -11,7 +11,7 @@ import nibabel as nib
 import matplotlib.pyplot as plt
 from scipy.ndimage import center_of_mass
 from bcblib.tools.nifti_utils import is_nifti
-from bcblib.tools.visualisation import mricron_display
+# from bcblib.tools.visualisation import mricron_display
 
 
 def open_tensorboard_page(log_dir, port='8008', new_browser_window=False):
@@ -114,13 +114,21 @@ def display_img(img, over1=None, over2=None):
     return process
 
 
-def display_one_output(output_dir, number=None, string=None):
+def display_one_output(output_dir, number=None, string=None, recursive=False):
     if number is None and string is None:
         raise ValueError('Provide either an image number or a string to find')
     if number is not None:
-        f_list = [p for p in Path(output_dir).iterdir() if is_nifti(p) and re.search(r'_{}.nii'.format(number), p.name)]
+        if not recursive:
+            f_list = [p for p in Path(output_dir).iterdir() if is_nifti(p) and
+                      re.search(r'_{}.nii'.format(number), p.name)]
+        else:
+            f_list = [p for p in Path(output_dir).rglob('*') if is_nifti(p) and
+                      re.search(r'_{}.nii'.format(number), p.name)]
     else:
-        f_list = [p for p in Path(output_dir).iterdir() if is_nifti(p) and string in p.name]
+        if not recursive:
+            f_list = [p for p in Path(output_dir).iterdir() if is_nifti(p) and string in p.name]
+        else:
+            f_list = [p for p in Path(output_dir).rglob('*') if is_nifti(p) and string in p.name]
     img = None
     label = None
     seg = None

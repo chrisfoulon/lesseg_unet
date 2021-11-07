@@ -295,12 +295,12 @@ def main():
                 if args.overlap:
                     nib.save(nifti_overlap_images(output_root, 'output_'),
                              Path(output_root, 'overlap_segmentation.nii'))
-            if args.segmentation_area:
-                output_img_list = [p for p in Path(output_root).rglob('*')
-                                   if p.name.startswith('output_') and bcblib.tools.nifti_utils.is_nifti(p)]
-                segmentation_areas_dict = utils.get_segmentation_areas(
-                    output_img_list, comp_meth='dice', cluster_thr=0.1, root_dir_path=output_root)
-                pd.DataFrame().from_dict(segmentation_areas_dict).to_csv(Path(output_root, 'segmentation_areas.csv'))
+            # if args.segmentation_area:
+            #     output_img_list = [p for p in Path(output_root).rglob('*')
+            #                        if p.name.startswith('output_') and bcblib.tools.nifti_utils.is_nifti(p)]
+            #     segmentation_areas_dict = utils.get_segmentation_areas(
+            #         output_img_list, comp_meth='dice', cluster_thr=0.1, root_dir_path=output_root)
+            #     pd.DataFrame().from_dict(segmentation_areas_dict).to_csv(Path(output_root, 'segmentation_areas.csv'))
 
         else:
             logging.info(f'Output validation folder : {output_root}')

@@ -240,8 +240,11 @@ def validation_loop(img_path_list: Sequence,
                 #     inputs_np, val_images_dir,
                 #     '{}_validation_{}'.format(input_filename, img_count), labels_np, outputs_np)
                 if les_area_finder is not None:
-                    cluster_name = les_area_finder.get_img_area(outputs_np)
-                    output_subdir = Path(val_images_dir, cluster_name)
+                    if vol_output == 0:
+                        output_subdir = Path(val_images_dir, 'empty_prediction')
+                    else:
+                        cluster_name = les_area_finder.get_img_area(outputs_np)
+                        output_subdir = Path(val_images_dir, cluster_name)
                     os.makedirs(output_subdir, exist_ok=True)
                 else:
                     output_subdir = val_images_dir
