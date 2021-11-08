@@ -190,7 +190,7 @@ def sort_output_images(files, dest_dir, labels=None, tmp_copy=True, skip_already
         if resp not in subfolder_list:
             subfolder_list.append(resp)
             os.makedirs(Path(dest_dir, resp), exist_ok=True)
-        shutil.copy(file, Path(dest_dir, resp, Path(file).name))
+        shutil.move(file, Path(dest_dir, resp, Path(file).name))
         if label is not None:
-            shutil.copy(label, Path(dest_dir, resp, Path(label).name))
+            shutil.move(label, Path(dest_dir, resp, Path(label).name))
         print(f'Image writen in {Path(dest_dir, resp)}')
