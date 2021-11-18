@@ -89,6 +89,7 @@ def display_img(img, over1=None, over2=None):
     relative_dir = Path(img).parent
     if over1:
         change_dir = change_dir and Path(over1).parent == Path(img).parent
+        print(f'Non zero voxels in the label: {np.count_nonzero(nib.load(over1).get_fdata())})')
     if over2:
         change_dir = change_dir and Path(over2).parent == Path(img).parent
     if change_dir:
@@ -147,24 +148,26 @@ def display_one_output(output_dir, number=None, string=None, recursive=False):
     return process
 
 
-def sort_output_images(files, dest_dir, labels=None, tmp_copy=True, skip_already_sorted=True):
+def sort_output_images(files, dest_dir, labels=None, subfolder_list=None, tmp_copy=True, skip_already_sorted=True):
     os.makedirs(dest_dir, exist_ok=True)
+    if subfolder_list is None:
+        subfolder_list = []
     tmp_dir = None
     if tmp_copy:
         tmp_dir = Path(dest_dir, 'tmp')
         os.makedirs(tmp_dir, exist_ok=True)
-    subfolder_list = []
     if skip_already_sorted:
         # could do it with tmp but maybe tmp would get deleted at some point so it might be safer this way
         subfolder_paths = [p for p in Path(dest_dir).iterdir() if p.is_dir() and p.name != 'tmp']
-        subfolder_list = [p.name for p in subfolder_paths]
+        subfolder_list = subfolder_list + [p.name for p in subfolder_paths]
+        subfolder_list = list(set(subfolder_list))
         already_sorted_files = [f.name for d in subfolder_paths for f in d.iterdir()]
         to_sort_list = []
         for f in files:
             if Path(f).name not in already_sorted_files:
                 to_sort_list.append(f)
         files = to_sort_list
-        if labels is not None:
+        if labels is not None and labels:
             to_sort_list = []
             for f in labels:
                 if Path(f).name not in already_sorted_files:
@@ -176,7 +179,7 @@ def sort_output_images(files, dest_dir, labels=None, tmp_copy=True, skip_already
             tmp_f = Path(tmp_dir, Path(file).name)
             shutil.copy(file, tmp_f)
             file = tmp_f
-        if labels is not None:
+        if labels is not None and labels:
             label = labels[i]
             if tmp_dir:
                 tmp_f = Path(tmp_dir, Path(label).name)
@@ -189,8 +192,34 @@ def sort_output_images(files, dest_dir, labels=None, tmp_copy=True, skip_already
                      f'(Current subfolder list: {subfolder_list}\n')
         if resp not in subfolder_list:
             subfolder_list.append(resp)
-            os.makedirs(Path(dest_dir, resp), exist_ok=True)
+        os.makedirs(Path(dest_dir, resp), exist_ok=True)
         shutil.move(file, Path(dest_dir, resp, Path(file).name))
         if label is not None:
             shutil.move(label, Path(dest_dir, resp, Path(label).name))
         print(f'Image writen in {Path(dest_dir, resp)}')
+    if tmp_dir is not None:
+        os.rmdir(tmp_dir)
+    return subfolder_list
+
+
+def sort_seg_following_folder_tree(root_dir, output_dir, img_pref='input_', label_pref='output_',
+                                   ignore_folder_names=None,
+                                   output_subfolder_depth=3):
+    if ignore_folder_names is None:
+        ignore_folder_names = []
+    output_subfolder_list = list({di.name for di in Path(output_dir).rglob('*')
+                                  if di.is_dir() and di.name != 'tmp' and len(
+            list(di.relative_to(output_dir).parents)) == output_subfolder_depth})
+    if output_subfolder_list:
+        print(f'Resuming from precedent sorting with output subfolder names:\n {output_subfolder_list}')
+    for d in [p for p in Path(root_dir).rglob('*') if p.is_dir() and p.name not in ignore_folder_names
+              and not set(ignore_folder_names).intersection(set([pp.name for pp in p.parents]))]:
+        f_list = sorted([f for f in d.iterdir() if is_nifti(f) and f.name.startswith(img_pref)])
+        l_list = sorted([f for f in d.iterdir() if is_nifti(f) and f.name.startswith(label_pref)])
+        if f_list:
+            if len(f_list) != len(l_list):
+                raise ValueError(f'The image list and the label list in {d} do not have the same length')
+            print(f'Sorting images from {d}')
+            output_subfolder_list = sort_output_images(f_list, Path(output_dir, d.relative_to(root_dir)), l_list,
+                                                       output_subfolder_list)
+
