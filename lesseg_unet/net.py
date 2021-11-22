@@ -21,14 +21,14 @@ default_unet_hyper_params = {
 # coord_conv_unet_hyper_params = deepcopy(default_unet_hyper_params)
 # coord_conv_unet_hyper_params['in_channels'] = 4
 
-unetr_hyper_params = {
+default_unetr_hyper_params = {
     'in_channels': 1,
-    'out_channels': 14,
-    'img_size': (96, 96, 96),
-    'feature_size': 16,
-    'hidden_size': 768,
-    'mlp_dim': 3072,
-    'num_heads': 12,
+    'out_channels': 1,
+    'img_size': (96, 128, 96),
+    'feature_size': 32,
+    # 'hidden_size': 768,
+    # 'mlp_dim': 3072,
+    # 'num_heads': 12,
     'pos_embed': 'perceptron',
     'norm_name': 'instance',
     'res_block': True,
@@ -37,11 +37,11 @@ unetr_hyper_params = {
 
 
 def create_unetr_model(device: torch.device,
-                       unet_hyper_params: dict = None) -> UNETR:
-    if unet_hyper_params is None:
-        unet_hyper_params = default_unet_hyper_params
+                       unetr_hyper_params: dict = None) -> UNETR:
+    if unetr_hyper_params is None:
+        unetr_hyper_params = default_unetr_hyper_params
     # create UNet
-    logging.info('Creating monai UNet with params: {}'.format(unet_hyper_params))
+    logging.info('Creating monai UNETR with params: {}'.format(unetr_hyper_params))
     model = UNETR(**unetr_hyper_params).to(device)
     return model
 

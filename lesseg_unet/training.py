@@ -98,9 +98,14 @@ def training_loop(img_path_list: Sequence,
     else:
         device = torch.device(device)
     logging.info(f'Torch device used for this training: {str(device)}')
+    # Apparently it can potentially improve the performance when the model does not change its size. (Source tuto UNETR)
+    torch.backends.cudnn.benchmark = True
     # val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
     # checking is CoordConv is used and change the input channel dimension
-    unet_hyper_params = net.default_unet_hyper_params
+    if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
+        unet_hyper_params = net.default_unetr_hyper_params
+    else:
+        unet_hyper_params = net.default_unet_hyper_params
     if transform_dict is not None:
         for li in transform_dict:
             for d in transform_dict[li]:
@@ -275,8 +280,17 @@ def training_loop(img_path_list: Sequence,
                                                                        device=transformations_device)
         logging.info(f'Control training loss: mean(sigmoid(outputs)) * {control_weight_factor}')
     for fold in range(folds_number):
-        model = net.create_unet_model(device, unet_hyper_params)
-        params = list(model.model.parameters())
+        if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
+            model = net.create_unetr_model(device, unet_hyper_params)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
+            loss_function = DiceCELoss(sigmoid=True)
+            params = list(model.parameters())
+            unetr = True
+        else:
+            model = net.create_unet_model(device, unet_hyper_params)
+            optimizer = torch.optim.Adam(model.parameters(), 1e-3)
+            params = list(model.model.parameters())
+            unetr = False
         # with torch.no_grad():
         #     regularisation_val = utils.sum_non_bias_l2_norms(params, 1e-4)
         # Get model parameters
@@ -296,7 +310,6 @@ def training_loop(img_path_list: Sequence,
         #
         # print(count_unique_parameters(parameters))
         # exit()
-        optimizer = torch.optim.Adam(model.parameters(), 1e-3)
         if folds_number == 1:
             output_fold_dir = output_dir
         else:
