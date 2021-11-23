@@ -104,8 +104,10 @@ def training_loop(img_path_list: Sequence,
     # checking is CoordConv is used and change the input channel dimension
     if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
         unet_hyper_params = net.default_unetr_hyper_params
+        loss_function = DiceCELoss(to_onehot_y=True, softmax=True)
     else:
         unet_hyper_params = net.default_unet_hyper_params
+        loss_function = DiceLoss(sigmoid=True)
     if transform_dict is not None:
         for li in transform_dict:
             for d in transform_dict[li]:
@@ -157,9 +159,8 @@ def training_loop(img_path_list: Sequence,
 
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     # surface_metric = SurfaceDistanceMetric(include_background=True, reduction="mean", symmetric=True)
-    hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean")
+    hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean", percentile=95)
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
-    loss_function = DiceLoss(sigmoid=True)
     tversky_function = TverskyLoss(sigmoid=True, alpha=2, beta=0.5)
     # focal_function = FocalLoss()
     # df_loss = DiceFocalLoss(sigmoid=True)
@@ -283,7 +284,6 @@ def training_loop(img_path_list: Sequence,
         if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
             model = net.create_unetr_model(device, unet_hyper_params)
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
-            loss_function = DiceCELoss(sigmoid=True)
             params = list(model.parameters())
             unetr = True
         else:
@@ -755,3 +755,126 @@ def training_loop(img_path_list: Sequence,
         print(f'train completed, best_metric: {best_metric:.4f} at epoch: {best_metric_epoch}')
         logging.info(str_best_epoch)
         writer.close()
+
+
+def training(img_path_list: Sequence,
+             seg_path_list: Sequence,
+             output_dir: Union[str, bytes, os.PathLike],
+             img_pref: str = None,
+             transform_dict=None,
+             device: str = None,
+             batch_size: int = 10,
+             val_batch_size: int = 1,
+             epoch_num: int = 50,
+             dataloader_workers: int = 4,
+             train_val_percentage=80,
+             lesion_set_clamp=None,
+             controls_clamping=None,
+             label_smoothing=False,
+             stop_best_epoch=-1,
+             training_loss_fct='dice',
+             val_loss_fct='dice',
+             weight_factor=1,
+             folds_number=1,
+             dropout=0,
+             cache_dir=None,
+             save_every_decent_best_epoch=True,
+             **kwargs
+             ):
+    # Apparently it can potentially improve the performance when the model does not change its size. (Source tuto UNETR)
+    torch.backends.cudnn.benchmark = True
+    """MODEL PARAMETERS"""
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        device = torch.device(device)
+    logging.info(f'Torch device used for this training: {str(device)}')
+
+    if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
+        unet_hyper_params = net.default_unetr_hyper_params
+    else:
+        unet_hyper_params = net.default_unet_hyper_params
+    # checking is CoordConv is used and change the input channel dimension
+    if transform_dict is not None:
+        for li in transform_dict:
+            for d in transform_dict[li]:
+                for t in d:
+                    if t == 'CoordConvd' or t == 'CoordConvAltd':
+                        unet_hyper_params['in_channels'] = 4
+    if dropout is not None and dropout == 0:
+        unet_hyper_params['dropout'] = dropout
+        logging.info(f'Dropout rate used: {dropout}')
+    """LOSS FUNCTIONS"""
+    if training_loss_fct.lower() in ['dice_ce', 'dicece', 'dice_ce_loss', 'diceceloss', 'dice_cross_entropy']:
+        loss_function = DiceCELoss(sigmoid=True)
+    else:
+        loss_function = DiceLoss(sigmoid=True)
+    logging.info(f'Training loss fct: {loss_function}')
+    if val_loss_fct.lower() in ['dice_ce', 'dicece', 'dice_ce_loss', 'diceceloss', 'dice_cross_entropy']:
+        val_loss_function = DiceCELoss(sigmoid=True)
+    else:
+        val_loss_function = DiceLoss(sigmoid=True)
+    logging.info(f'Validation loss fct: {val_loss_function}')
+    """METRICS"""
+    dice_metric = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
+    hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean", percentile=95)
+
+    """TRANSFORMATIONS AND AUGMENTATIONS"""
+    # Attempt to send the transformations / augmentations on the GPU when possible (disabled by default)
+    transformations_device = None
+    if 'tr_device' in kwargs:
+        v = kwargs['tr_device']
+        if v == 'False' or v == 0:
+            transformations_device = None
+        if v == 'True' or v == 1:
+            print(f'ToTensord transformation will be called on {device}')
+            transformations_device = device
+    logging.info('Initialisation of the training transformations')
+    # Extract all the transformations from transform_dict
+    train_img_transforms = transformations.train_transformd(transform_dict, lesion_set_clamp,
+                                                            device=transformations_device)
+    # Extract only the 'first' and 'last' transformations from transform_dict ignoring the augmentations
+    val_img_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp,
+                                                        device=transformations_device)
+    """POST TRANSFORMATIONS"""
+    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
+    """DATA LOADING"""
+    if img_pref is not None and img_pref != '':
+        logging.info(f'Abnormal images prefix: {img_pref}')
+
+    # Get the images from the image and label list and tries to match them
+    img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, seg_path_list, img_pref)
+
+    split_lists = utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage)
+
+    """LOOOP VARIABLES"""
+    val_interval = 1
+    best_metric = -1
+    best_controls_mean_loss = -1
+    # best_distance = -1
+    best_avg_loss = -1
+    best_metric_epoch = -1
+    val_meh_thr = 0.7
+    val_trash_thr = 0.3
+    metric_select_fct = gt
+    control_weight_factor = weight_factor  # Experiment with different weightings!
+    if stop_best_epoch != -1:
+        logging.info(f'Will stop after {stop_best_epoch} epochs without improvement')
+
+    for fold in range(folds_number):
+        if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
+            model = net.create_unetr_model(device, unet_hyper_params)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
+            # For the regularisation
+            params = list(model.parameters())
+            unetr = True
+        else:
+            model = net.create_unet_model(device, unet_hyper_params)
+            optimizer = torch.optim.Adam(model.parameters(), 1e-3)
+            params = list(model.model.parameters())
+            unetr = False
+        if folds_number == 1:
+            output_fold_dir = output_dir
+        else:
+            output_fold_dir = Path(output_dir, f'fold_{fold}')
+    return

@@ -704,8 +704,6 @@ crop_test = {
             'keys': ['image'],
             'out_min_max': (-1, 1)}
          },
-    ],
-    'crop': [
         {'ToNumpyd': {'keys': ['image', 'label']}},
         {'RandCropByPosNegLabeld': {
             'keys': ['image', 'label'],
