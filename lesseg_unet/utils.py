@@ -74,10 +74,11 @@ def save_checkpoint(model, epoch, optimizer, output_folder, filename=None):
              'optim_dict': optimizer.state_dict(),
              }
     if filename is None:
-        torch.save(state, Path(output_folder, 'state_dictionary_{}.pt'.format(epoch)))
+        out_path = Path(output_folder, 'state_dictionary_{}.pt'.format(epoch))
     else:
-        torch.save(state, Path(output_folder, filename))
-    return
+        out_path = Path(output_folder, filename)
+    torch.save(state, out_path)
+    return out_path
 
 
 def load_eval_from_checkpoint(checkpoint_path, device, unet_hyper_params=None):
@@ -519,3 +520,7 @@ def get_segmentation_areas(img_list, comp_meth='dice', cluster_thr=0.1, root_dir
         img_cluster_isflipped_dict[path] = {'cluster': Path(clu).name.split('.nii')[0],
                                             'flipped': flipped}
     return img_cluster_isflipped_dict
+
+
+def get_img_size(img):
+    return load_nifti(img).shape

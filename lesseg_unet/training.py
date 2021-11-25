@@ -17,6 +17,7 @@ import torch
 from torch.nn.functional import binary_cross_entropy_with_logits as BCE
 from monai.metrics import DiceMetric, SurfaceDistanceMetric, HausdorffDistanceMetric
 from monai.losses import DiceLoss, TverskyLoss, FocalLoss, DiceFocalLoss, DiceCELoss
+from monai.inferers import sliding_window_inference
 from monai.transforms import (
     Activations,
     AsDiscrete,
@@ -209,6 +210,7 @@ def training_loop(img_path_list: Sequence,
     val_trash_thr = 0.3
     metric_select_fct = gt
     control_weight_factor = weight_factor  # Experiment with different weightings!
+    nb_patches = None
     if stop_best_epoch != -1:
         logging.info(f'Will stop after {stop_best_epoch} epochs without improvement')
     if label_smoothing:
@@ -261,6 +263,10 @@ def training_loop(img_path_list: Sequence,
                                                             device=transformations_device)
     val_img_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp,
                                                         device=transformations_device)
+    training_img_size = transformations.find_param_from_hyper_dict(
+        transform_dict, 'spatial_size', find_last=True)
+    if training_img_size is None:
+        training_img_size = utils.get_img_size(split_lists[0][0])
     controls_lists = []
     trash_seg_path_count_dict = {}
     ctr_img_transforms = None
@@ -282,6 +288,7 @@ def training_loop(img_path_list: Sequence,
         logging.info(f'Control training loss: mean(sigmoid(outputs)) * {control_weight_factor}')
     for fold in range(folds_number):
         if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
+            unet_hyper_params['img_size'] = training_img_size
             model = net.create_unetr_model(device, unet_hyper_params)
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
             params = list(model.parameters())
@@ -413,6 +420,11 @@ def training_loop(img_path_list: Sequence,
                 optimizer.zero_grad()
                 inputs, labels = batch_data['image'].to(device, non_blocking=non_blocking), batch_data['label'].to(
                     device, non_blocking=non_blocking)
+                if nb_patches is None:
+                    nb_patches = int(inputs.shape[0]/batch_size)
+                # print(inputs.shape)
+                # print(batch_data['image_meta_dict']['spatial_shape'])
+                # print(batch_data['image_meta_dict']['original_channel_dim'])
                 # exit()
                 # if output_spatial_size is None:
                 #     output_spatial_size = inputs.shape
@@ -492,7 +504,7 @@ def training_loop(img_path_list: Sequence,
                 epoch_loss += loss.item()
                 # PRINTS
                 print(f'[{fold}]{step}/{batches_per_epoch}, train loss: {loss.item():.4f}, ' +
-                      controls_loss_str
+                      controls_loss_str + str(inputs.shape) + ' ' + str(outputs.shape)
                       # f'| tversky_loss: {tversky_function(outputs, y).item():.4f}'
                       # f'| dicefocal: {df_loss(outputs, y).item():.4f}'
                       # f'| BCE: {BCE(outputs, y).item():.4f}'
@@ -545,7 +557,15 @@ def training_loop(img_path_list: Sequence,
                         step += 1
                         inputs, labels = val_data['image'].to(device, non_blocking=non_blocking), val_data['label'].to(
                             device, non_blocking=non_blocking)
+
+                        print(f'Nb patches: {nb_patches}')
+                        val_outputs = sliding_window_inference(inputs, training_img_size,
+                                                               nb_patches, model)
+                                                               # ,overlap=0.8) for the segmentation
+                        print(val_outputs.shape)
+                        exit()
                         outputs = model(inputs)
+
                         # In case CoordConv is used, we only want the measures on the images, not the coordinates
                         # inputs = inputs[:, :1, :, :, :]
                         labels = labels[:, :1, :, :, :]
@@ -773,7 +793,7 @@ def training(img_path_list: Sequence,
              label_smoothing=False,
              stop_best_epoch=-1,
              training_loss_fct='dice',
-             val_loss_fct='dice',
+             val_metric='dice',
              weight_factor=1,
              folds_number=1,
              dropout=0,
@@ -783,6 +803,7 @@ def training(img_path_list: Sequence,
              ):
     # Apparently it can potentially improve the performance when the model does not change its size. (Source tuto UNETR)
     torch.backends.cudnn.benchmark = True
+
     """MODEL PARAMETERS"""
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -804,17 +825,19 @@ def training(img_path_list: Sequence,
     if dropout is not None and dropout == 0:
         unet_hyper_params['dropout'] = dropout
         logging.info(f'Dropout rate used: {dropout}')
+
     """LOSS FUNCTIONS"""
     if training_loss_fct.lower() in ['dice_ce', 'dicece', 'dice_ce_loss', 'diceceloss', 'dice_cross_entropy']:
         loss_function = DiceCELoss(sigmoid=True)
     else:
         loss_function = DiceLoss(sigmoid=True)
     logging.info(f'Training loss fct: {loss_function}')
-    if val_loss_fct.lower() in ['dice_ce', 'dicece', 'dice_ce_loss', 'diceceloss', 'dice_cross_entropy']:
+    if val_metric.lower() in ['dice_ce', 'dicece', 'dice_ce_loss', 'diceceloss', 'dice_cross_entropy']:
         val_loss_function = DiceCELoss(sigmoid=True)
     else:
         val_loss_function = DiceLoss(sigmoid=True)
     logging.info(f'Validation loss fct: {val_loss_function}')
+
     """METRICS"""
     dice_metric = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
     hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean", percentile=95)
@@ -836,8 +859,10 @@ def training(img_path_list: Sequence,
     # Extract only the 'first' and 'last' transformations from transform_dict ignoring the augmentations
     val_img_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp,
                                                         device=transformations_device)
+
     """POST TRANSFORMATIONS"""
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
+
     """DATA LOADING"""
     if img_pref is not None and img_pref != '':
         logging.info(f'Abnormal images prefix: {img_pref}')
@@ -846,35 +871,198 @@ def training(img_path_list: Sequence,
     img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, seg_path_list, img_pref)
 
     split_lists = utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage)
+    # We need the training image size for the unetr as we need to know the size of the model to create it
+    training_img_size = transformations.find_param_from_hyper_dict(
+        transform_dict, 'spatial_size', find_last=True)
+    if training_img_size is None:
+        training_img_size = utils.get_img_size(split_lists[0][0])
 
-    """LOOOP VARIABLES"""
+    """FOLDS LOOP VARIABLES"""
+    non_blocking = True
+    if 'non_blocking' in kwargs:
+        v = kwargs['non_blocking']
+        if v == 'False' or v == 0:
+            non_blocking = False
+        if v == 'True' or v == 1:
+            non_blocking = True
     val_interval = 1
-    best_metric = -1
-    best_controls_mean_loss = -1
-    # best_distance = -1
-    best_avg_loss = -1
-    best_metric_epoch = -1
-    val_meh_thr = 0.7
-    val_trash_thr = 0.3
-    metric_select_fct = gt
-    control_weight_factor = weight_factor  # Experiment with different weightings!
+    # val_meh_thr = 0.7
+    # val_trash_thr = 0.3
+    nb_patches = None
     if stop_best_epoch != -1:
         logging.info(f'Will stop after {stop_best_epoch} epochs without improvement')
 
     for fold in range(folds_number):
         if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
+            unet_hyper_params['img_size'] = training_img_size
             model = net.create_unetr_model(device, unet_hyper_params)
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
             # For the regularisation
             params = list(model.parameters())
-            unetr = True
         else:
             model = net.create_unet_model(device, unet_hyper_params)
             optimizer = torch.optim.Adam(model.parameters(), 1e-3)
             params = list(model.model.parameters())
-            unetr = False
         if folds_number == 1:
             output_fold_dir = output_dir
         else:
             output_fold_dir = Path(output_dir, f'fold_{fold}')
-    return
+        # Tensorboard writer
+        writer = SummaryWriter(log_dir=str(output_fold_dir))
+        # Creates both the training and validation loaders based on the fold number
+        # (e.g. fold 0 means the first sublist of split_lists will be the validation set for this fold)
+        train_loader, val_loader = data_loading.create_fold_dataloaders(
+            split_lists, fold, train_img_transforms,
+            val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir
+        )
+
+        """EPOCHS LOOP VARIABLES"""
+        batches_per_epoch = len(train_loader)
+        str_best_epoch = ''
+        time_list = []
+        epoch_time_list = []
+        best_dice = 0
+        best_dist = 1000
+        best_metric_epoch = -1
+        for epoch in range(epoch_num):
+            print('-' * 10)
+            print(f'epoch {epoch + 1}/{epoch_num}')
+            model.train()
+            epoch_loss = 0
+            step = 0
+            start_time = time.time()
+            loading_time = True
+
+            """TRAINING LOOP"""
+            for batch_data in train_loader:
+                if loading_time:
+                    end_time = time.time()
+                    load_time = end_time - start_time
+                    print(f'Loading loop Time: {load_time}')
+                    time_list.append(load_time)
+                    print(f'First load time: {time_list[0]} and average loading time {np.mean(time_list)}')
+                    loading_time = False
+                step += 1
+                optimizer.zero_grad()
+                inputs, labels = batch_data['image'].to(device, non_blocking=non_blocking), batch_data['label'].to(
+                    device, non_blocking=non_blocking)
+                if nb_patches is None:
+                    nb_patches = int(inputs.shape[0]/batch_size)
+                logit_outputs = model(inputs)
+                # In case we use CoordConv, we only take the mask of the labels without the coordinates
+                masks_only_labels = labels[:, :1, :, :, :]
+                loss = loss_function(logit_outputs, masks_only_labels)
+                # Regularisation
+                loss += utils.sum_non_bias_l2_norms(params, 1e-4)
+                loss.backward()
+                optimizer.step()
+                epoch_loss += loss.item()
+                print(f'[{fold}]{step}/{batches_per_epoch}, train loss: {loss.item():.4f}')
+            epoch_loss /= step
+            print(f'epoch {epoch + 1} average loss: {epoch_loss:.4f}')
+            writer.add_scalar('epoch_train_loss', epoch_loss, epoch + 1)
+
+            """VALIDATION"""
+            if (epoch + 1) % val_interval == 0:
+                model.eval()
+                with torch.no_grad():
+                    step = 0
+                    loss_list = []
+                    val_batch_dice_list = []
+                    val_batch_dist_list = None
+                    if 'dist' in val_metric.lower():
+                        val_batch_dist_list = []
+                    pbar = tqdm(val_loader, desc=f'Val[{epoch + 1}] avg_metric:[N/A]')
+
+                    """VALIDATION LOOP"""
+                    for val_data in pbar:
+                        step += 1
+                        val_inputs, val_labels = val_data['image'].to(device, non_blocking=non_blocking), val_data['label'].to(
+                            device, non_blocking=non_blocking)
+                        # In case CoordConv is used
+                        masks_only_val_labels = val_labels[:, :1, :, :, :]
+                        val_outputs = sliding_window_inference(val_inputs, training_img_size,
+                                                               nb_patches, model)
+                        loss_list.append(val_loss_function(val_outputs, masks_only_val_labels))
+                        val_outputs_list = decollate_batch(val_outputs)
+                        val_output_convert = [
+                            post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
+                        ]
+                        dice_metric(y_pred=val_output_convert, y=masks_only_val_labels)
+                        dice = dice_metric.aggregate().item()
+
+                        if val_batch_dist_list is not None:
+                            hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
+                            dist = hausdorff_metric.aggregate().item()
+                            val_batch_dist_list.append(dist)
+                        val_batch_dice_list.append(dice)
+                        pbar.set_description(f'Val[{epoch + 1}] mean_loss:[{np.mean(loss_list)}]')
+                    mean_loss_val = np.mean(loss_list)
+                    dice_metric.reset()
+                    mean_dice_val = np.mean(val_batch_dice_list)
+                    writer.add_scalar('val_mean_dice', mean_dice_val, epoch + 1)
+                    writer.add_scalar('val_mean_loss', mean_loss_val, epoch + 1)
+
+                    mean_dist_val = None
+                    if val_batch_dist_list is not None:
+                        mean_dist_val = np.mean(val_batch_dist_list)
+                        hausdorff_metric.reset()
+                        mean_dist_str = f'/ Current mean distance {mean_dist_val}'
+                        writer.add_scalar('val_distance', mean_dist_val, epoch + 1)
+                    """IF NEW BEST EPOCH"""
+                    if best_dice < mean_dice_val and (mean_dist_val is None or (mean_dist_val < best_dist)):
+                        best_dice = mean_dice_val
+                        writer.add_scalar('val_best_mean_dice', best_dice, epoch + 1)
+                        best_dist_str = ''
+                        if mean_dist_val is not None:
+                            best_dist = mean_dist_val
+                            best_dist_str = f'/ Best Distance {best_dist}'
+                            writer.add_scalar('val_best_mean_distance', best_dice, epoch + 1)
+                        best_avg_loss = mean_loss_val
+                        writer.add_scalar('val_best_mean_loss', best_dice, epoch + 1)
+                        best_metric_epoch = epoch + 1
+                        epoch_suffix = ''
+                        if save_every_decent_best_epoch:
+                            if best_dice > 0.75:
+                                epoch_suffix = '_' + str(epoch)
+                        checkpoint_path = utils.save_checkpoint(
+                            model, epoch + 1, optimizer, output_fold_dir,
+                            f'best_metric_model_segmentation3d_epo{epoch_suffix}.pth')
+                        print(f'New best model saved in {checkpoint_path}')
+                        str_best_epoch = (
+                                f'Best epoch {best_metric_epoch} '
+                                # f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
+                                f'Dice metric {best_dice:.4f} / mean loss {best_avg_loss}'
+                                + best_dist_str + '\n'
+                        )
+                    best_epoch_count = epoch + 1 - best_metric_epoch
+                    str_current_epoch = (
+                            f'[Fold: {fold}]Current epoch: {epoch + 1} current mean loss: {mean_loss_val:.4f}'
+                            f' current mean dice metric: {mean_dice_val}' + mean_dist_str + '\n'
+                            + str_best_epoch
+                    )
+                    print(str_current_epoch)
+                    print(f'It has been [{best_epoch_count}] since a best epoch has been found')
+                    if stop_best_epoch > -1:
+                        print(f'The training will stop after [{stop_best_epoch}] epochs without improvement')
+                    epoch_end_time = time.time()
+                    epoch_time = epoch_end_time - start_time
+                    print(f'Epoch Time: {epoch_time}')
+                    epoch_time_list.append(epoch_time)
+                    print(f'First epoch time: '
+                          f'{epoch_time_list[0]} and average epoch time {np.mean(epoch_time_list)}')
+                    if stop_best_epoch != -1:
+                        if best_epoch_count > stop_best_epoch:
+                            print(f'More than {stop_best_epoch} without improvement')
+                            # df.to_csv(Path(output_fold_dir, 'perf_measures.csv'), columns=perf_measure_names)
+                            print(f'Training completed\n')
+                            logging.info(str_best_epoch)
+                            writer.close()
+                            break
+                    # utils.save_checkpoint(model, epoch + 1, optimizer, output_dir)
+        # df.to_csv(Path(output_fold_dir, f'perf_measures_{fold}.csv'), columns=perf_measure_names)
+        # with open(Path(output_fold_dir, f'trash_img_count_dict_{fold}.json'), 'w+') as j:
+        #     json.dump(trash_seg_path_count_dict, j, indent=4)
+        print(f'Training completed\n')
+        logging.info(str_best_epoch)
+        writer.close()

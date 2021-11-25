@@ -156,7 +156,7 @@ full_hyper_dict = {
 }
 
 full_hyper_dict_cc = deepcopy(full_hyper_dict)
-full_hyper_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
+full_hyper_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image']}})
 
 # new_full_dict_cc = deepcopy(full_hyper_dict_cc)
 # new_full_dict_cc['monai_transform'].append({'ThreeDHaircutd': {
@@ -222,7 +222,7 @@ minimal_hyper_dict = {
 }
 
 minimal_hyper_dict_cc = deepcopy(minimal_hyper_dict)
-minimal_hyper_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
+minimal_hyper_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image']}})
 
 minimal_hyper_dict_altcc = deepcopy(minimal_hyper_dict)
 minimal_hyper_dict_altcc['last_transform'].append({'CoordConvAltd': {'keys': ['image', 'label']}})
@@ -335,7 +335,7 @@ new_dict = {
 }
 
 new_dict_cc = deepcopy(new_dict)
-new_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
+new_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image']}})
 
 curated_dict = {
     'first_transform': [
@@ -478,7 +478,7 @@ curated_dict = {
 }
 
 curated_dict_cc = deepcopy(curated_dict)
-curated_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
+curated_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image']}})
 
 std_dict = deepcopy(curated_dict)
 for di in std_dict['first_transform']:
@@ -490,14 +490,14 @@ for di in std_dict['last_transform']:
         if tr == 'MyNormalizeIntensityd':
             di[tr]['no_std'] = False
 std_dict_cc = deepcopy(std_dict)
-std_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
+std_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image']}})
 
 
 mod_full_dict = deepcopy(full_hyper_dict)
 mod_full_dict['last_transform'] = curated_dict['last_transform']
 mod_full_dict['first_transform'] = curated_dict['first_transform']
 mod_full_dict_cc = deepcopy(mod_full_dict)
-mod_full_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
+mod_full_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image']}})
 
 test_dict = {
     'first_transform': [
@@ -705,6 +705,9 @@ crop_test = {
             'out_min_max': (-1, 1)}
          },
         {'ToNumpyd': {'keys': ['image', 'label']}},
+        {'ToTensord': {'keys': ['image', 'label']}},
+    ],
+    'crop': [
         {'RandCropByPosNegLabeld': {
             'keys': ['image', 'label'],
             'label_key': 'label',
@@ -712,11 +715,9 @@ crop_test = {
             # 'spatial_size': [96, 96, 96],
             'pos': 1,
             'neg': 1,
-            'num_samples': 36}
-         },
-        {'ToTensord': {'keys': ['image', 'label']}},
-    ],
+            'num_samples': 36}},
+    ]
 }
 
 crop_test_cc = deepcopy(crop_test)
-crop_test_cc['last_transform'].append({'CoordConvd': {'keys': ['image', 'label']}})
+crop_test_cc['last_transform'].append({'CoordConvd': {'keys': ['image']}})

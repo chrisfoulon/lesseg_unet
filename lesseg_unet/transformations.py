@@ -1076,27 +1076,37 @@ def trans_list_from_dict(hyper_param_dict):
         trans_list_from_list(hyper_param_dict[k])
 
 
-def find_param_from_hyper_dict(hyper_param_dict, param_name, transform_list_name=None, transform_name=None):
+def find_param_from_hyper_dict(hyper_param_dict, param_name, transform_list_name=None, transform_name=None,
+                               find_last=True):
+    param_val = None
     for list_name in hyper_param_dict:
         if transform_list_name is not None and list_name == transform_list_name:
             for d in hyper_param_dict[list_name]:
                 for t in d:
                     if transform_name is not None and t == transform_name:
                         if param_name in d[t]:
-                            return d[t][param_name]
+                            param_val = d[t][param_name]
+                            if not find_last:
+                                return param_val
                     if transform_name is None:
                         if param_name in d[t]:
-                            return d[t][param_name]
+                            param_val = d[t][param_name]
+                            if not find_last:
+                                return param_val
         if transform_list_name is None:
             for d in hyper_param_dict[list_name]:
                 for t in d:
                     if transform_name is not None and t == transform_name:
                         if param_name in d[t]:
-                            return d[t][param_name]
+                            param_val = d[t][param_name]
+                            if not find_last:
+                                return param_val
                     if transform_name is None:
                         if param_name in d[t]:
-                            return d[t][param_name]
-    return None
+                            param_val = d[t][param_name]
+                            if not find_last:
+                                return param_val
+    return param_val
 
 
 """
@@ -1105,21 +1115,24 @@ Transformation compositions for the image segmentation
 
 
 def setup_coord_conv(hyper_param_dict):
-    spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size', 'last_transform')
-    if spatial_size is None:
-        spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size')
-    logging.info(f'Spatial resize to {spatial_size}')
+    create_gradient_before = True
+    if create_gradient_before:
+        spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size', 'last_transform',
+                                                  find_last=True)
+        if spatial_size is None:
+            spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size', find_last=True)
+        logging.info(f'Spatial resize to {spatial_size}')
 
-    gradients = None
-    for k in hyper_param_dict:
-        # Each dict in the sublist
-        for d in hyper_param_dict[k]:
-            # Each Transformation name in the sublist
-            for name in d:
-                if name == 'CoordConvd' or name == 'CoordConv':
-                    if gradients is None:
-                        gradients = create_gradient(spatial_size)
-                    d[name]['gradients'] = gradients
+        gradients = None
+        for k in hyper_param_dict:
+            # Each dict in the sublist
+            for d in hyper_param_dict[k]:
+                # Each Transformation name in the sublist
+                for name in d:
+                    if name == 'CoordConvd' or name == 'CoordConv':
+                        if gradients is None:
+                            gradients = create_gradient(spatial_size)
+                        d[name]['gradients'] = gradients
 
 
 def train_transformd(hyper_param_dict=None, clamping=None, device=None):
