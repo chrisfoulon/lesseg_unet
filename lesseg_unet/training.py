@@ -983,7 +983,7 @@ def training(img_path_list: Sequence,
                         masks_only_val_labels = val_labels[:, :1, :, :, :]
                         val_outputs = sliding_window_inference(val_inputs, training_img_size,
                                                                nb_patches, model)
-                        loss_list.append(val_loss_function(val_outputs, masks_only_val_labels))
+                        loss_list.append(val_loss_function(val_outputs, masks_only_val_labels).item())
                         val_outputs_list = decollate_batch(val_outputs)
                         val_output_convert = [
                             post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
