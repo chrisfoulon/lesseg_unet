@@ -793,7 +793,7 @@ def training(img_path_list: Sequence,
              label_smoothing=False,
              stop_best_epoch=-1,
              training_loss_fct='dice',
-             val_metric='dice',
+             val_loss_fct='dice',
              weight_factor=1,
              folds_number=1,
              dropout=0,
@@ -832,7 +832,7 @@ def training(img_path_list: Sequence,
     else:
         loss_function = DiceLoss(sigmoid=True)
     logging.info(f'Training loss fct: {loss_function}')
-    if val_metric.lower() in ['dice_ce', 'dicece', 'dice_ce_loss', 'diceceloss', 'dice_cross_entropy']:
+    if val_loss_fct.lower() in ['dice_ce', 'dicece', 'dice_ce_loss', 'diceceloss', 'dice_cross_entropy']:
         val_loss_function = DiceCELoss(sigmoid=True)
     else:
         val_loss_function = DiceLoss(sigmoid=True)
@@ -970,7 +970,7 @@ def training(img_path_list: Sequence,
                     loss_list = []
                     val_batch_dice_list = []
                     val_batch_dist_list = None
-                    if 'dist' in val_metric.lower():
+                    if 'dist' in val_loss_fct.lower():
                         val_batch_dist_list = []
                     pbar = tqdm(val_loader, desc=f'Val[{epoch + 1}] avg_metric:[N/A]')
 
@@ -1004,6 +1004,7 @@ def training(img_path_list: Sequence,
                     writer.add_scalar('val_mean_loss', mean_loss_val, epoch + 1)
 
                     mean_dist_val = None
+                    mean_dist_str = ''
                     if val_batch_dist_list is not None:
                         mean_dist_val = np.mean(val_batch_dist_list)
                         hausdorff_metric.reset()
