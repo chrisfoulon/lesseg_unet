@@ -977,7 +977,8 @@ def training(img_path_list: Sequence,
                     """VALIDATION LOOP"""
                     for val_data in pbar:
                         step += 1
-                        val_inputs, val_labels = val_data['image'].to(device, non_blocking=non_blocking), val_data['label'].to(
+                        val_inputs, val_labels = val_data['image'].to(
+                            device, non_blocking=non_blocking), val_data['label'].to(
                             device, non_blocking=non_blocking)
                         # In case CoordConv is used
                         masks_only_val_labels = val_labels[:, :1, :, :, :]
@@ -1018,9 +1019,9 @@ def training(img_path_list: Sequence,
                         if mean_dist_val is not None:
                             best_dist = mean_dist_val
                             best_dist_str = f'/ Best Distance {best_dist}'
-                            writer.add_scalar('val_best_mean_distance', best_dice, epoch + 1)
+                            writer.add_scalar('val_best_mean_distance', best_dist, epoch + 1)
                         best_avg_loss = mean_loss_val
-                        writer.add_scalar('val_best_mean_loss', best_dice, epoch + 1)
+                        writer.add_scalar('val_best_mean_loss', best_avg_loss, epoch + 1)
                         best_metric_epoch = epoch + 1
                         epoch_suffix = ''
                         if save_every_decent_best_epoch:
