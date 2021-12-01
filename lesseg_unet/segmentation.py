@@ -196,32 +196,32 @@ def validation_loop(img_path_list: Sequence,
         for val_data in tqdm(val_loader, desc=f'Validation '):
             inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
             input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
-            outputs = model(inputs)
-            outputs = post_trans(outputs)
+            # outputs = model(inputs)
+            # outputs = post_trans(outputs)
 
             masks_only_val_labels = labels[:, :1, :, :, :]
             # TODO
-            # val_outputs = sliding_window_inference(inputs, training_img_size,
-            #                                        1, model, overlap=0.8)
-            # val_outputs_list = decollate_batch(val_outputs)
-            # val_output_convert = [
-            #     post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
-            # ]
-            # dice_metric(y_pred=val_output_convert, y=masks_only_val_labels)
-            # dice = dice_metric.aggregate().item()
+            val_outputs = sliding_window_inference(inputs, training_img_size,
+                                                   1, model, overlap=0.8)
+            val_outputs_list = decollate_batch(val_outputs)
+            val_output_convert = [
+                post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
+            ]
+            dice_metric(y_pred=val_output_convert, y=masks_only_val_labels)
+            dice = dice_metric.aggregate().item()
 
-            vol_output = utils.volume_metric(outputs, False, False)
+            vol_output = utils.volume_metric(val_output_convert, False, False)
             input_filename += f'_v{vol_output}v'
             output_dict_data = deepcopy(val_data)
-            value = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
-            val_score_list.append(value.item())
-            metric_count += len(value)
-            metric_sum += value.item() * len(value)
+            # value = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
+            val_score_list.append(dice.item())
+            metric_count += len(dice)
+            metric_sum += dice.item() * len(dice)
 
             val_data['image'] = val_data['image'].to(device)[0]
             val_data['label'] = val_data['label'].to(device)[0]
             output_dict_data['image'] = val_data['image']
-            output_dict_data['label'] = outputs[0]
+            output_dict_data['label'] = val_output_convert[0]
 
             inverted_dict = val_ds.transform.inverse(val_data)
             inv_inputs, inv_labels = inverted_dict['image'], inverted_dict['label']
@@ -235,7 +235,7 @@ def validation_loop(img_path_list: Sequence,
             # inputs_np = inv_inputs[0, :, :, :].detach().numpy()
             # labels_np = inv_labels[0, :, :, :].detach().numpy()
             # outputs_np = inv_outputs[0, :, :, :].detach().numpy()
-            if value.item() < bad_dice_treshold:
+            if dice.item() < bad_dice_treshold:
                 trash_count += 1
                 # print('Saving trash image #{}'.format(trash_count))
                 # TODO This is slow AF because of the imshow, maybe resetting the plot would work
