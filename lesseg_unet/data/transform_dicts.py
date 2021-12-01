@@ -711,11 +711,11 @@ crop_test = {
         {'RandCropByPosNegLabeld': {
             'keys': ['image', 'label'],
             'label_key': 'label',
-            'spatial_size': [32, 32, 32],
-            # 'spatial_size': [96, 96, 96],
+            # 'spatial_size': [32, 32, 32],
+            'spatial_size': min_small_crop_size,
             'pos': 1,
             'neg': 1,
-            'num_samples': 36}},
+            'num_samples': 4}},
     ]
 }
 

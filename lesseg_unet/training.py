@@ -562,8 +562,6 @@ def training_loop(img_path_list: Sequence,
                         val_outputs = sliding_window_inference(inputs, training_img_size,
                                                                nb_patches, model)
                                                                # ,overlap=0.8) for the segmentation
-                        print(val_outputs.shape)
-                        exit()
                         outputs = model(inputs)
 
                         # In case CoordConv is used, we only want the measures on the images, not the coordinates

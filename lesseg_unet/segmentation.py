@@ -10,6 +10,8 @@ from tqdm import tqdm
 import torch
 from lesseg_unet import data_loading, utils, net, transformations
 from monai.metrics import DiceMetric
+from monai.inferers import sliding_window_inference
+from monai.data import decollate_batch
 from monai.transforms import (
     Activations,
     AsDiscrete,
@@ -136,6 +138,11 @@ def validation_loop(img_path_list: Sequence,
                                                 train_val_percentage=0, clamping=clamping)
     val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
                                                             dataloader_workers=dataloader_workers)
+
+    training_img_size = transformations.find_param_from_hyper_dict(
+        transform_dict, 'spatial_size', find_last=True)
+    if training_img_size is None:
+        training_img_size = utils.get_img_size(img_path_list[0])
     unet_hyper_params = net.default_unet_hyper_params
     if transform_dict is not None:
         for li in transform_dict:
@@ -191,6 +198,18 @@ def validation_loop(img_path_list: Sequence,
             input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
             outputs = model(inputs)
             outputs = post_trans(outputs)
+
+            masks_only_val_labels = labels[:, :1, :, :, :]
+            # TODO
+            # val_outputs = sliding_window_inference(inputs, training_img_size,
+            #                                        1, model, overlap=0.8)
+            # val_outputs_list = decollate_batch(val_outputs)
+            # val_output_convert = [
+            #     post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
+            # ]
+            # dice_metric(y_pred=val_output_convert, y=masks_only_val_labels)
+            # dice = dice_metric.aggregate().item()
+
             vol_output = utils.volume_metric(outputs, False, False)
             input_filename += f'_v{vol_output}v'
             output_dict_data = deepcopy(val_data)
