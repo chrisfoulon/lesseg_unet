@@ -29,7 +29,8 @@ def segmentation_loop(img_path_list: Sequence,
                       dataloader_workers: int = 8,
                       original_size=True,
                       clamping: tuple = None,
-                      segmentation_area=True):
+                      segmentation_area=True,
+                      **kwargs):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -40,14 +41,23 @@ def segmentation_loop(img_path_list: Sequence,
     val_ds = data_loading.init_segmentation(img_path_list, img_pref, transform_dict, clamping=clamping)
     val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
                                                             dataloader_workers=dataloader_workers)
-    unet_hyper_params = net.default_unet_hyper_params
+    training_img_size = transformations.find_param_from_hyper_dict(
+        transform_dict, 'spatial_size', find_last=True)
+    if training_img_size is None:
+        training_img_size = utils.get_img_size(img_path_list[0])
+    model_name = 'unet'
+    hyper_params = net.default_unet_hyper_params
+    if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
+        hyper_params = net.default_unetr_hyper_params
+        hyper_params['img_size'] = training_img_size
+        model_name = 'unetr'
     if transform_dict is not None:
         for li in transform_dict:
             for d in transform_dict[li]:
                 for t in d:
                     if t == 'CoordConvd' or t == 'CoordConvAltd':
-                        unet_hyper_params['in_channels'] = 4
-    model = utils.load_eval_from_checkpoint(checkpoint_path, device, unet_hyper_params)
+                        hyper_params['in_channels'] = 4
+    model = utils.load_model_from_checkpoint(checkpoint_path, device, hyper_params, model_name=model_name)
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
     model.eval()
     les_area_finder = None
@@ -59,17 +69,29 @@ def segmentation_loop(img_path_list: Sequence,
         for val_data in tqdm(val_loader, desc=f'Segmentation '):
             img_count += 1
             inputs = val_data['image'].to(device)
-            outputs = model(inputs)
-            outputs = post_trans(outputs)
+            # TODO
+            val_outputs = sliding_window_inference(inputs, training_img_size,
+                                                   1, model, overlap=0.8)
+            val_outputs_list = decollate_batch(val_outputs)
+            val_output_convert = [
+                post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
+            ]
+
+            vol_output = utils.volume_metric(val_output_convert[0], False, False)
+
             input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
-            vol_output = utils.volume_metric(outputs, False, False)
             input_filename += f'_v{vol_output}v'
+            # TODO
+            # if 'entropy' in kwargs and (kwargs['entropy'] == 'True' or kwargs['entropy'] == 1):
+            #     print(utils.entropy_metric(val_outputs_list[0], sigmoid=True))
+            #     exit()
+            #     input_filename += f'_e{utils.entropy_metric(val_outputs_list[0], sigmoid=True)}e'
             if original_size:
                 output_dict_data = deepcopy(val_data)
                 output_dict_data['image'] = val_data['image'].to(device)[0]
                 inverted_output_dict = val_ds.transform.inverse(output_dict_data)
                 inv_inputs = inverted_output_dict['image']
-                output_dict_data['image'] = outputs[0]
+                output_dict_data['image'] = val_output_convert[0]
                 inverted_output_dict = val_ds.transform.inverse(output_dict_data)
                 inv_outputs = inverted_output_dict['image']
                 inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_inputs, torch.Tensor) \
@@ -94,10 +116,10 @@ def segmentation_loop(img_path_list: Sequence,
                     inputs_np, tmp, outputs_np, output_subdir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(img_count)))
             else:
-                inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy() if isinstance(inputs, torch.Tensor) \
-                    else inputs[0, :, :, :]
-                outputs_np = outputs[0, 0, :, :, :].cpu().detach().numpy() if isinstance(outputs, torch.Tensor) \
-                    else outputs[0, :, :, :]
+                inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy() if isinstance(
+                    inputs, torch.Tensor) else inputs[0, :, :, :]
+                outputs_np = val_output_convert[0, 0, :, :, :].cpu().detach().numpy() if isinstance(
+                    val_output_convert, torch.Tensor) else val_output_convert[0, :, :, :]
 
                 tmp = None
                 output_path_list = utils.save_img_lbl_seg_to_nifti(
@@ -110,7 +132,7 @@ def segmentation_loop(img_path_list: Sequence,
             pd.DataFrame().from_dict(img_vol_dict, orient='index').to_csv(
                 Path(output_dir, f'__output_image_volumes.csv'))
             del inputs
-            del outputs
+            del val_output_convert
             del inputs_np
             del outputs_np
 
@@ -126,7 +148,9 @@ def validation_loop(img_path_list: Sequence,
                     dataloader_workers: int = 8,
                     bad_dice_treshold: float = 0.1,
                     clamping: tuple = None,
-                    segmentation_area=True):
+                    segmentation_area=True,
+                    **kwargs
+                    ):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -143,14 +167,19 @@ def validation_loop(img_path_list: Sequence,
         transform_dict, 'spatial_size', find_last=True)
     if training_img_size is None:
         training_img_size = utils.get_img_size(img_path_list[0])
-    unet_hyper_params = net.default_unet_hyper_params
+    model_name = 'unet'
+    hyper_params = net.default_unet_hyper_params
+    if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
+        hyper_params = net.default_unetr_hyper_params
+        hyper_params['img_size'] = training_img_size
+        model_name = 'unetr'
     if transform_dict is not None:
         for li in transform_dict:
             for d in transform_dict[li]:
                 for t in d:
                     if t == 'CoordConvd' or t == 'CoordConvAltd':
-                        unet_hyper_params['in_channels'] = 4
-    model = utils.load_eval_from_checkpoint(checkpoint_path, device, unet_hyper_params)
+                        hyper_params['in_channels'] = 4
+    model = utils.load_model_from_checkpoint(checkpoint_path, device, hyper_params, model_name=model_name)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
 
@@ -187,8 +216,6 @@ def validation_loop(img_path_list: Sequence,
     img_vol_dict = {}
     model.eval()
     with torch.no_grad():
-        metric_sum = 0.0
-        metric_count = 0
         img_count = 0
         trash_count = 0
         # img_max_num = len(train_ds) + len(val_ds)
@@ -210,13 +237,13 @@ def validation_loop(img_path_list: Sequence,
             dice_metric(y_pred=val_output_convert, y=masks_only_val_labels)
             dice = dice_metric.aggregate().item()
 
-            vol_output = utils.volume_metric(val_output_convert, False, False)
+            vol_output = utils.volume_metric(val_output_convert[0], False, False)
             input_filename += f'_v{vol_output}v'
+            # if 'entropy' in kwargs and (kwargs['entropy'] == 'True' or kwargs['entropy'] == 1):
+            #     input_filename += f'_e{utils.entropy_metric(val_outputs_list[0], sigmoid=True)}e'
             output_dict_data = deepcopy(val_data)
             # value = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
-            val_score_list.append(dice.item())
-            metric_count += len(dice)
-            metric_sum += dice.item() * len(dice)
+            val_score_list.append(dice)
 
             val_data['image'] = val_data['image'].to(device)[0]
             val_data['label'] = val_data['label'].to(device)[0]
@@ -235,7 +262,7 @@ def validation_loop(img_path_list: Sequence,
             # inputs_np = inv_inputs[0, :, :, :].detach().numpy()
             # labels_np = inv_labels[0, :, :, :].detach().numpy()
             # outputs_np = inv_outputs[0, :, :, :].detach().numpy()
-            if dice.item() < bad_dice_treshold:
+            if dice < bad_dice_treshold:
                 trash_count += 1
                 # print('Saving trash image #{}'.format(trash_count))
                 # TODO This is slow AF because of the imshow, maybe resetting the plot would work
@@ -271,14 +298,13 @@ def validation_loop(img_path_list: Sequence,
                     inputs_np, labels_np, outputs_np, output_subdir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(img_count)))
             img_vol_dict[output_path_list[-1]] = vol_output
-        metric = metric_sum / metric_count
-        metric_values.append(metric)
+        mean_metric = np.mean(np.array(val_score_list))
         median = np.median(np.array(val_score_list))
         std = np.std(np.array(val_score_list))
         min_score = np.min(np.array(val_score_list))
         max_score = np.max(np.array(val_score_list))
         df.loc[0] = pd.Series({
-            'val_mean_dice': metric,
+            'val_mean_dice': mean_metric,
             'val_median_dice': median,
             'val_std_dice': std,
             'trash_img_nb': trash_count,
@@ -286,6 +312,8 @@ def validation_loop(img_path_list: Sequence,
             'val_max_dice': max_score,
             'val_best_mean_dice': 0
         })
+        # Not necessary but I prefer it there
+        dice_metric.reset()
     with open(Path(output_dir, f'__output_image_volumes.json'), 'w+') as j:
         json.dump(img_vol_dict, j, indent=4)
     pd.DataFrame().from_dict(img_vol_dict, orient='index').to_csv(Path(output_dir, f'__output_image_volumes.csv'))

@@ -810,18 +810,18 @@ def training(img_path_list: Sequence,
     logging.info(f'Torch device used for this training: {str(device)}')
 
     if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
-        unet_hyper_params = net.default_unetr_hyper_params
+        hyper_params = net.default_unetr_hyper_params
     else:
-        unet_hyper_params = net.default_unet_hyper_params
+        hyper_params = net.default_unet_hyper_params
     # checking is CoordConv is used and change the input channel dimension
     if transform_dict is not None:
         for li in transform_dict:
             for d in transform_dict[li]:
                 for t in d:
                     if t == 'CoordConvd' or t == 'CoordConvAltd':
-                        unet_hyper_params['in_channels'] = 4
+                        hyper_params['in_channels'] = 4
     if dropout is not None and dropout == 0:
-        unet_hyper_params['dropout'] = dropout
+        hyper_params['dropout'] = dropout
         logging.info(f'Dropout rate used: {dropout}')
 
     """LOSS FUNCTIONS"""
@@ -892,13 +892,13 @@ def training(img_path_list: Sequence,
 
     for fold in range(folds_number):
         if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
-            unet_hyper_params['img_size'] = training_img_size
-            model = net.create_unetr_model(device, unet_hyper_params)
+            hyper_params['img_size'] = training_img_size
+            model = net.create_unetr_model(device, hyper_params)
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
             # For the regularisation
             params = list(model.parameters())
         else:
-            model = net.create_unet_model(device, unet_hyper_params)
+            model = net.create_unet_model(device, hyper_params)
             optimizer = torch.optim.Adam(model.parameters(), 1e-3)
             params = list(model.model.parameters())
         if folds_number == 1:
@@ -932,7 +932,14 @@ def training(img_path_list: Sequence,
             loading_time = True
 
             """TRAINING LOOP"""
-            for batch_data in train_loader:
+            train_iter = tqdm(train_loader, desc=f'Training[{epoch + 1}] avg_loss:[N/A]')
+            no_progressbar_training = False
+            if 'no_progressbar_training' in kwargs:
+                v = kwargs['no_progressbar_training']
+                if v == 'True' or v == 0:
+                    train_iter = train_loader
+                    no_progressbar_training = True
+            for batch_data in train_iter:
                 if loading_time:
                     end_time = time.time()
                     load_time = end_time - start_time
@@ -955,7 +962,10 @@ def training(img_path_list: Sequence,
                 loss.backward()
                 optimizer.step()
                 epoch_loss += loss.item()
-                print(f'[{fold}]{step}/{batches_per_epoch}, train loss: {loss.item():.4f}')
+                if no_progressbar_training:
+                    print(f'[{fold}]{step}/{batches_per_epoch}, train loss: {loss.item():.4f}')
+                else:
+                    train_iter.set_description(f'Val[{epoch + 1}] mean_loss:[{loss.item()}{epoch_loss/step}]')
             epoch_loss /= step
             print(f'epoch {epoch + 1} average loss: {epoch_loss:.4f}')
             writer.add_scalar('epoch_train_loss', epoch_loss, epoch + 1)

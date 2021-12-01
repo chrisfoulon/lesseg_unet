@@ -10,7 +10,6 @@ import bcblib.tools.nifti_utils
 import pandas as pd
 from monai.config import print_config
 from lesseg_unet import utils, training, segmentation
-from lesseg_unet.data import transform_dicts
 from bcblib.tools.nifti_utils import file_to_list, overlaps_subfolders, nifti_overlap_images
 import lesseg_unet.data.transform_dicts as tr_dicts
 import nibabel as nib
@@ -188,7 +187,7 @@ def main():
                                  'in lesseg_unet/data/transform_dicts.py'.format(args.transform_dict))
     else:
         print('Using default transformation dictionary')
-        transform_dict = transform_dicts.minimal_hyper_dict
+        transform_dict = tr_dicts.minimal_hyper_dict
     # Clamping or not clamping
     if args.clamp_low is not None:
         if args.clamp_high is not None:
@@ -276,7 +275,8 @@ def main():
                                                    device=args.torch_device,
                                                    dataloader_workers=args.num_workers,
                                                    clamping=clamp_tuple,
-                                                   segmentation_area=args.segmentation_area)
+                                                   segmentation_area=args.segmentation_area,
+                                                   **kwargs)
                 if args.overlap:
                     overlaps_subfolders(output_root, 'output_')
             else:
@@ -289,7 +289,8 @@ def main():
                                                device=args.torch_device,
                                                dataloader_workers=args.num_workers,
                                                clamping=clamp_tuple,
-                                               segmentation_area=args.segmentation_area)
+                                               segmentation_area=args.segmentation_area,
+                                               **kwargs)
                 if args.overlap:
                     nib.save(nifti_overlap_images(output_root, 'output_'),
                              Path(output_root, 'overlap_segmentation.nii'))
@@ -312,7 +313,8 @@ def main():
                                          # train_val_percentage=train_val_percentage,
                                          # default_label=args.default_label
                                          clamping=clamp_tuple,
-                                         segmentation_area=args.segmentation_area)
+                                         segmentation_area=args.segmentation_area,
+                                         **kwargs)
             if args.overlap:
                 nib.save(nifti_overlap_images(output_root, 'output_'),
                          Path(output_root, 'overlap_segmentation.nii'))

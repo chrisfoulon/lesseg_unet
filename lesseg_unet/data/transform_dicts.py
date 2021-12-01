@@ -837,6 +837,33 @@ unetr_dict = {
         #  },
         # {'ToNumpyd': {'keys': ['image', 'label']}},
     ],
+    'unetr_transform': [
+        {'RandFlipd': {
+            'keys': ["image", "label"],
+            'spatial_axis': [0],
+            'prob': low_prob}
+         },
+        {'RandFlipd': {
+            'keys': ["image", "label"],
+            'spatial_axis': [1],
+            'prob': low_prob}
+         },
+        {'RandFlipd': {
+            'keys': ["image", "label"],
+            'spatial_axis': [2],
+            'prob': low_prob}
+         },
+        {'RandRotate90d': {
+            'keys': ["image", "label"],
+            'prob': low_prob},
+            'max_k': 3,
+         },
+        {'RandShiftIntensityd': {
+            'keys': ["image"],
+            'offsets': 0.10,
+            'prob': high_prob}
+         },
+    ],
     'last_transform': [
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'end of augmentations'}},
         # {'GaussianSmoothd': {
@@ -863,16 +890,15 @@ unetr_dict = {
         # {'ToNumpyd': {'keys': ['image', 'label']}},
         {'ToTensord': {'keys': ['image', 'label']}},
     ],
-    'crop': [
-        {'RandCropByPosNegLabeld': {
-            'keys': ['image', 'label'],
-            'label_key': 'label',
-            'spatial_size': [16, 16, 16],
-            # 'spatial_size': [96, 96, 96],
-            'pos': 1,
-            'neg': 1,
-            'num_samples': 72}},
-    ]
+    # 'crop': [
+    #     {'RandCropByPosNegLabeld': {
+    #         'keys': ['image', 'label'],
+    #         'label_key': 'label',
+    #         'spatial_size': [80, 96, 80],
+    #         'pos': 1,
+    #         'neg': 1,
+    #         'num_samples': 4}},
+    # ]
 }
 
 unetr_dict_cc = deepcopy(unetr_dict)

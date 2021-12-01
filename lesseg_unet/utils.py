@@ -9,12 +9,13 @@ from tqdm import tqdm
 from operator import lt, gt
 from multiprocessing.dummy import Pool
 import multiprocessing
+from scipy.stats import entropy
 
 import monai.transforms
 from monai.metrics import HausdorffDistanceMetric, DiceMetric
 from bcblib.tools.nifti_utils import is_nifti, centre_of_mass_difference
 from lesseg_unet.visualisation_utils import plot_seg
-from lesseg_unet.net import create_unet_model
+from lesseg_unet.net import create_unet_model, create_unetr_model
 import nibabel as nib
 import torch
 import numpy as np
@@ -81,11 +82,16 @@ def save_checkpoint(model, epoch, optimizer, output_folder, filename=None):
     return out_path
 
 
-def load_eval_from_checkpoint(checkpoint_path, device, unet_hyper_params=None):
-    checkpoint = torch.load(checkpoint_path)
-    model = create_unet_model(device, unet_hyper_params)
+def load_model_from_checkpoint(checkpoint_path, device, hyper_params=None, model_name='UNet'):
+    checkpoint = torch.load(checkpoint_path, map_location=torch.device(device))
+    if model_name.lower() == 'unet':
+        model = create_unet_model(device, hyper_params)
+    elif model_name.lower() == 'unetr':
+        model = create_unetr_model(device, hyper_params)
+    else:
+        raise ValueError(f'model "{model_name}" unknown')
     model.load_state_dict(checkpoint['state_dict'])
-    model.eval()
+    # model.eval()
     # bottom_up_graph.model.load_state_dict(checkpoint['bottom_up_graph_state_dict'])
     return model
 
@@ -274,6 +280,12 @@ def volume_metric(img, sigmoid=True, discrete=True):
     if discrete:
         img = monai.transforms.AsDiscrete(threshold_values=True)(img)
     return len(img[torch.where(img)])
+
+
+def entropy_metric(img, sigmoid=True):
+    if sigmoid:
+        img = torch.sigmoid(img)
+    return entropy(img, base=2)
 
 
 def check_inputs(inputs, img_string=None, min_file_size=300):
