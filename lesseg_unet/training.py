@@ -266,7 +266,7 @@ def training_loop(img_path_list: Sequence,
     training_img_size = transformations.find_param_from_hyper_dict(
         transform_dict, 'spatial_size', find_last=True)
     if training_img_size is None:
-        training_img_size = utils.get_img_size(split_lists[0][0])
+        training_img_size = utils.get_img_size(split_lists[0][0]['image'])
     controls_lists = []
     trash_seg_path_count_dict = {}
     ctr_img_transforms = None
@@ -873,7 +873,7 @@ def training(img_path_list: Sequence,
     training_img_size = transformations.find_param_from_hyper_dict(
         transform_dict, 'spatial_size', find_last=True)
     if training_img_size is None:
-        training_img_size = utils.get_img_size(split_lists[0][0])
+        training_img_size = utils.get_img_size(split_lists[0][0]['image'])
 
     """FOLDS LOOP VARIABLES"""
     non_blocking = True
@@ -932,7 +932,7 @@ def training(img_path_list: Sequence,
             loading_time = True
 
             """TRAINING LOOP"""
-            train_iter = tqdm(train_loader, desc=f'Training[{epoch + 1}] avg_loss:[N/A]')
+            train_iter = tqdm(train_loader, desc=f'Training[{epoch + 1}] loss/mean_loss:[N/A]')
             no_progressbar_training = False
             if 'no_progressbar_training' in kwargs:
                 v = kwargs['no_progressbar_training']
@@ -965,7 +965,8 @@ def training(img_path_list: Sequence,
                 if no_progressbar_training:
                     print(f'[{fold}]{step}/{batches_per_epoch}, train loss: {loss.item():.4f}')
                 else:
-                    train_iter.set_description(f'Val[{epoch + 1}] mean_loss:[{loss.item()}{epoch_loss/step}]')
+                    train_iter.set_description(
+                        f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss/step:.4f}]')
             epoch_loss /= step
             print(f'epoch {epoch + 1} average loss: {epoch_loss:.4f}')
             writer.add_scalar('epoch_train_loss', epoch_loss, epoch + 1)

@@ -855,8 +855,8 @@ unetr_dict = {
          },
         {'RandRotate90d': {
             'keys': ["image", "label"],
-            'prob': low_prob},
-            'max_k': 3,
+            'prob': low_prob,
+            'max_k': 3}
          },
         {'RandShiftIntensityd': {
             'keys': ["image"],
@@ -890,15 +890,15 @@ unetr_dict = {
         # {'ToNumpyd': {'keys': ['image', 'label']}},
         {'ToTensord': {'keys': ['image', 'label']}},
     ],
-    # 'crop': [
-    #     {'RandCropByPosNegLabeld': {
-    #         'keys': ['image', 'label'],
-    #         'label_key': 'label',
-    #         'spatial_size': [80, 96, 80],
-    #         'pos': 1,
-    #         'neg': 1,
-    #         'num_samples': 4}},
-    # ]
+    'crop': [
+        {'RandCropByPosNegLabeld': {
+            'keys': ['image', 'label'],
+            'label_key': 'label',
+            'spatial_size': [80, 80, 80],
+            'pos': 1,
+            'neg': 1,
+            'num_samples': 4}},
+    ]
 }
 
 unetr_dict_cc = deepcopy(unetr_dict)

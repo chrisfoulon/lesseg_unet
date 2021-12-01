@@ -42,7 +42,9 @@ from monai.transforms import (
     AsChannelFirstd,
     RandSpatialCropd,
     RandCropByPosNegLabeld,
-    ResizeWithPadOrCropd, RandomizableTransform
+    ResizeWithPadOrCropd,
+    RandomizableTransform,
+    RandShiftIntensityd,
 )
 import torchio
 from torchio import Subject, ScalarImage
