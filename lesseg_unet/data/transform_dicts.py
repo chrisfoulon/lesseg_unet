@@ -700,10 +700,10 @@ crop_test = {
         # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER second binarized'}},
         # {'NormalizeIntensityd': {'keys': ['image']}},
-        {'MyNormalizeIntensityd': {
-            'keys': ['image'],
-            'out_min_max': (-1, 1)}
-         },
+        # {'MyNormalizeIntensityd': {
+        #     'keys': ['image'],
+        #     'out_min_max': (-1, 1)}
+        #  },
         # {'ToNumpyd': {'keys': ['image', 'label']}},
         {'ToTensord': {'keys': ['image', 'label']}},
     ],
