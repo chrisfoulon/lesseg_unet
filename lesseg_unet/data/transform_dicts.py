@@ -704,15 +704,17 @@ crop_test = {
             'keys': ['image'],
             'out_min_max': (-1, 1)}
          },
-        {'ToNumpyd': {'keys': ['image', 'label']}},
+        # {'ToNumpyd': {'keys': ['image', 'label']}},
         {'ToTensord': {'keys': ['image', 'label']}},
     ],
     'crop': [
         {'RandCropByPosNegLabeld': {
             'keys': ['image', 'label'],
             'label_key': 'label',
+            # UNet cannot take every dimension min_small_crop_size (91, 121, 91) does not work for example
+            'spatial_size': [80, 96, 80],
             # 'spatial_size': [32, 32, 32],
-            'spatial_size': min_small_crop_size,
+            # 'spatial_size': min_small_crop_size,
             'pos': 1,
             'neg': 1,
             'num_samples': 4}},
@@ -858,7 +860,7 @@ unetr_dict = {
             'keys': ['image'],
             'out_min_max': (0, 1)}
          },
-        {'ToNumpyd': {'keys': ['image', 'label']}},
+        # {'ToNumpyd': {'keys': ['image', 'label']}},
         {'ToTensord': {'keys': ['image', 'label']}},
     ],
     'crop': [
