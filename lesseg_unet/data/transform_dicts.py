@@ -693,10 +693,10 @@ crop_test = {
             'keys': ['label'],
             'lower_threshold': 0.25}
          },
-        # {'ResizeWithPadOrCropd': {
-        #     'keys': ['image', 'label'],
-        #     'spatial_size': def_spatial_size}
-        #  },
+        {'ResizeWithPadOrCropd': {
+            'keys': ['image', 'label'],
+            'spatial_size': def_spatial_size}
+         },
         # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER second binarized'}},
         # {'NormalizeIntensityd': {'keys': ['image']}},
