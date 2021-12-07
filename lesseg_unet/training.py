@@ -896,7 +896,7 @@ def training(img_path_list: Sequence,
         if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
             hyper_params['img_size'] = training_img_size
             if 'feature_size' in kwargs:
-                hyper_params['feature_size'] = kwargs['feature_size']
+                hyper_params['feature_size'] = int(kwargs['feature_size'])
             model = net.create_unetr_model(device, hyper_params)
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
             # For the regularisation
