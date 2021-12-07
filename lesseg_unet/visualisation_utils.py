@@ -134,12 +134,12 @@ def display_one_output(output_dir, number=None, string=None, recursive=False):
     label = None
     seg = None
     for f in f_list:
-        if 'input' in f.name:
+        if f.name.startswith('input'):
             img = f
-        if 'label' in f.name:
+        if f.name.startswith('label'):
             print(f'Non zero voxels in the label: {np.count_nonzero(nib.load(f).get_fdata())})')
             label = f
-        if 'output' in f.name:
+        if f.name.startswith('output'):
             print(f'Non zero voxels in the output prediction: {np.count_nonzero(nib.load(f).get_fdata())}')
             seg = f
     if img is None:

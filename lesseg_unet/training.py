@@ -803,6 +803,8 @@ def training(img_path_list: Sequence,
     torch.backends.cudnn.benchmark = True
 
     """MODEL PARAMETERS"""
+    # device = torch.device(f"cuda:{args.local_rank}")
+    # torch.cuda.set_device(device)
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -893,6 +895,8 @@ def training(img_path_list: Sequence,
     for fold in range(folds_number):
         if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
             hyper_params['img_size'] = training_img_size
+            if 'feature_size' in kwargs:
+                hyper_params['feature_size'] = kwargs['feature_size']
             model = net.create_unetr_model(device, hyper_params)
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
             # For the regularisation

@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from typing import Sequence, Union
 from copy import deepcopy
+import logging
 
 import numpy as np
 import pandas as pd
@@ -36,6 +37,7 @@ def segmentation_loop(img_path_list: Sequence,
     else:
         device = torch.device(device)
 
+    logging.info(f'Torch device used for this segmentation: {str(device)}')
     original_size = original_size
     val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
     val_ds = data_loading.init_segmentation(img_path_list, img_pref, transform_dict, clamping=clamping)
