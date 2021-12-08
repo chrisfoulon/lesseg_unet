@@ -837,33 +837,6 @@ unetr_dict = {
         #  },
         # {'ToNumpyd': {'keys': ['image', 'label']}},
     ],
-    'unetr_transform': [
-        {'RandFlipd': {
-            'keys': ["image", "label"],
-            'spatial_axis': [0],
-            'prob': low_prob}
-         },
-        {'RandFlipd': {
-            'keys': ["image", "label"],
-            'spatial_axis': [1],
-            'prob': low_prob}
-         },
-        {'RandFlipd': {
-            'keys': ["image", "label"],
-            'spatial_axis': [2],
-            'prob': low_prob}
-         },
-        {'RandRotate90d': {
-            'keys': ["image", "label"],
-            'prob': low_prob,
-            'max_k': 3}
-         },
-        {'RandShiftIntensityd': {
-            'keys': ["image"],
-            'offsets': 0.10,
-            'prob': high_prob}
-         },
-    ],
     'last_transform': [
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'end of augmentations'}},
         # {'GaussianSmoothd': {
@@ -898,13 +871,40 @@ unetr_dict = {
             'pos': 1,
             'neg': 1,
             'num_samples': 4}},
-    ]
+    ],
+    'unetr_transform': [
+        {'RandFlipd': {
+            'keys': ["image", "label"],
+            'spatial_axis': [0],
+            'prob': low_prob}
+         },
+        {'RandFlipd': {
+            'keys': ["image", "label"],
+            'spatial_axis': [1],
+            'prob': low_prob}
+         },
+        {'RandFlipd': {
+            'keys': ["image", "label"],
+            'spatial_axis': [2],
+            'prob': low_prob}
+         },
+        {'RandRotate90d': {
+            'keys': ["image", "label"],
+            'prob': low_prob,
+            'max_k': 3}
+         },
+        {'RandShiftIntensityd': {
+            'keys': ["image"],
+            'offsets': 0.10,
+            'prob': high_prob}
+         },
+    ],
 }
 
 unetr_dict_cc = deepcopy(unetr_dict)
 unetr_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image']}})
 
-unetr_dict_oneflip = {
+unetr_dict_lastflip = {
     'first_transform': [
         {'LoadImaged': {
             'keys': ['image', 'label']}},
