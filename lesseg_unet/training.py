@@ -832,7 +832,8 @@ def training(img_path_list: Sequence,
     else:
         loss_function = DiceLoss(sigmoid=True)
     logging.info(f'Training loss fct: {loss_function}')
-    if val_loss_fct.lower() in ['dice_ce', 'dicece', 'dice_ce_loss', 'diceceloss', 'dice_cross_entropy']:
+    if any([s in val_loss_fct.lower() for s in
+            ['dice_ce', 'dicece', 'dice_ce_loss', 'diceceloss', 'dice_cross_entropy']]):
         val_loss_function = DiceCELoss(sigmoid=True)
     else:
         val_loss_function = DiceLoss(sigmoid=True)
@@ -841,7 +842,13 @@ def training(img_path_list: Sequence,
     """METRICS"""
     dice_metric = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
     hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean", percentile=95)
-
+    keep_dice_and_dist = False
+    if 'keep_dice_and_dist' in kwargs:
+        v = kwargs['keep_dice_and_dist']
+        if v == 'False' or v == 0:
+            keep_dice_and_dist = False
+        if v == 'True' or v == 1:
+            keep_dice_and_dist = True
     """TRANSFORMATIONS AND AUGMENTATIONS"""
     # Attempt to send the transformations / augmentations on the GPU when possible (disabled by default)
     transformations_device = None
@@ -1025,7 +1032,28 @@ def training(img_path_list: Sequence,
                         mean_dist_str = f'/ Current mean distance {mean_dist_val}'
                         writer.add_scalar('val_distance', mean_dist_val, epoch + 1)
                     """IF NEW BEST EPOCH"""
-                    if best_dice < mean_dice_val and (mean_dist_val is None or (mean_dist_val < best_dist)):
+                    if best_dice < mean_dice_val:  # and (mean_dist_val is None or (mean_dist_val < best_dist)):
+                        best_epoch_pref_str = 'Best dice epoch'
+                        best_dice = mean_dice_val
+                        writer.add_scalar('val_best_mean_dice', best_dice, epoch + 1)
+                        writer.add_scalar('val_best_mean_loss', best_avg_loss, epoch + 1)
+                        best_avg_loss = mean_loss_val
+                        # So either we don't track the distance or only the dice metric is better for this epoch
+                        if mean_dist_val is None or (keep_dice_and_dist and mean_dist_val > best_dist):
+                            checkpoint_path = utils.save_checkpoint(
+                                model, epoch + 1, optimizer, output_fold_dir,
+                                f'best_dice_and_dict_model_segmentation3d_epo{epoch_suffix}.pth')
+                        # Here mean_dist_val exists and is better that the precedent best_dist
+                        else:
+                            best_epoch_pref_str = 'Best dice and best distance epoch'
+                            best_dist = mean_dist_val
+                            best_dist_str = f'/ Best Distance {best_dist}'
+                            writer.add_scalar('val_best_mean_distance', best_dist, epoch + 1)
+                            checkpoint_path = utils.save_checkpoint(
+                                model, epoch + 1, optimizer, output_fold_dir,
+                                f'best_dice_model_segmentation3d_epo{epoch_suffix}.pth')
+
+
                         best_dice = mean_dice_val
                         writer.add_scalar('val_best_mean_dice', best_dice, epoch + 1)
                         best_dist_str = ''
@@ -1039,13 +1067,13 @@ def training(img_path_list: Sequence,
                         epoch_suffix = ''
                         if save_every_decent_best_epoch:
                             if best_dice > 0.75:
-                                epoch_suffix = '_' + str(epoch)
+                                epoch_suffix = '_' + str(epoch + 1)
                         checkpoint_path = utils.save_checkpoint(
                             model, epoch + 1, optimizer, output_fold_dir,
                             f'best_metric_model_segmentation3d_epo{epoch_suffix}.pth')
                         print(f'New best model saved in {checkpoint_path}')
                         str_best_epoch = (
-                                f'Best epoch {best_metric_epoch} '
+                                f'{best_epoch_pref_str} {best_metric_epoch} '
                                 # f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
                                 f'Dice metric {best_dice:.4f} / mean loss {best_avg_loss}'
                                 + best_dist_str + '\n'

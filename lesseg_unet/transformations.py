@@ -930,6 +930,7 @@ class Anisotropiserd(Randomizable, MapTransform):
 
         return d
 
+
 """
 Transformation parameters
 """
@@ -946,71 +947,8 @@ min_small_crop_size = [int(0.95 * d) for d in def_spatial_size]
 
 # .74 aspect ratio? maybe change to 96x128x96 or crop to 64cube and increase the epoch number by a lot
 
-hyper_dict = {
-    'first_transform': [
-        {'LoadImaged': {'keys': ['image', 'label']}},
-        {'AddChanneld': {'keys': ['image', 'label']}},
-        # {'AsChannelFirstd': {
-        #     'keys': ['image', 'label'],
-        #     'channel_dim': -1}
-        # },
-        # {'Resized': {
-        #     'keys': ['image', 'label'],
-        #     'spatial_size': def_spatial_size,
-        #     # 'mode': 'nearest'
-        # }},
-        {'ResizeWithPadOrCropd': {
-            'keys': ['image', 'label'],
-            'spatial_size': def_spatial_size}
-         },
-        # {'NormalizeIntensityd': {'keys': ['image']}},
-        {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'First resize'}},
-    ],
-    'monai_transform': [
-
-        # {'ScaleIntensityd': {'keys': "image"}},
-
-        {'ToTensord': {'keys': ['image', 'label']}},
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'Fisrt monai'}},
-        # {'RandCropByPosNegLabeld': {
-        #     'keys': ["image", "label"],
-        #     'label_key': "label",
-        #     'spatial_size': def_spatial_size,
-        #     'pos': 1,
-        #     'neg': 1,
-        #     'num_samples': 4
-        # }},
-        {'RandSpatialCropd': {
-            'keys': ["image", "label"],
-            'roi_size': min_small_crop_size,
-            'random_size': False
-        }},
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'After RandCrop'}},
-    ],
-    'labelonly_transform': [],
-    'last_transform': [
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'Last binarized'}},
-        # {'Resized': {
-        #     'keys': ['image', 'label'],
-        #     'spatial_size': def_spatial_size,
-        #     'mode': 'nearest'
-        # }},
-        {'ResizeWithPadOrCropd': {
-            'keys': ['image', 'label'],
-            'spatial_size': def_spatial_size}
-         },
-        {'Binarized': {
-            'keys': ['label'],
-            'lower_threshold': 0.5
-        }},
-        {'NormalizeIntensityd': {'keys': ['image']}},
-    ]
-}
 
 # TODO Import all transforms from the dict
-
-
 def check_imports(hyper_param_dict):
     # The main dict
     for k in hyper_param_dict:
@@ -1139,7 +1077,7 @@ def setup_coord_conv(hyper_param_dict):
 
 def train_transformd(hyper_param_dict=None, clamping=None, device=None):
     if hyper_param_dict is None:
-        hyper_param_dict = hyper_dict
+        raise ValueError('Hyper dict is None')
     setup_coord_conv(hyper_param_dict)
     check_imports(hyper_param_dict)
     check_hyper_param_dict_shape(hyper_param_dict)
@@ -1167,7 +1105,7 @@ def train_transformd(hyper_param_dict=None, clamping=None, device=None):
 
 def val_transformd(hyper_param_dict=None, clamping=None, device=None):
     if hyper_param_dict is None:
-        hyper_param_dict = hyper_dict
+        raise ValueError('Hyper dict is None')
     setup_coord_conv(hyper_param_dict)
     seg_tr_dict = deepcopy(hyper_param_dict)
     if clamping is not None:
@@ -1190,7 +1128,7 @@ def val_transformd(hyper_param_dict=None, clamping=None, device=None):
 
 def image_only_transformd(hyper_param_dict=None, training=True, clamping=None, device=None):
     if hyper_param_dict is None:
-        hyper_param_dict = hyper_dict
+        raise ValueError('Hyper dict is None')
     setup_coord_conv(hyper_param_dict)
     check_imports(hyper_param_dict)
     check_hyper_param_dict_shape(hyper_param_dict)

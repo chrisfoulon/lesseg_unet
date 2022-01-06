@@ -54,7 +54,6 @@ full_hyper_dict = {
             'shear_range': radians(5),
             'translate_range': 0.05,
             'scale_range': 0.05,
-            'spatial_size': None,
             'padding_mode': 'border',
             'as_tensor_output': False}
          },
@@ -79,7 +78,6 @@ full_hyper_dict = {
             'shear_range': None,
             'translate_range': None,
             'scale_range': None,
-            'spatial_size': None,
             'padding_mode': "reflection",
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
@@ -399,7 +397,6 @@ curated_dict = {
             'shear_range': radians(5),
             'translate_range': 0.05,
             'scale_range': 0.05,
-            'spatial_size': None,
             'padding_mode': 'border',
             }  # was False
          },
@@ -412,7 +409,6 @@ curated_dict = {
             'shear_range': None,
             'translate_range': None,
             'scale_range': None,
-            'spatial_size': None,
             'padding_mode': "reflection",
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
@@ -528,7 +524,6 @@ test_dict = {
             'shear_range': radians(5),
             'translate_range': 0.05,
             'scale_range': 0.05,
-            'spatial_size': None,
             'padding_mode': 'border',
             'as_tensor_output': True}  # was False
          },
@@ -541,7 +536,6 @@ test_dict = {
             'shear_range': None,
             'translate_range': None,
             'scale_range': None,
-            'spatial_size': None,
             'padding_mode': "reflection",
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
@@ -630,7 +624,6 @@ crop_test = {
             'shear_range': radians(5),
             'translate_range': 0.05,
             'scale_range': 0.05,
-            'spatial_size': None,
             'padding_mode': 'border',
             'as_tensor_output': True}  # was False
          },
@@ -643,7 +636,6 @@ crop_test = {
             'shear_range': None,
             'translate_range': None,
             'scale_range': None,
-            'spatial_size': None,
             'padding_mode': "reflection",
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
@@ -786,7 +778,6 @@ unetr_dict = {
             'shear_range': radians(5),
             'translate_range': 0.05,
             'scale_range': 0.05,
-            'spatial_size': None,
             'padding_mode': 'border',
             'as_tensor_output': True}  # was False
          },
@@ -799,7 +790,6 @@ unetr_dict = {
             'shear_range': None,
             'translate_range': None,
             'scale_range': None,
-            'spatial_size': None,
             'padding_mode': "reflection",
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
@@ -965,7 +955,6 @@ unetr_dict_lastflip = {
             'shear_range': radians(5),
             'translate_range': 0.05,
             'scale_range': 0.05,
-            'spatial_size': None,
             'padding_mode': 'border',
             'as_tensor_output': True}  # was False
          },
@@ -978,7 +967,6 @@ unetr_dict_lastflip = {
             'shear_range': None,
             'translate_range': None,
             'scale_range': None,
-            'spatial_size': None,
             'padding_mode': "reflection",
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
@@ -1079,3 +1067,87 @@ unetr_dict_lastflip = {
             'num_samples': 4}},
     ]
 }
+
+unetr_cc = {
+    'first_transform': [
+        {'LoadImaged': {
+            'keys': ['image', 'label']}},
+        {'AddChanneld': {'keys': ['image', 'label']}},
+        {'ResizeWithPadOrCropd': {
+            'keys': ['image', 'label'],
+            'spatial_size': def_spatial_size}
+         },
+        {'MyNormalizeIntensityd': {
+            'keys': ['image'],
+            'out_min_max': (0, 1),
+            # 'clamp_quantile': (.001, .999)
+            }
+         },
+        {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
+    ],
+    'monai_transform': [
+        {'RandHistogramShiftd': {
+            'keys': ['image'],
+            'num_control_points': (10, 15),
+            'prob': low_prob}
+         },
+        # # TODO maybe 'Orientation': {} but it would interact with the flip,
+        {'RandAffined': {
+            'keys': ['image', 'label'],
+            'prob': low_prob,
+            'rotate_range': radians(5),
+            'shear_range': radians(5),
+            'translate_range': 0.05,
+            'scale_range': 0.05,
+            'padding_mode': 'border',
+            'as_tensor_output': True}  # was False
+         },
+        {'Rand3DElasticd': {
+            'keys': ['image', 'label'],
+            'sigma_range': (1, 3),
+            'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
+            'prob': tiny_prob,
+            'rotate_range': None,
+            'shear_range': None,
+            'translate_range': None,
+            'scale_range': None,
+            'padding_mode': "reflection",
+            # 'padding_mode': "border",
+            # 'padding_mode': "zeros",
+            'as_tensor_output': True}
+         },
+    ],
+    'torchio_transform': [
+        {'ToTensord': {'keys': ['image', 'label']}},
+        {'RandomBiasField': {
+            'include': ['image'],
+            'p': low_prob,
+            'coefficients': 0.1}
+         },
+    ],
+    'unetr_transform': [
+        {'RandFlipd': {
+            'keys': ["image", "label"],
+            'spatial_axis': [0],
+            'prob': low_prob}
+         },
+        {'RandShiftIntensityd': {
+            'keys': ["image"],
+            'offsets': 0.10,
+            'prob': high_prob}
+         },
+    ],
+    'last_transform': [
+        {'Binarized': {
+            'keys': ['label'],
+            'lower_threshold': 0.25}
+         },
+        {'MyNormalizeIntensityd': {
+            'keys': ['image'],
+            'out_min_max': (0, 1)}
+         },
+        {'ToTensord': {'keys': ['image', 'label']}},
+        {'CoordConvd': {'keys': ['image']}}
+    ],
+}
+
