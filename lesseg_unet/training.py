@@ -842,7 +842,7 @@ def training(img_path_list: Sequence,
     """METRICS"""
     dice_metric = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
     hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean", percentile=95)
-    keep_dice_and_dist = False
+    keep_dice_and_dist = True
     if 'keep_dice_and_dist' in kwargs:
         v = kwargs['keep_dice_and_dist']
         if v == 'False' or v == 0:
@@ -927,12 +927,16 @@ def training(img_path_list: Sequence,
 
         """EPOCHS LOOP VARIABLES"""
         batches_per_epoch = len(train_loader)
-        str_best_epoch = ''
         time_list = []
         epoch_time_list = []
+        str_best_epoch = ''
+        str_best_dist_epoch = ''
+        epoch_suffix = ''
         best_dice = 0
+        # only for the first epoch
         best_dist = 1000
         best_metric_epoch = -1
+        best_metric_dist_epoch = -1
         for epoch in range(epoch_num):
             print('-' * 10)
             print(f'epoch {epoch + 1}/{epoch_num}')
@@ -1032,57 +1036,71 @@ def training(img_path_list: Sequence,
                         mean_dist_str = f'/ Current mean distance {mean_dist_val}'
                         writer.add_scalar('val_distance', mean_dist_val, epoch + 1)
                     """IF NEW BEST EPOCH"""
-                    if best_dice < mean_dice_val:  # and (mean_dist_val is None or (mean_dist_val < best_dist)):
+                    if best_dice < mean_dice_val:
                         best_epoch_pref_str = 'Best dice epoch'
+                        best_metric_epoch = epoch + 1
                         best_dice = mean_dice_val
+                        best_avg_loss = mean_loss_val
                         writer.add_scalar('val_best_mean_dice', best_dice, epoch + 1)
                         writer.add_scalar('val_best_mean_loss', best_avg_loss, epoch + 1)
-                        best_avg_loss = mean_loss_val
+                        if save_every_decent_best_epoch:
+                            if best_dice > 0.75:
+                                epoch_suffix = '_' + str(epoch + 1)
                         # So either we don't track the distance or only the dice metric is better for this epoch
-                        if mean_dist_val is None or (keep_dice_and_dist and mean_dist_val > best_dist):
+                        if mean_dist_val is None or (keep_dice_and_dist and best_dist < mean_dist_val):
                             checkpoint_path = utils.save_checkpoint(
                                 model, epoch + 1, optimizer, output_fold_dir,
-                                f'best_dice_and_dict_model_segmentation3d_epo{epoch_suffix}.pth')
-                        # Here mean_dist_val exists and is better that the precedent best_dist
+                                f'best_dice_model_segmentation3d_epo{epoch_suffix}.pth')
+                            print(f'New best model saved in {checkpoint_path}')
+                            str_best_epoch = (
+                                    f'\n{best_epoch_pref_str} {best_metric_epoch} '
+                                    # f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
+                                    f'Dice metric {best_dice:.4f} / mean loss {best_avg_loss}'
+                            )
+                        # Here mean_dist_val exists and is better (smaller) that the precedent best_dist
                         else:
+                            best_metric_dist_epoch = epoch + 1
                             best_epoch_pref_str = 'Best dice and best distance epoch'
                             best_dist = mean_dist_val
                             best_dist_str = f'/ Best Distance {best_dist}'
                             writer.add_scalar('val_best_mean_distance', best_dist, epoch + 1)
                             checkpoint_path = utils.save_checkpoint(
                                 model, epoch + 1, optimizer, output_fold_dir,
-                                f'best_dice_model_segmentation3d_epo{epoch_suffix}.pth')
+                                f'best_dice_and_dict_model_segmentation3d_epo{epoch_suffix}.pth')
+                            print(f'New best (dice and dist) model saved in {checkpoint_path}')
+                            str_best_dist_epoch = (
+                                    f'\n{best_epoch_pref_str} {best_metric_dist_epoch} '
+                                    # f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
+                                    f'Dice metric {best_dice:.4f} / mean loss {best_avg_loss}'
+                                    + best_dist_str
+                            )
 
-
-                        best_dice = mean_dice_val
-                        writer.add_scalar('val_best_mean_dice', best_dice, epoch + 1)
-                        best_dist_str = ''
-                        if mean_dist_val is not None:
-                            best_dist = mean_dist_val
-                            best_dist_str = f'/ Best Distance {best_dist}'
-                            writer.add_scalar('val_best_mean_distance', best_dist, epoch + 1)
-                        best_avg_loss = mean_loss_val
-                        writer.add_scalar('val_best_mean_loss', best_avg_loss, epoch + 1)
-                        best_metric_epoch = epoch + 1
-                        epoch_suffix = ''
-                        if save_every_decent_best_epoch:
-                            if best_dice > 0.75:
-                                epoch_suffix = '_' + str(epoch + 1)
-                        checkpoint_path = utils.save_checkpoint(
-                            model, epoch + 1, optimizer, output_fold_dir,
-                            f'best_metric_model_segmentation3d_epo{epoch_suffix}.pth')
-                        print(f'New best model saved in {checkpoint_path}')
-                        str_best_epoch = (
-                                f'{best_epoch_pref_str} {best_metric_epoch} '
-                                # f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
-                                f'Dice metric {best_dice:.4f} / mean loss {best_avg_loss}'
-                                + best_dist_str + '\n'
-                        )
+                        # best_dice = mean_dice_val
+                        # writer.add_scalar('val_best_mean_dice', best_dice, epoch + 1)
+                        # best_dist_str = ''
+                        # if mean_dist_val is not None:
+                        #     best_dist = mean_dist_val
+                        #     best_dist_str = f'/ Best Distance {best_dist}'
+                        #     writer.add_scalar('val_best_mean_distance', best_dist, epoch + 1)
+                        # best_avg_loss = mean_loss_val
+                        # writer.add_scalar('val_best_mean_loss', best_avg_loss, epoch + 1)
+                        # best_metric_epoch = epoch + 1
+                        # epoch_suffix = ''
+                        # checkpoint_path = utils.save_checkpoint(
+                        #     model, epoch + 1, optimizer, output_fold_dir,
+                        #     f'best_metric_model_segmentation3d_epo{epoch_suffix}.pth')
+                        # print(f'New best model saved in {checkpoint_path}')
+                        # str_best_epoch = (
+                        #         f'{best_epoch_pref_str} {best_metric_epoch} '
+                        #         # f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
+                        #         f'Dice metric {best_dice:.4f} / mean loss {best_avg_loss}'
+                        #         + best_dist_str + '\n'
+                        # )
                     best_epoch_count = epoch + 1 - best_metric_epoch
                     str_current_epoch = (
                             f'[Fold: {fold}]Current epoch: {epoch + 1} current mean loss: {mean_loss_val:.4f}'
                             f' current mean dice metric: {mean_dice_val}' + mean_dist_str + '\n'
-                            + str_best_epoch
+                            + str_best_epoch + str_best_dist_epoch + '\n'
                     )
                     print(str_current_epoch)
                     print(f'It has been [{best_epoch_count}] since a best epoch has been found')
