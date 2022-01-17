@@ -1096,7 +1096,10 @@ def training(img_path_list: Sequence,
                         #         f'Dice metric {best_dice:.4f} / mean loss {best_avg_loss}'
                         #         + best_dist_str + '\n'
                         # )
-                    best_epoch_count = epoch + 1 - best_metric_epoch
+                    if keep_dice_and_dist:
+                        best_epoch_count = epoch + 1 - best_metric_dist_epoch
+                    else:
+                        best_epoch_count = epoch + 1 - best_metric_epoch
                     str_current_epoch = (
                             f'[Fold: {fold}]Current epoch: {epoch + 1} current mean loss: {mean_loss_val:.4f}'
                             f' current mean dice metric: {mean_dice_val}' + mean_dist_str + '\n'
