@@ -10,7 +10,7 @@ import pandas as pd
 from tqdm import tqdm
 import torch
 from lesseg_unet import data_loading, utils, net, transformations
-from monai.metrics import DiceMetric
+from monai.metrics import DiceMetric, HausdorffDistanceMetric
 from monai.inferers import sliding_window_inference
 from monai.data import decollate_batch
 from monai.transforms import (
@@ -183,6 +183,7 @@ def validation_loop(img_path_list: Sequence,
                         hyper_params['in_channels'] = 4
     model = utils.load_model_from_checkpoint(checkpoint_path, device, hyper_params, model_name=model_name)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
+    hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean", percentile=95)
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
 
     les_area_finder = None
@@ -209,12 +210,16 @@ def validation_loop(img_path_list: Sequence,
     for f in trash_val_images_dir.iterdir():
         os.remove(f)
     perf_measure_names = ['val_mean_dice',
+                          'val_mean_dist',
+                          'pred_volume',
                           'val_median_dice',
                           'val_std_dice',
                           'trash_img_nb',
                           'val_min_dice',
                           'val_max_dice']
     df = pd.DataFrame(columns=perf_measure_names)
+    loop_df_columns = ['dice_metric', 'volume', 'distance']
+    loop_df = pd.DataFrame(columns=loop_df_columns)
     img_vol_dict = {}
     model.eval()
     with torch.no_grad():
@@ -222,6 +227,7 @@ def validation_loop(img_path_list: Sequence,
         trash_count = 0
         # img_max_num = len(train_ds) + len(val_ds)
         val_score_list = []
+        val_dist_list = []
         for val_data in tqdm(val_loader, desc=f'Validation '):
             inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
             input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
@@ -238,6 +244,8 @@ def validation_loop(img_path_list: Sequence,
             ]
             dice_metric(y_pred=val_output_convert, y=masks_only_val_labels)
             dice = dice_metric.aggregate().item()
+            hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
+            dist = hausdorff_metric.aggregate().item()
 
             vol_output = utils.volume_metric(val_output_convert[0], False, False)
             input_filename += f'_v{vol_output}v'
@@ -246,11 +254,21 @@ def validation_loop(img_path_list: Sequence,
             output_dict_data = deepcopy(val_data)
             # value = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
             val_score_list.append(dice)
+            val_dist_list.append(dist)
 
             val_data['image'] = val_data['image'].to(device)[0]
             val_data['label'] = val_data['label'].to(device)[0]
             output_dict_data['image'] = val_data['image']
             output_dict_data['label'] = val_output_convert[0]
+
+            # Loop dataframe filling
+            loop_df = loop_df.append({'dice_metric': dice,
+                                      'volume': vol_output,
+                                      'distance': dist})
+
+            # Maybe not necessary but I prefer it there
+            dice_metric.reset()
+            hausdorff_metric.reset()
 
             inverted_dict = val_ds.transform.inverse(val_data)
             inv_inputs, inv_labels = inverted_dict['image'], inverted_dict['label']
@@ -305,8 +323,9 @@ def validation_loop(img_path_list: Sequence,
         std = np.std(np.array(val_score_list))
         min_score = np.min(np.array(val_score_list))
         max_score = np.max(np.array(val_score_list))
-        df.loc[0] = pd.Series({
+        df = df.append({
             'val_mean_dice': mean_metric,
+            'val_mean_dist': np.mean(val_dist_list),
             'pred_volume': vol_output,
             'val_median_dice': median,
             'val_std_dice': std,
@@ -314,10 +333,9 @@ def validation_loop(img_path_list: Sequence,
             'val_min_dice': min_score,
             'val_max_dice': max_score,
             'val_best_mean_dice': 0
-        })
-        # Not necessary but I prefer it there
-        dice_metric.reset()
+        }, ignore_index=True)
     with open(Path(output_dir, f'__output_image_volumes.json'), 'w+') as j:
         json.dump(img_vol_dict, j, indent=4)
     pd.DataFrame().from_dict(img_vol_dict, orient='index').to_csv(Path(output_dir, f'__output_image_volumes.csv'))
-    df.to_csv(Path(output_dir, 'val_perf_measures.csv'), columns=perf_measure_names)
+    df.to_csv(Path(output_dir, 'val_perf_global_measures.csv'), columns=perf_measure_names)
+    loop_df.to_csv(Path(output_dir, 'val_perf_individual_measures.csv'), columns=loop_df_columns)
