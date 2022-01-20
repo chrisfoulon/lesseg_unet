@@ -307,6 +307,7 @@ def validation_loop(img_path_list: Sequence,
         max_score = np.max(np.array(val_score_list))
         df.loc[0] = pd.Series({
             'val_mean_dice': mean_metric,
+            'pred_volume': vol_output,
             'val_median_dice': median,
             'val_std_dice': std,
             'trash_img_nb': trash_count,
