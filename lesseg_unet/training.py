@@ -1068,7 +1068,7 @@ def training(img_path_list: Sequence,
                             writer.add_scalar('val_best_mean_distance', best_dist, epoch + 1)
                             checkpoint_path = utils.save_checkpoint(
                                 model, epoch + 1, optimizer, output_fold_dir,
-                                f'best_dice_and_dict_model_segmentation3d_epo{epoch_suffix}.pth')
+                                f'best_dice_and_dist_model_segmentation3d_epo{epoch_suffix}.pth')
                             print(f'New best (dice and dist) model saved in {checkpoint_path}')
                             str_best_dist_epoch = (
                                     f'\n{best_epoch_pref_str} {best_metric_dist_epoch} '
