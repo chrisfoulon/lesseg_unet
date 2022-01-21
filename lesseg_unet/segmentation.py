@@ -264,7 +264,7 @@ def validation_loop(img_path_list: Sequence,
             # Loop dataframe filling
             loop_df = loop_df.append({'dice_metric': dice,
                                       'volume': vol_output,
-                                      'distance': dist})
+                                      'distance': dist}, ignore_index=True)
 
             # Maybe not necessary but I prefer it there
             dice_metric.reset()
