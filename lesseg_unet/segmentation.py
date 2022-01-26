@@ -194,7 +194,7 @@ def validation_loop(img_path_list: Sequence,
     # best_metric = -1
     # best_metric_epoch = -1
     # epoch_loss_values = list()
-    metric_values = list()
+    # metric_values = list()
     # val_save_thr = 0.7
     """
     Measure tracking init

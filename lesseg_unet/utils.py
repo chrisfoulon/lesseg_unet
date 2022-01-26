@@ -151,7 +151,8 @@ def save_json_transform_dict(transform_dict, output_path):
 def load_json_transform_dict(json_path):
     if not Path(json_path).is_file():
         raise ValueError('{} is not an existing json file'.format(json_path))
-    return json.load(open(json_path, 'r'))
+    with open(json_path, 'r') as f:
+        return json.load(f)
 
 
 def get_output_paths(output_dir, img_num, split_string='_segmentation', reference_centre_of_mass=None):

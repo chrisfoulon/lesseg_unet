@@ -140,7 +140,8 @@ def main():
         logging.info(f'Input image list : {args.input_list}')
         img_list = file_to_list(args.input_list)
     else:
-        seg_input_dict = json.load(open(args.seg_input_dict, 'r'))
+        with open(args.seg_input_dict, 'r') as f:
+            seg_input_dict = json.load(f)
         img_list = [img_path for sublist in seg_input_dict for img_path in sublist]
     if args.output in img_list:
         raise ValueError("The output directory CANNOT be one of the input directories")

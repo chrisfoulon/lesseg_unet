@@ -879,7 +879,8 @@ def training(img_path_list: Sequence,
 
     split_lists = utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage)
     # Save the split_lists to easily get the content of the folds and all
-    json.dump(split_lists, open(Path(output_dir, 'split_lists.json'), 'w+'))
+    with open(Path(output_dir, 'split_lists.json'), 'w+') as f:
+        json.dump(split_lists, f)
     # We need the training image size for the unetr as we need to know the size of the model to create it
     training_img_size = transformations.find_param_from_hyper_dict(
         transform_dict, 'spatial_size', find_last=True)
@@ -935,6 +936,7 @@ def training(img_path_list: Sequence,
         str_best_dist_epoch = ''
         epoch_suffix = ''
         best_dice = 0
+        best_dice_with_dist = 0
         # only for the first epoch
         best_dist = 1000
         best_metric_epoch = -1
@@ -1048,19 +1050,10 @@ def training(img_path_list: Sequence,
                         if save_every_decent_best_epoch:
                             if best_dice > 0.75:
                                 epoch_suffix = '_' + str(epoch + 1)
-                        # So either we don't track the distance or only the dice metric is better for this epoch
-                        if mean_dist_val is None or (keep_dice_and_dist and best_dist < mean_dist_val):
-                            checkpoint_path = utils.save_checkpoint(
-                                model, epoch + 1, optimizer, output_fold_dir,
-                                f'best_dice_model_segmentation3d_epo{epoch_suffix}.pth')
-                            print(f'New best model saved in {checkpoint_path}')
-                            str_best_epoch = (
-                                    f'\n{best_epoch_pref_str} {best_metric_epoch} '
-                                    # f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
-                                    f'Dice metric {best_dice:.4f} / mean loss {best_avg_loss}'
-                            )
-                        # Here mean_dist_val exists and is better (smaller) that the precedent best_dist
-                        else:
+                        # True here means that we track and keep the distance and that both dice and dist improved
+                        if (mean_dist_val is not None and keep_dice_and_dist) and (
+                                best_dist > mean_dist_val and best_dice_with_dist < mean_dice_val):
+                            best_dice_with_dist = mean_dice_val
                             best_metric_dist_epoch = epoch + 1
                             best_epoch_pref_str = 'Best dice and best distance epoch'
                             best_dist = mean_dist_val
@@ -1076,28 +1069,17 @@ def training(img_path_list: Sequence,
                                     f'Dice metric {best_dice:.4f} / mean loss {best_avg_loss}'
                                     + best_dist_str
                             )
-
-                        # best_dice = mean_dice_val
-                        # writer.add_scalar('val_best_mean_dice', best_dice, epoch + 1)
-                        # best_dist_str = ''
-                        # if mean_dist_val is not None:
-                        #     best_dist = mean_dist_val
-                        #     best_dist_str = f'/ Best Distance {best_dist}'
-                        #     writer.add_scalar('val_best_mean_distance', best_dist, epoch + 1)
-                        # best_avg_loss = mean_loss_val
-                        # writer.add_scalar('val_best_mean_loss', best_avg_loss, epoch + 1)
-                        # best_metric_epoch = epoch + 1
-                        # epoch_suffix = ''
-                        # checkpoint_path = utils.save_checkpoint(
-                        #     model, epoch + 1, optimizer, output_fold_dir,
-                        #     f'best_metric_model_segmentation3d_epo{epoch_suffix}.pth')
-                        # print(f'New best model saved in {checkpoint_path}')
-                        # str_best_epoch = (
-                        #         f'{best_epoch_pref_str} {best_metric_epoch} '
-                        #         # f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
-                        #         f'Dice metric {best_dice:.4f} / mean loss {best_avg_loss}'
-                        #         + best_dist_str + '\n'
-                        # )
+                        # Here, only dice improved
+                        else:
+                            checkpoint_path = utils.save_checkpoint(
+                                model, epoch + 1, optimizer, output_fold_dir,
+                                f'best_dice_model_segmentation3d_epo{epoch_suffix}.pth')
+                            print(f'New best model saved in {checkpoint_path}')
+                            str_best_epoch = (
+                                f'\n{best_epoch_pref_str} {best_metric_epoch} '
+                                # f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
+                                f'Dice metric {best_dice:.4f} / mean loss {best_avg_loss}'
+                            )
                     if keep_dice_and_dist:
                         best_epoch_count = epoch + 1 - best_metric_dist_epoch
                     else:
