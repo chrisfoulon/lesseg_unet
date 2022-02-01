@@ -1015,7 +1015,7 @@ def training(img_path_list: Sequence,
             writer.add_scalar('epoch_train_loss', epoch_loss, epoch + 1)
 
             """VALIDATION"""
-            if (epoch + 1) % val_interval == 0 and dist.get_rank() == 0:
+            if (epoch + 1) % val_interval == 0 and torch.distributed.get_rank() == 0:
                 model.eval()
                 with torch.no_grad():
                     step = 0
