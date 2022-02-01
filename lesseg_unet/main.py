@@ -327,7 +327,7 @@ if __name__ == "__main__":
         world_size = 3
     else:
         world_size = 1
-    if world_size > 1:
+    if world_size > 0 and torch.cuda.is_available():
         torch.multiprocessing.spawn(
             main,
             args=(world_size,),
