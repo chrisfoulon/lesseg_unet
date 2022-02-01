@@ -898,8 +898,8 @@ def training(img_path_list: Sequence,
 
     split_lists = utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage)
     # Save the split_lists to easily get the content of the folds and all
-    with open(Path(output_dir, 'split_lists.json'), 'w+') as f:
-        json.dump(split_lists, f)
+    # with open(Path(output_dir, 'split_lists.json'), 'w+') as f:
+    #     json.dump(split_lists, f)
     # We need the training image size for the unetr as we need to know the size of the model to create it
     training_img_size = transformations.find_param_from_hyper_dict(
         transform_dict, 'spatial_size', find_last=True)
