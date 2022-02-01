@@ -13,11 +13,11 @@ from lesseg_unet import utils, training, segmentation
 from bcblib.tools.nifti_utils import file_to_list, overlaps_subfolders, nifti_overlap_images
 import lesseg_unet.data.transform_dicts as tr_dicts
 import nibabel as nib
+import torch.multiprocessing
+import torch
 
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 
-
-def main():
+def main(rank=0, world_size=1):
     # Script arguments
     parser = argparse.ArgumentParser(description='Monai unet training')
     # Paths
@@ -322,4 +322,16 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # TODO make something more scalable
+    if torch.cuda.is_available() and torch.cuda.device_count() == 3:
+        world_size = 3
+    else:
+        world_size = 1
+    if world_size > 1:
+        torch.multiprocessing.spawn(
+            main,
+            args=(world_size,),
+            nprocs=world_size
+        )
+    else:
+        main(0, world_size)
