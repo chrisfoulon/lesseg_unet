@@ -72,7 +72,7 @@ def create_training_data_loader(train_ds: monai.data.Dataset,
     train_loader = DataLoader(
         train_ds,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=(sampler is None),
         drop_last=True,
         num_workers=dataloader_workers,
         pin_memory=torch.cuda.is_available(),
