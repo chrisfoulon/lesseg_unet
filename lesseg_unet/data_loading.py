@@ -171,7 +171,7 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
         val_ds = PersistentDataset(val_data_list, transform=val_img_transforms, cache_dir=cache_dir)
     else:
         val_ds = CacheDataset(val_data_list, transform=val_img_transforms)
-    if world_size > 1:
+    if world_size > 0:
         if dataloader_workers > 1:
             dataloader_workers = 1
             print('Number of workers for the dataloader changed to 1 as DDP is activated')

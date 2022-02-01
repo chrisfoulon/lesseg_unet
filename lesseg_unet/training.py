@@ -822,7 +822,8 @@ def training(img_path_list: Sequence,
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
-    if world_size > 1:
+    # TODO just see what the performance looks like on only one GPU with DDP
+    if world_size > 0:
         cpu_device = device.type == 'cpu'
 
         setup(rank, world_size, cpu=cpu_device)
@@ -934,7 +935,7 @@ def training(img_path_list: Sequence,
             optimizer = torch.optim.Adam(model.parameters(), 1e-3)
             params = list(model.model.parameters())
         # TODO the segmentation might require to add 'module' after model. to access the state_dict and all
-        if world_size > 1:
+        if world_size > 0:
             model.to(rank)
             model = DistributedDataParallel(model, device_ids=[rank], output_device=rank, find_unused_parameters=True)
         if folds_number == 1:
