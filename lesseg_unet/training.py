@@ -935,7 +935,7 @@ def training(img_path_list: Sequence,
             optimizer = torch.optim.Adam(model.parameters(), 1e-3)
             params = list(model.model.parameters())
         # TODO the segmentation might require to add 'module' after model. to access the state_dict and all
-        if world_size > 0:
+        if torch.cuda.is_available():
             model.to(rank)
             model = DistributedDataParallel(model, device_ids=[rank], output_device=rank, find_unused_parameters=True)
         if folds_number == 1:
