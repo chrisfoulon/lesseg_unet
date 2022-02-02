@@ -814,10 +814,8 @@ def training(img_path_list: Sequence,
              ):
     # Apparently it can potentially improve the performance when the model does not change its size. (Source tuto UNETR)
     torch.backends.cudnn.benchmark = True
-
+    print(f'################RANK : {rank}####################')
     """MODEL PARAMETERS"""
-    # device = torch.device(f"cuda:{args.local_rank}")
-    # torch.cuda.set_device(device)
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -827,6 +825,9 @@ def training(img_path_list: Sequence,
         cpu_device = device.type == 'cpu'
 
         setup(rank, world_size, cpu=cpu_device)
+
+        device = torch.device(f"cuda:{rank}")
+        torch.cuda.set_device(device)
 
     logging.info(f'Torch device used for this training: {str(device)}')
 
