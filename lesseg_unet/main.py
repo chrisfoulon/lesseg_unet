@@ -95,7 +95,7 @@ def main(rank=0, world_size=1):
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args()
     kwargs = {}
-    if unknown:
+    if rank == 0 and unknown:
         kwargs = utils.kwargs_argparse(unknown)
         print(f'Unlisted arguments : {kwargs}')
         resp = input('If the additional parameters you entered are not what you wanted type quit/q/stop/s/no/n')
