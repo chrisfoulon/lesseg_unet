@@ -1001,7 +1001,8 @@ def training(img_path_list: Sequence,
                 masks_only_labels = labels[:, :1, :, :, :]
                 loss = loss_function(logit_outputs, masks_only_labels)
                 # Regularisation
-                loss += utils.sum_non_bias_l2_norms(params, 1e-4)
+                # TODO find out why this is making the DDP crash
+                # loss += utils.sum_non_bias_l2_norms(params, 1e-4)
                 loss.backward()
                 optimizer.step()
                 epoch_loss += loss.item()
