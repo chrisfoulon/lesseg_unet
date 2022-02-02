@@ -331,7 +331,8 @@ if __name__ == "__main__":
         torch.multiprocessing.spawn(
             main,
             args=(world_size,),
-            nprocs=world_size
+            nprocs=world_size,
+            join=True
         )
     else:
         main(0, world_size)
