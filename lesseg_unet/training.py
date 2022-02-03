@@ -938,7 +938,7 @@ def training(img_path_list: Sequence,
         # TODO the segmentation might require to add 'module' after model. to access the state_dict and all
         if torch.cuda.is_available():
             model.to(rank)
-            model = DistributedDataParallel(model, device_ids=[rank], output_device=rank, find_unused_parameters=True)
+            model = DistributedDataParallel(model, device_ids=[rank], output_device=rank, find_unused_parameters=False)
         if folds_number == 1:
             output_fold_dir = output_dir
         else:
