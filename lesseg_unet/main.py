@@ -243,6 +243,8 @@ def main(rank=0, world_size=1):
                           folds_number=args.folds_number,
                           dropout=args.dropout,
                           cache_dir=cache_dir,
+                          world_size=world_size,
+                          rank=rank,
                           **kwargs)
     else:
         if args.checkpoint is None:
