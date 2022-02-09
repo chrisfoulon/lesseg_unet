@@ -25,7 +25,6 @@ setup(
     # entry_points could be used to automagically download dcm2niix depending on the OS of the user
     entry_points={
         'console_scripts': ['lesseg_unet = lesseg_unet.main:main']
-        # 'console_scripts': ['dicom_conversion = data_identification.scripts.dicom_conversion:convert']
     },
     # metadata to display on PyPI
     author="Chris Foulon",

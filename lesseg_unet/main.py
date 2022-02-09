@@ -4,7 +4,6 @@ import argparse
 from pathlib import Path
 import os
 import json
-from datetime import datetime
 
 import bcblib.tools.nifti_utils
 import pandas as pd
@@ -15,8 +14,10 @@ import lesseg_unet.data.transform_dicts as tr_dicts
 import nibabel as nib
 import torch.multiprocessing
 import torch
+from torch.distributed.elastic.multiprocessing.errors import record
 
 
+@record
 def main(rank=0, world_size=1):
     # Script arguments
     parser = argparse.ArgumentParser(description='Monai unet training')
@@ -95,13 +96,13 @@ def main(rank=0, world_size=1):
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args()
     kwargs = {}
-    if rank == 0 and unknown:
+    if unknown:
         kwargs = utils.kwargs_argparse(unknown)
-        print(f'Unlisted arguments : {kwargs}')
-        resp = input('If the additional parameters you entered are not what you wanted type quit/q/stop/s/no/n')
-        if resp.lower() in ['quit', 'q', 'stop', 's', 'no', 'n']:
-            print('Sorry little parameter but, your parents never wanted you. Good bye.')
-            exit()
+        print(f'Unlisted arguments used: {kwargs}')
+        # resp = input('If the additional parameters you entered are not what you wanted type quit/q/stop/s/no/n')
+        # if resp.lower() in ['quit', 'q', 'stop', 's', 'no', 'n']:
+        #     print('Sorry little parameter but, your parents never wanted you. Good bye.')
+        #     exit()
     # print MONAI config
     print_config()
     # logs init
@@ -323,8 +324,8 @@ def main(rank=0, world_size=1):
                          Path(output_root, 'overlap_segmentation.nii'))
 
 
-if __name__ == "__main__":
-    # TODO make something more scalable
+if __name__ in ['__main__', 'lesseg_unet.main']:
+    # # TODO make something more scalable
     if torch.cuda.is_available() and torch.cuda.device_count() == 3:
         world_size = 3
     else:
@@ -342,3 +343,4 @@ if __name__ == "__main__":
         print(f'Torch available? {torch.cuda.is_available()}')
         print(f'################WORLD SIZE : {world_size}####################')
         main(0, world_size)
+    # main()

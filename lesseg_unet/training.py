@@ -6,6 +6,7 @@ from operator import lt, gt
 from pathlib import Path
 from typing import Sequence, Tuple, Union
 import time
+import signal
 
 import pandas as pd
 from tqdm import tqdm
@@ -27,6 +28,16 @@ from torch.utils.tensorboard import SummaryWriter
 from lesseg_unet import net, utils, data_loading, transformations
 import torch.distributed
 from torch.nn.parallel import DistributedDataParallel
+
+
+def handler(signum, frame):
+    res = input("Ctrl-c was pressed. Do you really want to exit? y/n ")
+    if res == 'y':
+        torch.distributed.destroy_process_group()
+        exit(1)
+
+
+signal.signal(signal.SIGINT, handler)
 
 
 def setup(rank, world_size, port='1234', cpu=False):
@@ -809,11 +820,11 @@ def training(img_path_list: Sequence,
              cache_dir=None,
              save_every_decent_best_epoch=True,
              world_size=1,
-             rank=0,
              **kwargs
              ):
     # Apparently it can potentially improve the performance when the model does not change its size. (Source tuto UNETR)
     torch.backends.cudnn.benchmark = True
+    rank = int(os.environ["LOCAL_RANK"])
     print(f'################RANK : {rank}####################')
     """MODEL PARAMETERS"""
     if device is None:
@@ -1012,9 +1023,10 @@ def training(img_path_list: Sequence,
                 else:
                     train_iter.set_description(
                         f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss/step:.4f}]')
-            epoch_loss /= step
-            print(f'epoch {epoch + 1} average loss: {epoch_loss:.4f}')
-            writer.add_scalar('epoch_train_loss', epoch_loss, epoch + 1)
+            if torch.distributed.get_rank() == 0:
+                epoch_loss /= step
+                print(f'epoch {epoch + 1} average loss: {epoch_loss:.4f}')
+                writer.add_scalar('epoch_train_loss', epoch_loss, epoch + 1)
 
             """VALIDATION"""
             if (epoch + 1) % val_interval == 0 and torch.distributed.get_rank() == 0:
