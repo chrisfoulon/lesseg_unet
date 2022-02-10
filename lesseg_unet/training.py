@@ -836,8 +836,8 @@ def training(img_path_list: Sequence,
         cpu_device = device.type == 'cpu'
 
         setup(rank, world_size, cpu=cpu_device)
-
-        device = torch.device(f"cuda:{rank}")
+        if not cpu_device:
+            device = torch.device(f"cuda:{rank}")
         torch.cuda.set_device(device)
 
     logging.info(f'Torch device used for this training: {str(device)}')

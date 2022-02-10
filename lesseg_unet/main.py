@@ -14,10 +14,10 @@ import lesseg_unet.data.transform_dicts as tr_dicts
 import nibabel as nib
 import torch.multiprocessing
 import torch
-from torch.distributed.elastic.multiprocessing.errors import record
+# from torch.distributed.elastic.multiprocessing.errors import record
 
 
-@record
+# @record
 def main(rank=0, world_size=1):
     # Script arguments
     parser = argparse.ArgumentParser(description='Monai unet training')
