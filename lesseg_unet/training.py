@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import shutil
 import logging
 from operator import lt, gt
@@ -26,14 +27,14 @@ from monai.transforms import (
 )
 from torch.utils.tensorboard import SummaryWriter
 from lesseg_unet import net, utils, data_loading, transformations
-import torch.distributed
+import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 
 
 def handler(signum, frame):
     res = input("Ctrl-c was pressed. Do you really want to exit? y/n ")
     if res == 'y':
-        torch.distributed.destroy_process_group()
+        dist.destroy_process_group()
         exit(1)
 
 
@@ -44,9 +45,9 @@ def setup(rank, world_size, port='1234', cpu=False):
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = port
     if not cpu:
-        torch.distributed.init_process_group('nccl', rank=rank, world_size=world_size)
+        dist.init_process_group('nccl', rank=rank, world_size=world_size)
     else:
-        torch.distributed.init_process_group('gloo', rank=rank, world_size=world_size)
+        dist.init_process_group('gloo', rank=rank, world_size=world_size)
 
 
 def testing(train_loader, output_dir):
@@ -825,6 +826,10 @@ def training(img_path_list: Sequence,
              ):
     # Apparently it can potentially improve the performance when the model does not change its size. (Source tuto UNETR)
     torch.backends.cudnn.benchmark = True
+    # disable logging for processes except 0 on every node
+    if rank != 0:
+        f = open(os.devnull, "w")
+        sys.stdout = sys.stderr = f
     # rank = int(os.environ["LOCAL_RANK"])
     print(f'################RANK : {rank}####################')
     """MODEL PARAMETERS"""
@@ -900,7 +905,7 @@ def training(img_path_list: Sequence,
                                                         device=transformations_device)
 
     """POST TRANSFORMATIONS"""
-    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
+    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
 
     """DATA LOADING"""
     if img_pref is not None and img_pref != '':
@@ -927,7 +932,11 @@ def training(img_path_list: Sequence,
             non_blocking = False
         if v == 'True' or v == 1:
             non_blocking = True
+
     val_interval = 1
+    if 'val_interval' in kwargs:
+        val_interval = kwargs['val_interval']
+
     # val_meh_thr = 0.7
     # val_trash_thr = 0.3
     nb_patches = None
@@ -1024,13 +1033,15 @@ def training(img_path_list: Sequence,
                 else:
                     train_iter.set_description(
                         f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss/step:.4f}]')
-            if torch.distributed.get_rank() == 0:
+            print(f"[{dist.get_rank()}] " + f"epoch {epoch + 1}, average loss: {epoch_loss/step:.4f}")
+            if dist.get_rank() == 0:
                 epoch_loss /= step
                 print(f'epoch {epoch + 1} average loss: {epoch_loss:.4f}')
                 writer.add_scalar('epoch_train_loss', epoch_loss, epoch + 1)
 
             """VALIDATION"""
-            if (epoch + 1) % val_interval == 0 and torch.distributed.get_rank() == 0:
+            if (epoch + 1) % val_interval == 0:
+            # if (epoch + 1) % val_interval == 0 and dist.get_rank() == 0:
                 model.eval()
                 with torch.no_grad():
                     step = 0
@@ -1061,8 +1072,8 @@ def training(img_path_list: Sequence,
 
                         if val_batch_dist_list is not None:
                             hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
-                            dist = hausdorff_metric.aggregate().item()
-                            val_batch_dist_list.append(dist)
+                            distance = hausdorff_metric.aggregate().item()
+                            val_batch_dist_list.append(distance)
                         val_batch_dice_list.append(dice)
                         pbar.set_description(f'Val[{epoch + 1}] mean_loss:[{np.mean(loss_list)}]')
                     mean_loss_val = np.mean(loss_list)
@@ -1116,7 +1127,7 @@ def training(img_path_list: Sequence,
                             print(f'New best model saved in {checkpoint_path}')
                             str_best_epoch = (
                                 f'\n{best_epoch_pref_str} {best_metric_epoch} '
-                                # f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
+                                # f'metric {best_metric:.4f}/distance {best_distance}/avgloss {best_avg_loss}\n'
                                 f'Dice metric {best_dice:.4f} / mean loss {best_avg_loss}'
                             )
                     if keep_dice_and_dist:
@@ -1153,4 +1164,4 @@ def training(img_path_list: Sequence,
         print(f'Training completed\n')
         logging.info(str_best_epoch)
         writer.close()
-        torch.distributed.destroy_process_group()
+        dist.destroy_process_group()

@@ -60,7 +60,7 @@ def segmentation_loop(img_path_list: Sequence,
                     if t == 'CoordConvd' or t == 'CoordConvAltd':
                         hyper_params['in_channels'] = 4
     model = utils.load_model_from_checkpoint(checkpoint_path, device, hyper_params, model_name=model_name)
-    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
+    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
     model.eval()
     les_area_finder = None
     if segmentation_area:
@@ -184,7 +184,7 @@ def validation_loop(img_path_list: Sequence,
     model = utils.load_model_from_checkpoint(checkpoint_path, device, hyper_params, model_name=model_name)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean", percentile=95)
-    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
+    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
 
     les_area_finder = None
     if segmentation_area:
