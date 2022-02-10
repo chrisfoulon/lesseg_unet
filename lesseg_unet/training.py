@@ -819,12 +819,13 @@ def training(img_path_list: Sequence,
              dropout=0,
              cache_dir=None,
              save_every_decent_best_epoch=True,
+             rank=0,
              world_size=1,
              **kwargs
              ):
     # Apparently it can potentially improve the performance when the model does not change its size. (Source tuto UNETR)
     torch.backends.cudnn.benchmark = True
-    rank = int(os.environ["LOCAL_RANK"])
+    # rank = int(os.environ["LOCAL_RANK"])
     print(f'################RANK : {rank}####################')
     """MODEL PARAMETERS"""
     if device is None:

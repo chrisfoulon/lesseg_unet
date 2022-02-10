@@ -21,6 +21,8 @@ import torch
 def main(rank=0, world_size=1):
     # Script arguments
     parser = argparse.ArgumentParser(description='Monai unet training')
+    # torch things ....
+    # parser.add_argument("--local_rank", type=int)
     # Paths
     parser.add_argument('-o', '--output', type=str, help='output folder', required=True)
     nifti_paths_group = parser.add_mutually_exclusive_group(required=True)
