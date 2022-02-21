@@ -60,6 +60,9 @@ def main():
     parser.add_argument('-pt', '--checkpoint', type=str, help='file path to a torch checkpoint file'
                                                               ' or directory (in that case, the most recent '
                                                               'checkpoint will be used)')
+    parser.add_argument('-pp', '--pretrained_point', type=str, help='[Training opt]file path to a torch checkpoint file'
+                                                                    ' or directory (in that case, the most recent '
+                                                                    'checkpoint will be used)')
     parser.add_argument('-sa', '--segmentation_area', action='store_true', help='Associate the segmentated masks'
                                                                                 ' to lesion areas in a csv file')
     parser.add_argument('-d', '--torch_device', type=str, help='Device type and number given to'
@@ -221,12 +224,25 @@ def main():
         # if les_list is None and args.default_label is None:
         #     parser.error(message='For the training, there must be a list of labels')
         logging.info(f'Output training folder : {output_root}')
+        if args.pretrained_point is not None:
+            if Path(args.pretrained_point).is_dir():
+                pretrained_point = utils.get_best_epoch_from_folder(args.pretrained_point)
+                if pretrained_point == '':
+                    raise ValueError(f'Checkpoint could not be found in {args.pretrained_point}')
+                else:
+                    print(f'Latest checkpoint found is: {pretrained_point}')
+            else:
+                # So it quickly breaks if the checkpoint does not exist
+                pretrained_point = str(Path(args.pretrained_point))
+        else:
+            pretrained_point = None
         training.training(img_path_list=img_list,
                           seg_path_list=les_list,
                           output_dir=output_root,
-                          ctr_path_list=ctr_list,
+                          # ctr_path_list=ctr_list,
                           img_pref=b1000_pref,
                           transform_dict=transform_dict,
+                          pretrained_point=pretrained_point,
                           device=args.torch_device,
                           batch_size=args.batch_size,
                           val_batch_size=args.val_batch_size,
