@@ -20,6 +20,82 @@ from monai.transforms import (
 )
 
 
+def get_images_np_on_cpu(batch_data, batch_images, compute_device, dataset_obj, output_size=None):
+    # batch_data_image is typically batch_data['image'] or batch_data['label'] or outputs of the model
+    if output_size is not None and output_size != batch_images.shape[-3:]:
+        for i in batch_images.shape[0]:
+            img = batch_images[i, ...].to(compute_device)
+            inv_img = dataset_obj.transform.inverse(img)
+            # The first dimension should already be 1 but as we want a 3D images as an output I preferred to ensure it
+            ing_img__np = inv_img[0, :, :, :].cpu().detach().numpy() if isinstance(inv_img, torch.Tensor) \
+                else inv_img[0, :, :, :]
+
+
+def run_eval_model(model, val_data, device, post_trans, training_img_size, number_of_patches, original_size,
+                   les_area_finder, val_ds, output_dir, val_output_affine):
+    inputs = val_data['image'].to(device)
+    # TODO
+    val_outputs = sliding_window_inference(inputs, training_img_size,
+                                           number_of_patches, model, overlap=0.8)
+    val_outputs_list = decollate_batch(val_outputs)
+    val_output_convert = [
+        post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
+    ]
+    if original_size:
+        val_data['image'].to(device)[0] = val_ds.transform.inverse(val_data['image'].to(device)[0])
+        inv_outputs = val_data['image'].to(device)[0]
+        outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_outputs, torch.Tensor) \
+            else inv_outputs[0, :, :, :]
+    vol_output = utils.volume_metric(val_output_convert[0], False, False)
+
+    input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
+    input_filename += f'_v{vol_output}v'
+    # TODO
+    # if 'entropy' in kwargs and (kwargs['entropy'] == 'True' or kwargs['entropy'] == 1):
+    #     print(utils.entropy_metric(val_outputs_list[0], sigmoid=True))
+    #     exit()
+    #     input_filename += f'_e{utils.entropy_metric(val_outputs_list[0], sigmoid=True)}e'
+    if original_size:
+        output_dict_data = deepcopy(val_data)
+        output_dict_data['image'] = val_data['image'].to(device)[0]
+        inverted_output_dict = val_ds.transform.inverse(output_dict_data)
+        inv_inputs = inverted_output_dict['image']
+        output_dict_data['image'] = val_output_convert[0]
+        inverted_output_dict = val_ds.transform.inverse(output_dict_data)
+        inv_outputs = inverted_output_dict['image']
+        inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_inputs, torch.Tensor) \
+            else inv_inputs[0, :, :, :]
+        outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_outputs, torch.Tensor) \
+            else inv_outputs[0, :, :, :]
+        # TODO This is slow AF because of the imshow, maybe resetting the plot would work
+        # utils.save_img_lbl_seg_to_png(
+        #     inputs_np, output_dir,
+        #     '{}_segmentation_{}'.format(input_filename, img_count), outputs_np)
+        tmp = None
+        if les_area_finder is not None:
+            if vol_output == 0:
+                output_subdir = Path(output_dir, 'empty_prediction')
+            else:
+                cluster_name = les_area_finder.get_img_area(outputs_np)
+                output_subdir = Path(output_dir, cluster_name)
+            os.makedirs(output_subdir, exist_ok=True)
+        else:
+            output_subdir = output_dir
+        output_path_list = utils.save_img_lbl_seg_to_nifti(
+            inputs_np, tmp, outputs_np, output_subdir, val_output_affine,
+            '{}_{}'.format(str(input_filename), str(img_count)))
+    else:
+        inputs_np = inputs[0, 0, :, :, :].cpu().detach().numpy() if isinstance(
+            inputs, torch.Tensor) else inputs[0, :, :, :]
+        outputs_np = val_output_convert[0, 0, :, :, :].cpu().detach().numpy() if isinstance(
+            val_output_convert, torch.Tensor) else val_output_convert[0, :, :, :]
+
+        tmp = None
+        output_path_list = utils.save_img_lbl_seg_to_nifti(
+            inputs_np, tmp, outputs_np, output_dir, val_output_affine,
+            '{}_{}'.format(str(input_filename), str(img_count)))
+
+
 def segmentation_loop(img_path_list: Sequence,
                       output_dir: Union[str, bytes, os.PathLike],
                       checkpoint_path: Union[str, bytes, os.PathLike],
