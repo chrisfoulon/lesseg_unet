@@ -899,7 +899,6 @@ def training(img_path_list: Sequence,
     val_interval = 1
     # val_meh_thr = 0.7
     # val_trash_thr = 0.3
-    nb_patches = None
     if stop_best_epoch != -1:
         logging.info(f'Will stop after {stop_best_epoch} epochs without improvement')
 
@@ -979,8 +978,6 @@ def training(img_path_list: Sequence,
                 optimizer.zero_grad()
                 inputs, labels = batch_data['image'].to(device, non_blocking=non_blocking), batch_data['label'].to(
                     device, non_blocking=non_blocking)
-                if nb_patches is None:
-                    nb_patches = int(inputs.shape[0]/batch_size)
                 logit_outputs = model(inputs)
                 # In case we use CoordConv, we only take the mask of the labels without the coordinates
                 masks_only_labels = labels[:, :1, :, :, :]
@@ -1020,7 +1017,7 @@ def training(img_path_list: Sequence,
                         # In case CoordConv is used
                         masks_only_val_labels = val_labels[:, :1, :, :, :]
                         val_outputs = sliding_window_inference(val_inputs, training_img_size,
-                                                               nb_patches, model)
+                                                               val_batch_size, model)
                         loss_list.append(val_loss_function(val_outputs, masks_only_val_labels).item())
                         val_outputs_list = decollate_batch(val_outputs)
                         val_output_convert = [

@@ -115,11 +115,11 @@ def save_img_lbl_seg_to_nifti(image: Union[np.ndarray, torch.Tensor],
     out_input_path = Path(output_dir, 'input_{}.nii'.format(suffix))
     save_tensor_to_nifti(image, out_input_path, val_output_affine)
     out_paths_list = [str(out_input_path)]
-    if label is not None:
+    if len(label) > 0:
         out_label_path = Path(output_dir, 'label_{}.nii'.format(suffix))
         save_tensor_to_nifti(label, out_label_path, val_output_affine)
         out_paths_list.append(str(out_label_path))
-    if seg is not None:
+    if len(seg) > 0:
         out_output_path = Path(output_dir, 'output_{}.nii'.format(suffix))
         save_tensor_to_nifti(seg, out_output_path, val_output_affine)
         out_paths_list.append(str(out_output_path))
@@ -537,3 +537,8 @@ def get_segmentation_areas(img_list, comp_meth='dice', cluster_thr=0.1, root_dir
 
 def get_img_size(img):
     return load_nifti(img).shape
+
+
+def repeat_array_to_dim(arr, dim):
+    # credit to @scieronomic on https://stackoverflow.com/questions/64061832/numpy-tile-up-to-specific-size
+    return np.tile(arr, np.array(dim) // np.array(np.shape(arr)) + 1)[tuple(map(slice, dim))]

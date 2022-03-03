@@ -131,6 +131,21 @@ def init_training_data(
     return train_ds, val_ds
 
 
+def init_segmentation(img_path_list: Sequence,
+                      img_pref: str = None,
+                      transform_dict: dict = None,
+                      clamping=None):
+    if img_pref is None:
+        img_pref = ''
+    print('Listing input files to be loaded')
+    image_list = [{'image': str(img)} for img in img_path_list if img_pref in Path(img).name]
+    print('Create transformations')
+    val_img_transforms = transformations.image_only_transformd(transform_dict, training=False, clamping=clamping)
+    print('Create monai dataset')
+    train_ds = Dataset(image_list, transform=val_img_transforms)
+    return train_ds
+
+
 def get_data_folds(img_seg_dict: dict,
                    folds_number: int = 1,
                    train_val_percentage: float = 80) -> (List[List[dict]], List[List[dict]]):
@@ -172,18 +187,3 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
     train_loader = create_training_data_loader(train_ds, batch_size, dataloader_workers)
     val_loader = create_validation_data_loader(val_ds, val_batch_size, dataloader_workers)
     return train_loader, val_loader
-
-
-def init_segmentation(img_path_list: Sequence,
-                      img_pref: str = None,
-                      transform_dict: dict = None,
-                      clamping=None):
-    if img_pref is None:
-        img_pref = ''
-    print('Listing input files to be loaded')
-    image_list = [{'image': str(img)} for img in img_path_list if img_pref in Path(img).name]
-    print('Create transformations')
-    val_img_transforms = transformations.image_only_transformd(transform_dict, training=False, clamping=clamping)
-    print('Create monai dataset')
-    train_ds = Dataset(image_list, transform=val_img_transforms)
-    return train_ds
