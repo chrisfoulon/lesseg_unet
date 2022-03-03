@@ -261,6 +261,7 @@ def split_lists_in_folds(img_dict: Union[dict, list],
         split_lists = [full_file_list[training_end_index:], full_file_list[:training_end_index]]
     else:
         split_lists = list(np.array_split(np.array(full_file_list), folds_number))
+        split_lists = [list(li) for li in split_lists]
     return split_lists
 
 
