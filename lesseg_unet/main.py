@@ -156,7 +156,7 @@ def main():
             raise ValueError("The output directory CANNOT be the input directory")
     # So args.lesion_input_list is not None
     elif args.lesion_input_list is not None:
-        logging.info(f'Input lesion list : {args.input_list}')
+        logging.info(f'Input lesion list : {args.lesion_input_list}')
         les_list = file_to_list(args.lesion_input_list)
     else:
         les_list = None

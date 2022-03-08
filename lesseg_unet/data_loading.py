@@ -42,9 +42,10 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
         print(f'Some images did not have a label ({len(controls)} they have been added to the controls list')
     print('Number of images: {}'.format(len(img_dict)))
     if img_dict:
-        print(f'First image and label in img_dict: {img_dict[list(img_dict.keys())[0]]}')
+        print(f'First image and label in img_dict: {list(img_dict.keys())[0]}, {img_dict[list(img_dict.keys())[0]]}')
     if controls:
-        print('Number of controls: {}'.format(len(controls)))
+        # print('Number of controls: {}'.format(len(controls)))
+        raise ValueError(f'{len(controls)} could not be matched with a label')
     if check_inputs:
         utils.check_inputs(img_dict)
         utils.check_inputs(controls)
