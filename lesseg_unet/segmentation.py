@@ -341,7 +341,7 @@ def segmentation_loop(img_path_list: Sequence,
                 # utils.save_img_lbl_seg_to_png(
                 #     inputs_np, output_dir,
                 #     '{}_segmentation_{}'.format(input_filename, img_count), outputs_np)
-                tmp = None
+                tmp = np.array([])
                 if les_area_finder is not None:
                     if vol_output == 0:
                         output_subdir = Path(output_dir, 'empty_prediction')
@@ -360,7 +360,7 @@ def segmentation_loop(img_path_list: Sequence,
                 outputs_np = val_output_convert[0, 0, :, :, :].cpu().detach().numpy() if isinstance(
                     val_output_convert, torch.Tensor) else val_output_convert[0, :, :, :]
 
-                tmp = None
+                tmp = np.array([])
                 output_path_list = utils.save_img_lbl_seg_to_nifti(
                     inputs_np, tmp, outputs_np, output_dir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(img_count)))
@@ -383,7 +383,7 @@ def validation_loop(img_path_list: Sequence,
                     img_pref: str = None,
                     transform_dict: dict = None,
                     device: str = None,
-                    batch_size: int = 2,
+                    batch_size: int = 1,
                     dataloader_workers: int = 8,
                     bad_dice_treshold: float = 0.1,
                     clamping: tuple = None,
@@ -492,12 +492,10 @@ def validation_loop(img_path_list: Sequence,
             # value = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
             val_score_list.append(dice)
             val_dist_list.append(dist)
-
             val_data['image'] = val_data['image'].to(device)[0]
             val_data['label'] = val_data['label'].to(device)[0]
             output_dict_data['image'] = val_data['image']
             output_dict_data['label'] = val_output_convert[0]
-
             # Loop dataframe filling
             loop_df = loop_df.append({'dice_metric': dice,
                                       'volume': vol_output,

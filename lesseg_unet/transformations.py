@@ -262,6 +262,7 @@ class CoordConvd(MapTransform, InvertibleTransform):
             self,
             data: Mapping[Hashable, Union[np.ndarray, torch.Tensor]]
     ) -> Dict[Hashable, Union[np.ndarray, torch.Tensor]]:
+        from monai.utils.enums import InverseKeys
         d = deepcopy(dict(data))
         for key in self.key_iterator(d):
             # transform = self.get_most_recent_transform(d, key)
@@ -653,7 +654,7 @@ class MyRandHistogramShiftd(RandomizableTransform, MapTransform):
         return d
 
 
-class PrintDim(MapTransform):
+class PrintDim(MapTransform,  InvertibleTransform):
     """
     Set every above threshold voxel to 1.0
 
@@ -690,6 +691,13 @@ class PrintDim(MapTransform):
             s += 'dtype: {}\n'.format(d[key].dtype)
         s += 'End printdim'
         print('#######PRINTDIM#####\n{}\n#############'.format(s))
+        return d
+
+    def inverse(
+            self,
+            data: Mapping[Hashable, Union[np.ndarray, torch.Tensor]]
+    ) -> Dict[Hashable, Union[np.ndarray, torch.Tensor]]:
+        d = self.__call__(data)
         return d
 
 

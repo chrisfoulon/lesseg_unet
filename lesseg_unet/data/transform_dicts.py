@@ -1077,6 +1077,7 @@ unetr_cc = {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
          },
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'PrintDim after Resize'}},
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (0, 1),

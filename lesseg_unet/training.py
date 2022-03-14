@@ -1054,7 +1054,7 @@ def training(img_path_list: Sequence,
                         writer.add_scalar('val_best_mean_dice', best_dice, epoch + 1)
                         writer.add_scalar('val_best_mean_loss', best_avg_loss, epoch + 1)
                         if save_every_decent_best_epoch:
-                            if best_dice > 0.75:
+                            if best_dice > 0.7:
                                 epoch_suffix = '_' + str(epoch + 1)
                         # True here means that we track and keep the distance and that both dice and dist improved
                         if (mean_dist_val is not None and keep_dice_and_dist) and (
