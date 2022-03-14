@@ -1118,7 +1118,7 @@ unetr_cc = {
          },
     ],
     'torchio_transform': [
-        {'PrintDim': {'keys': ['image', 'label'], 'msg': 'PrintDim before ToTensord'}},
+        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'PrintDim before ToTensord'}},
         {'ToTensord': {'keys': ['image', 'label']}},
         {'RandomBiasField': {
             'include': ['image'],

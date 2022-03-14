@@ -268,6 +268,8 @@ class CoordConvd(MapTransform, InvertibleTransform):
             # transform = self.get_most_recent_transform(d, key)
             # Apply inverse transform
             d[key] = d[key][:1, :, :, :]
+            if isinstance(d[key], torch.Tensor):
+                d[key] = d[key].cpu().detach().numpy()
             # Remove the applied transform
             self.pop_transform(d, key)
         return d
