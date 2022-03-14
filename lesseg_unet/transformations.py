@@ -269,8 +269,6 @@ class CoordConvd(MapTransform, InvertibleTransform):
             # Apply inverse transform
             d[key] = d[key][:1, :, :, :]
             # Remove the applied transform
-            print(type(d[key]))
-            input(type(d[key][0,0,0,0]))
             self.pop_transform(d, key)
         return d
 
