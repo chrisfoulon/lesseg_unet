@@ -269,7 +269,7 @@ def percent_vox_loss(img, sigmoid=True, discrete=True, divide_max_vox=1):
     if sigmoid:
         img = torch.sigmoid(img)
     if discrete:
-        img = monai.transforms.AsDiscrete(threshold=0.5)(img)
+        img = monai.transforms.AsDiscrete(threshold_values=True)(img)
     max_vox = torch.prod(torch.as_tensor(img.shape))
     if divide_max_vox != 1:
         max_vox = max_vox // divide_max_vox
@@ -280,7 +280,7 @@ def volume_metric(img, sigmoid=True, discrete=True):
     if sigmoid:
         img = torch.sigmoid(img)
     if discrete:
-        img = monai.transforms.AsDiscrete(threshold=0.5)(img)
+        img = monai.transforms.AsDiscrete(threshold_values=True)(img)
     return len(img[torch.where(img)])
 
 

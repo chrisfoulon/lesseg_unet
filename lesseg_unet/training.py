@@ -161,7 +161,7 @@ def testing(train_loader, output_dir):
 #     dice_metric = DiceMetric(include_background=True, reduction="mean")
 #     # surface_metric = SurfaceDistanceMetric(include_background=True, reduction="mean", symmetric=True)
 #     hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean", percentile=95)
-#     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
+#     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
 #     tversky_function = TverskyLoss(sigmoid=True, alpha=2, beta=0.5)
 #     # focal_function = FocalLoss()
 #     # df_loss = DiceFocalLoss(sigmoid=True)
@@ -869,7 +869,7 @@ def training(img_path_list: Sequence,
                                                         device=transformations_device)
 
     """POST TRANSFORMATIONS"""
-    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
+    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
 
     """DATA LOADING"""
     if img_pref is not None and img_pref != '':
