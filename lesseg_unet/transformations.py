@@ -313,7 +313,7 @@ class SpatialCrop(Transform):
             if roi_center is not None and roi_size is not None:
                 roi_center = torch.as_tensor(roi_center, dtype=torch.int16)
                 roi_size = torch.as_tensor(roi_size, dtype=torch.int16)
-                roi_start = torch.maximum(roi_center - torch.floor_divide(roi_size, 2), torch.tensor(0))
+                roi_start = torch.maximum(roi_center - torch.div(roi_size, 2, rounding_mode='trunc'), torch.tensor(0))
                 roi_end = torch.maximum(roi_start + roi_size, roi_start)
             else:
                 if roi_start is None or roi_end is None:
