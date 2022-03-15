@@ -186,7 +186,6 @@ def segmentation(img_path_list: Sequence,
                     decollated_image_dict['image'] = decollated_batch_ensembled[ind]
 
             for img_dict, output_dict in zip(decollate_batch(batch), decollate_batch(output_dict_data)):
-                # TODO perform_validation measure here!
                 output_affine = img_dict['image_meta_dict']['affine']
                 input_filename = Path(img_dict['image_meta_dict']['filename_or_obj']).name.split('.nii')[0]
                 input_filename += f'_v{vol_output}v'

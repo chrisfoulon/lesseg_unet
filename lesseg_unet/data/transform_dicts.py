@@ -1100,6 +1100,7 @@ unetr_cc = {
             'translate_range': 0.05,
             'scale_range': 0.05,
             'padding_mode': 'border',
+            'mode': 'nearest',
             'as_tensor_output': True}  # was False
          },
         {'Rand3DElasticd': {
@@ -1112,6 +1113,7 @@ unetr_cc = {
             'translate_range': None,
             'scale_range': None,
             'padding_mode': "reflection",
+            'mode': 'nearest',
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
             'as_tensor_output': True}
@@ -1125,6 +1127,12 @@ unetr_cc = {
             'p': low_prob,
             'coefficients': 0.1}
          },
+        {'RandomNoise': {
+            'include': ['image'],
+            'p': low_prob,
+            'mean': 0.0,
+            'std': (0.01, 0.3)}
+        },
     ],
     'unetr_transform': [
         {'RandFlipd': {

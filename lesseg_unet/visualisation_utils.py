@@ -116,6 +116,12 @@ def display_img(img, over1=None, over2=None):
 
 
 def display_one_output(output_dir, number=None, string=None, recursive=False):
+    # from monai.transforms import AddChannel, LoadImage
+    # from monai.metrics import DiceMetric
+    # import torch
+    # add_channel = AddChannel()
+    # load = LoadImage()
+    # dice_metric = DiceMetric(include_background=True, reduction="mean")
     if number is None and string is None:
         raise ValueError('Provide either an image number or a string to find')
     if number is not None:
@@ -142,6 +148,14 @@ def display_one_output(output_dir, number=None, string=None, recursive=False):
         if f.name.startswith('output'):
             print(f'Non zero voxels in the output prediction: {np.count_nonzero(nib.load(f).get_fdata())}')
             seg = f
+
+    # ldata = torch.tensor(nib.load(label).get_fdata())
+    # odata = torch.tensor(nib.load(seg).get_fdata())
+    # dice_metric(y_pred=add_channel(odata),
+    #             y=add_channel(ldata))
+    # dice = dice_metric.aggregate().item()
+    # print(f'Dice score: {dice}')
+    # dice_metric.reset()
     if img is None:
         raise ValueError('input image not found')
     process = display_img(img, over1=label, over2=seg)

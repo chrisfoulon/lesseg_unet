@@ -309,7 +309,7 @@ def main():
                                                segmentation_area=args.segmentation_area,
                                                **kwargs)
                 if args.overlap:
-                    nib.save(nifti_overlap_images(output_root, 'output_'),
+                    nib.save(nifti_overlap_images(output_root, 'output_', recursive=True),
                              Path(output_root, 'overlap_segmentation.nii'))
             # if args.segmentation_area:
             #     output_img_list = [p for p in Path(output_root).rglob('*')
@@ -333,7 +333,7 @@ def main():
                                          segmentation_area=args.segmentation_area,
                                          **kwargs)
             if args.overlap:
-                nib.save(nifti_overlap_images(output_root, 'output_'),
+                nib.save(nifti_overlap_images(output_root, 'output_', recursive=True),
                          Path(output_root, 'overlap_segmentation.nii'))
 
 
