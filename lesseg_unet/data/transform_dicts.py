@@ -1067,7 +1067,7 @@ unetr_dict_lastflip = {
             'num_samples': 4}},
     ]
 }
-
+# low_prob = high_prob = tiny_prob = 1
 unetr_cc = {
     'first_transform': [
         {'LoadImaged': {
@@ -1131,8 +1131,8 @@ unetr_cc = {
             'include': ['image'],
             'p': low_prob,
             'mean': 0.0,
-            'std': (0.01, 0.3)}
-        },
+            'std': (0, 0.25)}
+         },
     ],
     'unetr_transform': [
         {'RandFlipd': {

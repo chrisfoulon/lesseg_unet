@@ -18,6 +18,7 @@ from torch.nn.functional import binary_cross_entropy_with_logits as BCE
 from monai.metrics import DiceMetric, SurfaceDistanceMetric, HausdorffDistanceMetric
 from monai.losses import DiceLoss, TverskyLoss, FocalLoss, DiceFocalLoss, DiceCELoss
 from monai.inferers import sliding_window_inference
+from monai.visualize import plot_2d_or_3d_image
 from monai.transforms import (
     Activations,
     AsDiscrete,
@@ -800,6 +801,12 @@ def training(img_path_list: Sequence,
              save_every_decent_best_epoch=True,
              **kwargs
              ):
+    display_training = False
+    if 'display_training' or '--display_training' in kwargs:
+        v = kwargs['display_training']
+        if v == 'True' or v == 1:
+            print(f'Displaying training images')
+            display_training = True
     # Apparently it can potentially improve the performance when the model does not change its size. (Source tuto UNETR)
     torch.backends.cudnn.benchmark = True
 
@@ -978,6 +985,9 @@ def training(img_path_list: Sequence,
                 optimizer.zero_grad()
                 inputs, labels = batch_data['image'].to(device, non_blocking=non_blocking), batch_data['label'].to(
                     device, non_blocking=non_blocking)
+                if display_training:
+                    plot_2d_or_3d_image(inputs, 12, writer, tag='tr_inputs')
+                    input('continue??')
                 logit_outputs = model(inputs)
                 # In case we use CoordConv, we only take the mask of the labels without the coordinates
                 masks_only_labels = labels[:, :1, :, :, :]
