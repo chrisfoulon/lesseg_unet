@@ -2,23 +2,19 @@ import json
 import os
 import shutil
 import logging
-from operator import lt, gt
 from pathlib import Path
-from typing import Sequence, Tuple, Union
+from typing import Sequence, Union
 import time
 
-import pandas as pd
 from tqdm import tqdm
 import numpy as np
-import monai
-from monai.data import Dataset
+from nilearn.plotting import plot_anat
+import nibabel as nib
 from monai.data import decollate_batch
 import torch
-from torch.nn.functional import binary_cross_entropy_with_logits as BCE
-from monai.metrics import DiceMetric, SurfaceDistanceMetric, HausdorffDistanceMetric
-from monai.losses import DiceLoss, TverskyLoss, FocalLoss, DiceFocalLoss, DiceCELoss
+from monai.metrics import DiceMetric, HausdorffDistanceMetric
+from monai.losses import DiceLoss, DiceCELoss
 from monai.inferers import sliding_window_inference
-from monai.visualize import plot_2d_or_3d_image
 from monai.transforms import (
     Activations,
     AsDiscrete,
@@ -801,12 +797,14 @@ def training(img_path_list: Sequence,
              save_every_decent_best_epoch=True,
              **kwargs
              ):
+    shuffle_training = True
     display_training = False
-    if 'display_training' or '--display_training' in kwargs:
+    if 'display_training' in kwargs:
         v = kwargs['display_training']
         if v == 'True' or v == 1:
             print(f'Displaying training images')
             display_training = True
+            shuffle_training = False
     # Apparently it can potentially improve the performance when the model does not change its size. (Source tuto UNETR)
     torch.backends.cudnn.benchmark = True
 
@@ -940,7 +938,8 @@ def training(img_path_list: Sequence,
         # (e.g. fold 0 means the first sublist of split_lists will be the validation set for this fold)
         train_loader, val_loader = data_loading.create_fold_dataloaders(
             split_lists, fold, train_img_transforms,
-            val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir
+            val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
+            shuffle_training=shuffle_training
         )
 
         """EPOCHS LOOP VARIABLES"""
@@ -956,6 +955,11 @@ def training(img_path_list: Sequence,
         best_dist = 1000
         best_metric_epoch = -1
         best_metric_dist_epoch = -1
+        img_dir = Path(output_dir, 'image_dir')
+        if display_training:
+            if img_dir.is_dir():
+                shutil.rmtree(img_dir)
+            os.makedirs(img_dir, exist_ok=True)
         for epoch in range(epoch_num):
             print('-' * 10)
             print(f'epoch {epoch + 1}/{epoch_num}')
@@ -986,8 +990,19 @@ def training(img_path_list: Sequence,
                 inputs, labels = batch_data['image'].to(device, non_blocking=non_blocking), batch_data['label'].to(
                     device, non_blocking=non_blocking)
                 if display_training:
-                    plot_2d_or_3d_image(inputs, 12, writer, tag='tr_inputs')
-                    input('continue??')
+                    img_name = Path(batch_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
+                    print(batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy())
+                    plot_anat(
+                        nib.Nifti1Image(inputs[0, 0, ...].cpu().detach().numpy(),
+                                        batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy()),
+                        output_file=Path(img_dir, f'{img_name}.png'),
+                        display_mode='tiled', title=img_name, draw_cross=False,
+                        # cut_coords=(1, 1, 6)
+                    )
+                    # display.savefig('pretty_brain.png')
+                    print(f'inputs shape: {inputs.shape}')
+                    # plot_2d_or_3d_image(inputs[0:,...], 12, writer, tag='tr_inputs')
+                    # input(img_name + '  continue??')
                 logit_outputs = model(inputs)
                 # In case we use CoordConv, we only take the mask of the labels without the coordinates
                 masks_only_labels = labels[:, :1, :, :, :]

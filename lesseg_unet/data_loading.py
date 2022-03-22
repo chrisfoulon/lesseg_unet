@@ -67,12 +67,13 @@ def create_file_dict_lists(raw_img_path_list: Sequence, raw_seg_path_list: Seque
 def create_training_data_loader(train_ds: monai.data.Dataset,
                                 batch_size: int = 10,
                                 dataloader_workers: int = 4,
-                                persistent_workers=True):
+                                persistent_workers=True,
+                                shuffle=True):
     print('Creating training data loader')
     train_loader = DataLoader(
         train_ds,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=shuffle,
         drop_last=True,
         num_workers=dataloader_workers,
         pin_memory=torch.cuda.is_available(),
@@ -163,7 +164,7 @@ def get_data_folds(img_seg_dict: dict,
 
 
 def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_transforms, batch_size,
-                            dataloader_workers, val_batch_size=1, cache_dir=None):
+                            dataloader_workers, val_batch_size=1, cache_dir=None, shuffle_training=True):
     train_data_list = []
     val_data_list = []
     for ind, chunk in enumerate(split_lists):
@@ -186,6 +187,6 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
         val_ds = CacheDataset(val_data_list, transform=val_img_transforms)
     # val_ds = Dataset(val_data_list, transform=val_img_transforms)
     # data_loader_checker_first(train_ds, 'validation')
-    train_loader = create_training_data_loader(train_ds, batch_size, dataloader_workers)
+    train_loader = create_training_data_loader(train_ds, batch_size, dataloader_workers, shuffle=shuffle_training)
     val_loader = create_validation_data_loader(val_ds, val_batch_size, dataloader_workers)
     return train_loader, val_loader

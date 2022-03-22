@@ -1091,7 +1091,7 @@ unetr_cc = {
             'num_control_points': (10, 15),
             'prob': low_prob}
          },
-        # # TODO maybe 'Orientation': {} but it would interact with the flip,
+        # TODO maybe 'Orientation': {} but it would interact with the flip,
         {'RandAffined': {
             'keys': ['image', 'label'],
             'prob': low_prob,
@@ -1131,7 +1131,7 @@ unetr_cc = {
             'include': ['image'],
             'p': low_prob,
             'mean': 0.0,
-            'std': (0, 0.25)}
+            'std': (0, 0.1)}
          },
     ],
     'unetr_transform': [
@@ -1145,6 +1145,14 @@ unetr_cc = {
             'offsets': 0.10,
             'prob': high_prob}
          },
+        # {'RandRicianNoised': {
+        #     'keys': ['image'],
+        #     'prob': low_prob,
+        #     'mean': 0.0,
+        #     'std': 5,
+        #     'sample_std': True,
+        #     'relative': False}
+        #  },
     ],
     'last_transform': [
         {'Binarized': {
