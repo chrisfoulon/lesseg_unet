@@ -1168,3 +1168,25 @@ unetr_cc = {
     ],
 }
 
+unetr_cc_patches = deepcopy(unetr_cc)
+del unetr_cc_patches['first_transform'][2]
+unetr_cc_patches.update({'crop': [
+        {'RandCropByPosNegLabeld': {
+            'keys': ['image', 'label'],
+            'label_key': 'label',
+            'spatial_size': [80, 80, 80],
+            'pos': 1,
+            'neg': 1,
+            'num_samples': 4}},
+        {'RandFlipd': {
+            'keys': ["image", "label"],
+            'spatial_axis': [1],
+            'prob': low_prob}
+         },
+        {'RandFlipd': {
+            'keys': ["image", "label"],
+            'spatial_axis': [2],
+            'prob': low_prob}
+         },
+    ],
+})

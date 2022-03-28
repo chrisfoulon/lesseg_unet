@@ -1063,7 +1063,7 @@ Transformation compositions for the image segmentation
 
 
 def setup_coord_conv(hyper_param_dict):
-    create_gradient_before = True
+    create_gradient_before = list(hyper_param_dict.keys())[-1] == 'last_transform'
     if create_gradient_before:
         spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size', 'last_transform',
                                                   find_last=True)
