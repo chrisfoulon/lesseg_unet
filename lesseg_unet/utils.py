@@ -360,6 +360,16 @@ def filter_outside_brain_voxels(img, output=None, template=None):
     nib.save(nib.Nifti1Image(data, nii.affine), output_path)
 
 
+def count_outside_brain_voxels(img, template=None):
+    nii = load_nifti(img)
+    if template is None:
+        with rsc.path('lesseg_unet.data', 'brain_mask.nii') as p:
+            template = str(p.resolve())
+    data = nii.get_fdata()
+    count = np.count_nonzero(data[np.where(nib.load(template).get_fdata() != 0)])
+    return count
+
+
 def sum_non_bias_l2_norms(parameters, multiplier=None):
     """
     Given parameters=model.parameters() where model is a PyTorch model, this iterates through the list and tallies
