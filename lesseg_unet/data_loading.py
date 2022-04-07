@@ -150,23 +150,6 @@ def init_segmentation(img_path_list: Sequence,
     return train_ds
 
 
-def get_data_folds(img_seg_dict: dict,
-                   folds_number: int = 1,
-                   train_val_percentage: float = 80,
-                   shuffle=True) -> (List[List[dict]], List[List[dict]]):
-    logging.info(f'Listing input files to be loaded with {folds_number} folds')
-    full_file_list = [{'image': str(img), 'label': str(img_seg_dict[img])} for img in img_seg_dict]
-    if shuffle:
-        random.shuffle(full_file_list)
-    if folds_number == 1:
-        training_end_index = math.ceil(train_val_percentage / 100 * len(img_seg_dict))
-        # Inverse the order of the splits because the validation chunk in that case will be 0
-        split_lists = [full_file_list[training_end_index:], full_file_list[:training_end_index]]
-    else:
-        split_lists = list(np.array_split(np.array(full_file_list), folds_number))
-    return split_lists
-
-
 def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_transforms, batch_size,
                             dataloader_workers, val_batch_size=1, cache_dir=None, shuffle_training=True):
     train_data_list = []
