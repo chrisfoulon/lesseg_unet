@@ -78,11 +78,27 @@ def plot_seg(img, label=None, seg=None, save_path=None):
     return
 
 
-def display_img(img, over1=None, over2=None):
+def display_img(img, over1=None, over2=None, display='mricron'):
     data = nib.load(img).get_fdata()
-    img_opt = ['-x', '-c', '-0',
-               '-l', '{:.4f}'.format(np.min(data)), '-h', '{:.4f}'.format(np.max(data)), '-b', '60']
-    # img_opt = ['-x', '-c', '-0', '-l', '0', '-h', '1000', '-b', '60']
+    if display == 'mricron':
+        img_opt = ['-x', '-c', '-0',
+                   '-l', '{:.4f}'.format(np.min(data)), '-h', '{:.4f}'.format(np.max(data)), '-b', '60']
+    elif display == 'fsleyes':
+        img_opt = ['-cm', 'red', '-a', '40', ]
+        fsleyes_command = img
+        if over1 is not None:
+            fsleyes_command += ' ' + over1
+        if over2 is not None:
+            fsleyes_command += ' ' + over2
+        fsleyes_command = fsleyes_command + img_opt
+        print('Mricron command: "{}"'.format(fsleyes_command))
+        process = subprocess.run(fsleyes_command,
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE,
+                                 universal_newlines=True)
+        return process
+    else:
+        raise ValueError(f'{display} display tool unkown')
     label_opt = []
     change_dir = True
     current_dir = os.getcwd()
@@ -115,7 +131,7 @@ def display_img(img, over1=None, over2=None):
     return process
 
 
-def display_one_output(output_dir, number=None, string=None, recursive=False):
+def display_one_output(output_dir, number=None, string=None, recursive=False, display='mricron'):
     # from monai.transforms import AddChannel, LoadImage
     # from monai.metrics import DiceMetric
     # import torch
@@ -158,7 +174,7 @@ def display_one_output(output_dir, number=None, string=None, recursive=False):
     # dice_metric.reset()
     if img is None:
         raise ValueError('input image not found')
-    process = display_img(img, over1=label, over2=seg)
+    process = display_img(img, over1=label, over2=seg, display=display)
     return process
 
 

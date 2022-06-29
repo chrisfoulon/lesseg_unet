@@ -459,7 +459,7 @@ def compare_img_to_cluster(img, cluster, comp_meth='dice', cluster_thr=None, fli
     if cluster_thr is not None and len(np.unique(cluster_data)) > 2:
         cluster_data[cluster_data < cluster_thr] = 0
         cluster_data[cluster_data >= cluster_thr] = 1
-    img_data = torch.tensor([img_data])
+    img_data = torch.tensor(np.ndarray([img_data]))
     cluster_data = torch.tensor([cluster_data])
     if comp_meth == 'distance':
         hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean")

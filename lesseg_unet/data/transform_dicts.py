@@ -1080,7 +1080,7 @@ unetr_cc = {
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (0, 1),
-            # 'clamp_quantile': (.001, .999)
+            'clamp_quantile': (.001, .999)
             }
          },
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
