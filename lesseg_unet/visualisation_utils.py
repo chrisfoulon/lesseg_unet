@@ -85,20 +85,21 @@ def display_img(img, over1=None, over2=None, display='mricron'):
                    '-l', '{:.4f}'.format(np.min(data)), '-h', '{:.4f}'.format(np.max(data)), '-b', '60']
     elif display == 'fsleyes':
         img_opt = ['-cm', 'red', '-a', '40', ]
-        fsleyes_command = img
+        fsleyes_command = ['fsleyes', img]
         if over1 is not None:
-            fsleyes_command += ' ' + over1
+            fsleyes_command += [over1]
         if over2 is not None:
-            fsleyes_command += ' ' + over2
+            fsleyes_command += [over2]
         fsleyes_command = fsleyes_command + img_opt
-        print('Mricron command: "{}"'.format(fsleyes_command))
+        print('Fsleyes command: "{}"'.format(fsleyes_command))
         process = subprocess.run(fsleyes_command,
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE,
-                                 universal_newlines=True)
+                                 universal_newlines=True
+                                 )
         return process
     else:
-        raise ValueError(f'{display} display tool unkown')
+        raise ValueError(f'{display} display tool unknown')
     label_opt = []
     change_dir = True
     current_dir = os.getcwd()
