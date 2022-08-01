@@ -84,14 +84,14 @@ def display_img(img, over1=None, over2=None, display='mricron'):
         img_opt = ['-x', '-c', '-0',
                    '-l', '{:.4f}'.format(np.min(data)), '-h', '{:.4f}'.format(np.max(data)), '-b', '60']
     elif display == 'fsleyes':
-        img_opt = ['-cm', 'red', '-a', '40', ]
-        fsleyes_command = ['fsleyes', img]
+        # img_opt = ['-cm', 'red', '-a', '40', ]
+        fsleyes_command = ['fsleyes', str(img)]
         if over1 is not None:
-            fsleyes_command += [over1]
+            fsleyes_command += [str(over1), '-cm', 'red', '-a', '40']
         if over2 is not None:
-            fsleyes_command += [over2]
-        fsleyes_command = fsleyes_command + img_opt
-        print('Fsleyes command: "{}"'.format(fsleyes_command))
+            fsleyes_command += [str(over2), '-cm', 'green', '-a', '40']
+        fsleyes_command = fsleyes_command  # + img_opt
+        print('Fsleyes command: "{}"'.format(' '.join(fsleyes_command)))
         process = subprocess.run(fsleyes_command,
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE,
