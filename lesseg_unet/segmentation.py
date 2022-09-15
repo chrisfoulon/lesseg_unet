@@ -454,7 +454,7 @@ def validation_loop(img_path_list: Sequence,
                           'val_min_dice',
                           'val_max_dice']
     df = pd.DataFrame(columns=perf_measure_names)
-    loop_df_columns = ['dice_metric', 'volume', 'distance']
+    loop_df_columns = ['core_filename', 'dice_metric', 'volume', 'distance']
     loop_df = pd.DataFrame(columns=loop_df_columns)
     img_vol_dict = {}
     model.eval()
