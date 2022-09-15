@@ -459,15 +459,8 @@ def compare_img_to_cluster(img, cluster, comp_meth='dice', cluster_thr=None, fli
     if cluster_thr is not None and len(np.unique(cluster_data)) > 2:
         cluster_data[cluster_data < cluster_thr] = 0
         cluster_data[cluster_data >= cluster_thr] = 1
-    print(f'Array type: {type(img_data)}')
-    print(f'Array shape: {img_data.shape}')
-    try:
-        img_data = torch.tensor([img_data])
-        cluster_data = torch.tensor([cluster_data])
-    except TypeError as e:
-        print('type error')
-        img_data = np.array(np.ndarray([img_data]))
-        cluster_data = np.array([cluster_data])
+    img_data = torch.tensor([img_data])
+    cluster_data = torch.tensor([cluster_data])
     if comp_meth == 'distance':
         hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean")
         return hausdorff_metric(y_pred=[img_data], y=[cluster_data]).item()
