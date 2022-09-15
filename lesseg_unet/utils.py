@@ -462,7 +462,7 @@ def compare_img_to_cluster(img, cluster, comp_meth='dice', cluster_thr=None, fli
     print(f'Array type: {type(img_data)}')
     print(f'Array shape: {img_data.shape}')
     try:
-        img_data = torch.tensor(np.ndarray([img_data]))
+        img_data = torch.tensor([img_data])
         cluster_data = torch.tensor([cluster_data])
     except TypeError as e:
         print('type error')
