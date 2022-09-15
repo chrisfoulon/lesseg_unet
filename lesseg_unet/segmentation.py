@@ -384,7 +384,7 @@ def validation_loop(img_path_list: Sequence,
                     device: str = None,
                     batch_size: int = 1,
                     dataloader_workers: int = 8,
-                    bad_dice_treshold: float = 0.1,
+                    bad_dice_treshold: float = 0,
                     clamping: tuple = None,
                     segmentation_area=True,
                     **kwargs
@@ -496,7 +496,8 @@ def validation_loop(img_path_list: Sequence,
             output_dict_data['image'] = val_data['image']
             output_dict_data['label'] = val_output_convert[0]
             # Loop dataframe filling
-            loop_df = loop_df.append({'dice_metric': dice,
+            loop_df = loop_df.append({'core_filename': input_filename.split('input_')[-1],
+                                      'dice_metric': dice,
                                       'volume': vol_output,
                                       'distance': dist}, ignore_index=True)
 
