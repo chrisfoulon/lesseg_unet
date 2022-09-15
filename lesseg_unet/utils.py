@@ -460,7 +460,7 @@ def compare_img_to_cluster(img, cluster, comp_meth='dice', cluster_thr=None, fli
         cluster_data[cluster_data < cluster_thr] = 0
         cluster_data[cluster_data >= cluster_thr] = 1
     print(f'Array type: {type(img_data)}')
-    print(f'Array dtype: {img_data.dtype}')
+    print(f'Array shape: {img_data.shape}')
     try:
         img_data = torch.tensor(np.ndarray([img_data]))
         cluster_data = torch.tensor([cluster_data])
