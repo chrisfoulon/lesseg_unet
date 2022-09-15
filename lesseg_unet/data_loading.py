@@ -33,7 +33,7 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
             matching_les_list = []
         else:
             matching_les_list = [str(les) for les in seg_path_list
-                                 if Path(img).name.split('nii')[0] in Path(les).name.split('nii')[0]]
+                                 if Path(img).name.split('.nii')[0] in Path(les).name.split('.nii')[0]]
         if len(matching_les_list) == 0:
             controls.append(img)
         elif len(matching_les_list) > 1:

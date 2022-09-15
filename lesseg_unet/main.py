@@ -125,7 +125,7 @@ def main():
     #     logging.info(f'{args.default_label} will be used to fill up missing labels')
     # if args.create_default_label:
     #     args.default_label = output_root
-    #     print(f'Missing labels will be replace by an zero-filled default image')
+    #     print(f'Missing labels will be replaced by a zero-filled default image')
     if not output_root.is_dir():
         raise ValueError('{} is not an existing directory and could not be created'.format(output_root))
     cache_dir = None
