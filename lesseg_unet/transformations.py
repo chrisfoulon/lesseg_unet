@@ -162,13 +162,14 @@ class CoordConvAlt(Transform):
     """
     Implement CordConv
     """
+
     def __init__(
-        self,
-        spatial_channels: Tuple[int] = (1, 2, 3),
+            self,
+            spatial_channels: Tuple[int] = (1, 2, 3),
     ) -> None:
         self.spatial_channels = spatial_channels
 
-    def __call__(self,  img: Union[np.ndarray, torch.Tensor]) -> Union[np.ndarray, torch.Tensor]:
+    def __call__(self, img: Union[np.ndarray, torch.Tensor]) -> Union[np.ndarray, torch.Tensor]:
         """
         Apply the transform to `img`.
         """
@@ -184,8 +185,8 @@ class CoordConvAlt(Transform):
             channel_size = img.shape[dim]
             range = np.arange(channel_size)
             non_channel_dims = list(set(np.arange(img.ndim)).difference([dim]))
-            channel = ones * np.expand_dims(range,  non_channel_dims)
-            channel = channel/channel_size - 0.5
+            channel = ones * np.expand_dims(range, non_channel_dims)
+            channel = channel / channel_size - 0.5
             coord_channels[i] = channel
 
         return torch.Tensor(np.concatenate((img, coord_channels), axis=0))
@@ -210,7 +211,7 @@ class CoordConvAltd(MapTransform):
         self.coord_conv = CoordConvAlt(spatial_channels)
 
     def __call__(
-        self, data: Mapping[Hashable, Union[np.ndarray, torch.Tensor]]
+            self, data: Mapping[Hashable, Union[np.ndarray, torch.Tensor]]
     ) -> Dict[Hashable, Union[np.ndarray, torch.Tensor]]:
         d = dict(data)
         for key in self.keys:
@@ -288,12 +289,12 @@ class SpatialCrop(Transform):
     """
 
     def __init__(
-        self,
-        roi_center: Union[Sequence[int], torch.Tensor, None] = None,
-        roi_size: Union[Sequence[int], torch.Tensor, None] = None,
-        roi_start: Union[Sequence[int], torch.Tensor, None] = None,
-        roi_end: Union[Sequence[int], torch.Tensor, None] = None,
-        roi_slices: Optional[Sequence[slice]] = None,
+            self,
+            roi_center: Union[Sequence[int], torch.Tensor, None] = None,
+            roi_size: Union[Sequence[int], torch.Tensor, None] = None,
+            roi_start: Union[Sequence[int], torch.Tensor, None] = None,
+            roi_end: Union[Sequence[int], torch.Tensor, None] = None,
+            roi_slices: Optional[Sequence[slice]] = None,
     ) -> None:
         """
         Args:
@@ -389,11 +390,11 @@ class MySpatialPad(Transform):
     """
 
     def __init__(
-        self,
-        spatial_size: Union[Sequence[int], int],
-        method: Union[Method, str] = Method.SYMMETRIC,
-        mode: Union[TorchPadMode, str] = TorchPadMode.CONSTANT,
-        **torch_kwargs,
+            self,
+            spatial_size: Union[Sequence[int], int],
+            method: Union[Method, str] = Method.SYMMETRIC,
+            mode: Union[TorchPadMode, str] = TorchPadMode.CONSTANT,
+            **torch_kwargs,
     ) -> None:
         self.spatial_size = spatial_size
         self.method: Method = Method(method)
@@ -451,13 +452,13 @@ class MyNormalizeIntensity(Transform):
     """
 
     def __init__(
-        self,
-        out_min_max: Union[float, Tuple[float, float]] = None,
-        clamp_quantile: Tuple[float, float] = None,
-        nonzero: bool = False,
-        dtype: str = 'float32',
-        in_min_max: Union[float, Tuple[float, float]] = None,
-        no_std: bool = True
+            self,
+            out_min_max: Union[float, Tuple[float, float]] = None,
+            clamp_quantile: Tuple[float, float] = None,
+            nonzero: bool = False,
+            dtype: str = 'float32',
+            in_min_max: Union[float, Tuple[float, float]] = None,
+            no_std: bool = True
     ) -> None:
         self.in_min_max = in_min_max
         if in_min_max is not None:
@@ -572,15 +573,15 @@ class MyNormalizeIntensityd(MapTransform):
     """
 
     def __init__(
-        self,
-        keys: KeysCollection,
-        out_min_max: Union[float, Tuple[float, float]] = None,
-        clamp_quantile: Tuple[float, float] = None,
-        nonzero: bool = False,
-        dtype: str = 'float32',
-        in_min_max: Union[float, Tuple[float, float]] = None,
-        no_std: bool = True,
-        allow_missing_keys: bool = False,
+            self,
+            keys: KeysCollection,
+            out_min_max: Union[float, Tuple[float, float]] = None,
+            clamp_quantile: Tuple[float, float] = None,
+            nonzero: bool = False,
+            dtype: str = 'float32',
+            in_min_max: Union[float, Tuple[float, float]] = None,
+            no_std: bool = True,
+            allow_missing_keys: bool = False,
     ) -> None:
         super().__init__(keys, allow_missing_keys)
         self.normalizer = MyNormalizeIntensity(out_min_max, clamp_quantile, nonzero, dtype, in_min_max, no_std)
@@ -608,11 +609,11 @@ class MyRandHistogramShiftd(RandomizableTransform, MapTransform):
     """
 
     def __init__(
-        self,
-        keys: KeysCollection,
-        num_control_points: Union[Tuple[int, int], int] = 10,
-        prob: float = 0.1,
-        allow_missing_keys: bool = False,
+            self,
+            keys: KeysCollection,
+            num_control_points: Union[Tuple[int, int], int] = 10,
+            prob: float = 0.1,
+            allow_missing_keys: bool = False,
     ) -> None:
         MapTransform.__init__(self, keys, allow_missing_keys)
         RandomizableTransform.__init__(self, prob)
@@ -654,7 +655,7 @@ class MyRandHistogramShiftd(RandomizableTransform, MapTransform):
         return d
 
 
-class PrintDim(MapTransform,  InvertibleTransform):
+class PrintDim(MapTransform, InvertibleTransform):
     """
     Set every above threshold voxel to 1.0
 
@@ -708,6 +709,7 @@ class TorchIOWrapper(Randomizable, MapTransform):
     keys: a list of keys to apply the trans to, e.g. keys = ["img"]
     p: probability that this trans will be applied (to all the keys listed in 'keys')
     """
+
     def __init__(self, keys: KeysCollection, trans: Callable, p: float = 1) -> None:
         super().__init__(keys)
         self.keys = keys
@@ -742,6 +744,7 @@ class RandTransformWrapper(Randomizable, MapTransform):
     keys: a list of keys to apply the trans to, e.g. keys = ["img"]
     p: probability that this trans will be applied (to all the keys listed in 'keys')
     """
+
     def __init__(self, trans: Callable) -> None:
         prob_key = None
         keys_key = None
@@ -822,7 +825,7 @@ class ThreeDHaircutd(Randomizable, MapTransform):
             g_prob = self.prob[0]
             one_cut_prob = 1
             # Now we make an array with the different values to get each of the cut axes permutations
-            permutations_values = [1/3, 1/3, 1/3, 0, 0, 0, 0]
+            permutations_values = [1 / 3, 1 / 3, 1 / 3, 0, 0, 0, 0]
             if len(self.prob) > 1:
                 two_cut_prob = self.prob[1]
                 one_cut_prob -= two_cut_prob
@@ -838,7 +841,7 @@ class ThreeDHaircutd(Randomizable, MapTransform):
             permutations_values[2] *= one_cut_prob
         else:
             g_prob = self.prob
-            permutations_values = [1/3, 1/3, 1/3, 0, 0, 0, 0]
+            permutations_values = [1 / 3, 1 / 3, 1 / 3, 0, 0, 0, 0]
         self._do_transform = self.R.random() < g_prob
         if self._do_transform:
             # self.index_0 = int(self.R.uniform(low=0, high=self.index_range[0]))
@@ -952,6 +955,7 @@ def_spatial_size = [96, 128, 96]
 
 # def_spatial_size = [96, 96, 96]
 min_small_crop_size = [int(0.95 * d) for d in def_spatial_size]
+
 
 # .74 aspect ratio? maybe change to 96x128x96 or crop to 64cube and increase the epoch number by a lot
 
@@ -1090,16 +1094,18 @@ def train_transformd(hyper_param_dict=None, clamping=None, device=None):
     check_imports(hyper_param_dict)
     check_hyper_param_dict_shape(hyper_param_dict)
     seg_tr_dict = deepcopy(hyper_param_dict)
-    if clamping is not None:
-        for li in seg_tr_dict:
-            for di in seg_tr_dict[li]:
-                for tr in di:
-                    if tr == 'ToTensord':
-                        if device is not None:
-                            di[tr]['device'] = device
-                    if tr == 'MyNormalizeIntensityd':
-                        if clamping is not None and 'clamp_quantile' not in di[tr]:
-                            di[tr]['clamp_quantile'] = clamping
+    normalize_count = 0
+    for li in seg_tr_dict:
+        for di in seg_tr_dict[li]:
+            for tr in di:
+                if tr == 'ToTensord':
+                    if device is not None:
+                        di[tr]['device'] = device
+                if tr == 'MyNormalizeIntensityd':
+                    normalize_count += 1
+                    # if MyNormalizeIntensityd is called more than once, we do not want to clamp twice
+                    if clamping is not None and not normalize_count > 1:  # and 'clamp_quantile' not in di[tr]:
+                        di[tr]['clamp_quantile'] = clamping
     compose_list = []
     for d_list_name in seg_tr_dict:
         trs = trans_list_from_list(seg_tr_dict[d_list_name])
