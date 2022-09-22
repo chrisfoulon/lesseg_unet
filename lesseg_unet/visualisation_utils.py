@@ -342,7 +342,7 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, perf_measure='d
 
     pp = PdfPages(output_path)
     for cluster in cluster_dicts[0]:
-        fig, axes = plt.subplots(cluster_dicts//3, len(cluster_dicts), figsize=(15, 5), sharey='none')
+        fig, axes = plt.subplots(len(cluster_dicts)//3, len(cluster_dicts), figsize=(15, 5), sharey='none')
         fig.suptitle(cluster)
         for ind, cluster_dict in enumerate(cluster_dicts):
             perf_list = [d[perf_measure] for d in cluster_dict[cluster]]
