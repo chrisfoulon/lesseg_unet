@@ -457,7 +457,8 @@ class MyNormalizeIntensity(Transform):
         nonzero: bool = False,
         dtype: str = 'float32',
         in_min_max: Union[float, Tuple[float, float]] = None,
-        no_std: bool = True
+        no_std: bool = True,
+        interpolation='linear'
     ) -> None:
         self.in_min_max = in_min_max
         if in_min_max is not None:
@@ -485,6 +486,7 @@ class MyNormalizeIntensity(Transform):
         self.nonzero = nonzero
         self._dtype = dtype
         self.no_std = no_std
+        self.interpolation = interpolation
 
     def _normalize(self, img: Union[torch.Tensor, np.ndarray], no_std: bool = True) -> Union[torch.Tensor, np.ndarray]:
         img, pkg = get_data_and_pkg(img)
@@ -510,9 +512,11 @@ class MyNormalizeIntensity(Transform):
     def _clamp(self, img):
         img, pkg = get_data_and_pkg(img)
         if isinstance(img, np.ndarray):
-            cutoff = pkg.quantile(img, self.clamp_quantile)
+            cutoff = pkg.quantile(img, self.clamp_quantile, interpolation=self.interpolation)
         else:
-            cutoff = pkg.quantile(img, torch.tensor(self.clamp_quantile, device=img.device))
+            cutoff = pkg.quantile(img, torch.tensor(self.clamp_quantile, device=img.device),
+                                  interpolation=self.interpolation)
+            print('torch quantile')
         pkg.clip(img, *cutoff, out=img)
 
     def _rescale(

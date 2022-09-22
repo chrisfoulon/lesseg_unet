@@ -5,12 +5,17 @@ import subprocess
 from pathlib import Path
 import re
 from tqdm import tqdm
+from collections import defaultdict
 
 import numpy as np
+import pandas as pd
 import nibabel as nib
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+import seaborn as sns
 from scipy.ndimage import center_of_mass
 from bcblib.tools.nifti_utils import is_nifti
+from lesseg_unet.utils import LesionAreaFinder
 # from bcblib.tools.visualisation import mricron_display
 
 
@@ -254,3 +259,98 @@ def sort_seg_following_folder_tree(root_dir, output_dir, img_pref='input_', labe
             output_subfolder_list = sort_output_images(f_list, Path(output_dir, d.relative_to(root_dir)), l_list,
                                                        output_subfolder_list)
 
+
+def perf_per_cluster(perf_df, seg_folder, cluster_by_labels=False, save_path=None):
+    """
+
+    Parameters
+    ----------
+    perf_df : Union[pd.DataFrame, str, pathlib.Path]
+        Usually, 'val_perf_individual_measures.csv' from the segmentation pipeline. Dataframe/csv file path containing
+        the columns 'core_filename', 'dice_metric', 'volume', and 'distance'
+    seg_folder : Union[str, pathlib.Path]
+        Path to the segmentation folder containing 'input_', 'label_', and 'output_' files (they can be in separate
+        directories)
+    cluster_by_labels : bool
+        If True, the clusters will be calculated on the ground truth labels instead of the prediction
+    save_path : Union[None, str, pathlib.Path]
+        [Optional] Path to a file or to a folder (in which case the filename will be 'pred_cluster_to_img_perf.npy',
+         it will be 'label_cluster_to_img_perf.npy' if cluster_by_labels is True)
+    Returns
+    -------
+    cluster_to_img_perf : list of dict
+        list of dictionaries with the following keys: {'b1000', 'label', 'segmentation', 'dice', 'volume', 'distance'}
+        for each segmentation
+    """
+    if isinstance(perf_df, str) or isinstance(perf_df, Path):
+        perf_df = pd.read_csv(perf_df, header=0, index_col=0)
+    file_list = [f for f in Path(seg_folder).rglob('*') if is_nifti(f)]
+    cluster_to_img_perf = defaultdict(list)
+    for row in tqdm(perf_df.iloc):
+        core_name = row['core_filename']
+        img = [f for f in file_list if f.name.startswith('input_') and core_name in f.name][0]
+        lbl = [f for f in file_list if f.name.startswith('label_') and core_name in f.name][0]
+        seg = [f for f in file_list if f.name.startswith('output_') and core_name in f.name][0]
+        cluster_name = img.parent.name
+        cluster_to_img_perf[cluster_name].append({'b1000': str(img), 'label': str(lbl), 'segmentation': str(seg),
+                                                  'dice': row['dice_metric'], 'volume': row['volume'],
+                                                  'distance': row['distance']})
+    pref = 'pred'
+    if cluster_by_labels:
+        les_area_finder = LesionAreaFinder()
+        labels_cluster_dict = defaultdict(list)
+        img_dict_list = []
+        for cluster in cluster_to_img_perf:
+            img_dict_list += cluster_to_img_perf[cluster]
+        for d in tqdm(img_dict_list):
+            data = nib.load(d['label']).get_fdata()
+            cluster_name = les_area_finder.get_img_area(data)
+            labels_cluster_dict[cluster_name].append(d)
+        cluster_to_img_perf = dict(labels_cluster_dict)
+        pref = 'label'
+    if save_path is not None:
+        if Path(save_path).is_dir():
+            np.save(str(Path(save_path, f'{pref}_cluster_to_img_perf.npy')), cluster_to_img_perf)
+        else:
+            np.save(save_path, cluster_to_img_perf)
+    return cluster_to_img_perf
+
+
+def get_bilateral_cluster_dict(cluster_dict):
+    bilateral_cluster_dict = {}
+    for cluster in cluster_dict:
+        if cluster.startswith('L_') or cluster.startswith('R_'):
+            bilat_clu_name = cluster[2:]
+            if bilat_clu_name not in bilateral_cluster_dict:
+                bilateral_cluster_dict[bilat_clu_name] = \
+                    cluster_dict['L_' + bilat_clu_name] + cluster_dict['R_' + bilat_clu_name]
+        else:
+            bilateral_cluster_dict[cluster] = cluster_dict[cluster]
+    return bilateral_cluster_dict
+
+
+def plot_perf_per_cluster(cluster_dicts, set_names, output_path, perf_measure='dice', bilateral=True):
+    if isinstance(cluster_dicts, dict):
+        cluster_dicts = [cluster_dicts]
+    if isinstance(set_names, str):
+        set_names = [set_names]
+    if bilateral:
+        bilateral_cluster_dicts = []
+        for cluster_dict in cluster_dicts:
+            bilateral_cluster_dicts.append(get_bilateral_cluster_dict(cluster_dict))
+        cluster_dicts = bilateral_cluster_dicts
+
+    pp = PdfPages(output_path)
+    for cluster in cluster_dicts[0]:
+        fig, axes = plt.subplots(cluster_dicts//3, len(cluster_dicts), figsize=(15, 5), sharey='none')
+        fig.suptitle(cluster)
+        for ind, cluster_dict in enumerate(cluster_dicts):
+            perf_list = [d[perf_measure] for d in cluster_dict[cluster]]
+            sns.violinplot(ax=axes[ind], data=perf_list)
+            axes[ind].set_title(set_names[ind])
+            axes[ind].set_xlabel(f'{len(cluster_dict[cluster])} images | mean: {np.mean(perf_list)}')
+            axes[ind].set_ylabel(perf_measure)
+
+        # plt.show()
+        pp.savefig(fig)
+    pp.close()
