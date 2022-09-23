@@ -15,7 +15,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import seaborn as sns
 from scipy.ndimage import center_of_mass
 from bcblib.tools.nifti_utils import is_nifti
-from lesseg_unet.utils import LesionAreaFinder
+from lesseg_unet.utils import LesionAreaFinder, open_json, save_json
 # from bcblib.tools.visualisation import mricron_display
 
 
@@ -356,3 +356,36 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, perf_measure='d
         # plt.show()
         pp.savefig(fig)
     pp.close()
+
+
+def check_and_exclude(seg_dict, root_seg_path, exclude_json_path, bmask_path):
+    seg_dict_path = seg_dict
+    seg_dict = open_json(seg_dict)
+    bmask = nib.load(bmask_path).get_fdata()
+    if Path(exclude_json_path).is_file():
+        exclude_dict = open_json(exclude_json_path)
+    else:
+        if not Path(exclude_json_path).parent.is_dir():
+            os.makedirs(Path(exclude_json_path).parent)
+        exclude_dict = {}
+    to_check_keys = []
+    for k in tqdm(list(seg_dict.keys())):
+        if k not in exclude_dict:
+            pred_data = nib.load(root_seg_path + seg_dict[k]['segmentation']).get_fdata()
+            if np.count_nonzero(pred_data[bmask == 0]):
+                to_check_keys.append(k)
+    for k in tqdm(to_check_keys):
+        display_img(root_seg_path + seg_dict[k]['b1000'], root_seg_path + seg_dict[k]['segmentation'],
+                    display='fsleyes')
+        resp = input(f'Keep[keep] or exclude[{set([exclude_dict[kk]["exclude"] for kk in exclude_dict])}]?')
+        if resp.lower() in ['quit', 'q', 'exit']:
+            break
+        if resp.lower() != 'keep':
+            exclude_dict[k] = seg_dict[k]
+            exclude_dict[k]['exclude'] = resp
+            del seg_dict[k]
+    print(len(exclude_dict))
+    save_json(exclude_json_path, exclude_dict)
+    save_json(seg_dict_path, seg_dict)
+    return exclude_dict
+

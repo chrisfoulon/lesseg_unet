@@ -15,7 +15,6 @@ from scipy.stats import entropy
 import monai.transforms
 from monai.metrics import HausdorffDistanceMetric, DiceMetric
 from bcblib.tools.nifti_utils import is_nifti, centre_of_mass_difference
-from lesseg_unet.visualisation_utils import plot_seg
 from lesseg_unet.net import create_unet_model, create_unetr_model
 import nibabel as nib
 import torch
@@ -26,6 +25,20 @@ from bcblib.tools.nifti_utils import load_nifti
 validation_input_pref = 'nib_input_'
 validation_label_pref = 'nib_label_'
 validation_output_pref = 'nib_output_'
+
+
+def open_json(path):
+    with open(path, 'r') as j:
+        return json.load(j)
+
+
+def save_json(path, d):
+    with open(path, 'w+') as j:
+        return json.dump(d, j, indent=4)
+
+
+def save_list(path, li):
+    np.savetxt(path, li, delimiter='\n', fmt='%s')
 
 
 def kwargs_argparse(unknown_param_list):
@@ -125,23 +138,6 @@ def save_img_lbl_seg_to_nifti(image: Union[np.ndarray, torch.Tensor],
         save_tensor_to_nifti(seg, out_output_path, val_output_affine)
         out_paths_list.append(str(out_output_path))
     return out_paths_list
-
-
-def save_img_lbl_seg_to_png(image: Union[np.ndarray, torch.Tensor],
-                            output_dir: Union[str, bytes, os.PathLike],
-                            filename: str,
-                            label: Union[np.ndarray, torch.Tensor] = None,
-                            seg: Union[np.ndarray, torch.Tensor] = None) -> None:
-    input_np = image
-    if isinstance(image, torch.Tensor):
-        input_np = image[0, 0, :, :, :].cpu().detach().numpy()
-    label_np = label
-    if isinstance(label, torch.Tensor):
-        label_np = label[0, 0, :, :, :].cpu().detach().numpy()
-    seg_np = seg
-    if isinstance(seg, torch.Tensor):
-        seg_np = seg[0, 0, :, :, :].cpu().detach().numpy()
-    plot_seg(input_np, label_np, seg_np, Path(output_dir, filename + '.png'))
 
 
 def save_json_transform_dict(transform_dict, output_path):
