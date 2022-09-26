@@ -358,10 +358,10 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, perf_measure='d
     pp.close()
 
 
-def check_and_exclude(seg_dict, root_seg_path, exclude_json_path, bmask_path):
-    seg_dict_path = seg_dict
-    seg_dict = open_json(seg_dict)
-    bmask = nib.load(bmask_path).get_fdata()
+def check_and_exclude(seg_dict, root_seg_path, seg_dict_path=None, exclude_json_path=None):
+    if not isinstance(seg_dict, dict):
+        seg_dict_path = seg_dict
+        seg_dict = open_json(seg_dict_path)
     if Path(exclude_json_path).is_file():
         exclude_dict = open_json(exclude_json_path)
     else:
@@ -372,7 +372,7 @@ def check_and_exclude(seg_dict, root_seg_path, exclude_json_path, bmask_path):
     for k in tqdm(list(seg_dict.keys())):
         if k not in exclude_dict:
             pred_data = nib.load(root_seg_path + seg_dict[k]['segmentation']).get_fdata()
-            if np.count_nonzero(pred_data[bmask == 0]):
+            if np.count_nonzero(pred_data):
                 to_check_keys.append(k)
     for k in tqdm(to_check_keys):
         display_img(root_seg_path + seg_dict[k]['b1000'], root_seg_path + seg_dict[k]['segmentation'],
