@@ -6,16 +6,18 @@ from pathlib import Path
 import re
 from tqdm import tqdm
 from collections import defaultdict
+import importlib.resources as rsc
 
 import numpy as np
 import pandas as pd
 import nibabel as nib
+from nilearn.plotting import plot_stat_map
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import seaborn as sns
 from scipy.ndimage import center_of_mass
 from bcblib.tools.nifti_utils import is_nifti
-from lesseg_unet.utils import LesionAreaFinder, open_json, save_json
+from lesseg_unet.utils import LesionAreaFinder
 # from bcblib.tools.visualisation import mricron_display
 
 
@@ -329,7 +331,8 @@ def get_bilateral_cluster_dict(cluster_dict):
     return bilateral_cluster_dict
 
 
-def plot_perf_per_cluster(cluster_dicts, set_names, output_path, perf_measure='dice', bilateral=True):
+def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster_overlap=True,
+                          perf_measure='dice', bilateral=True):
     if isinstance(cluster_dicts, dict):
         cluster_dicts = [cluster_dicts]
     if isinstance(set_names, str):
@@ -340,13 +343,35 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, perf_measure='d
             bilateral_cluster_dicts.append(get_bilateral_cluster_dict(cluster_dict))
         cluster_dicts = bilateral_cluster_dicts
 
+    archetypes = None
+    if display_cluster_overlap:
+        with rsc.path('lesseg_unet.data', 'Final_lesion_clusters') as p:
+            clusters_dir = str(p.resolve())
+        archetypes = [p for p in Path(clusters_dir).iterdir() if is_nifti(p)]
+
     pp = PdfPages(output_path)
     for cluster in cluster_dicts[0]:
-        fig, axes = plt.subplots(len(cluster_dicts)//4 + 1, len(cluster_dicts), figsize=(15, 5), sharey='none')
+        img_plot_num = 0
+        cluster_archetype = None
+        if archetypes is not None:
+            img_plot_num = 2
+            cluster_archetype = [p for p in archetypes if p.name == cluster + '.nii.gz']
+
+        fig, axes = plt.subplots((len(cluster_dicts) + img_plot_num)//4 + 1, len(cluster_dicts),
+                                 figsize=(15, 5), sharey='none')
         if not isinstance(axes, np.ndarray):
             axes = np.ndarray([axes])
         fig.suptitle(cluster)
+        if archetypes is not None:
+            img_plot_num = 2
+            # TODO make an empty plot for the 'outside_clusters' images
+            plot_stat_map(nib.load(cluster_archetype[0]), display_mode='yz', axes=axes[0])
+            # axes[0].set_title(set_names[ind])
+            # axes[0].set_xlabel(f'{len(cluster_dict[cluster])} images | mean: {np.mean(perf_list)}')
+            # axes[0].set_ylabel(perf_measure)
+            # TODO calculate overlap in the cluster and plot it in axes[1]
         for ind, cluster_dict in enumerate(cluster_dicts):
+            ind = ind + img_plot_num
             perf_list = [d[perf_measure] for d in cluster_dict[cluster]]
             sns.violinplot(ax=axes[ind], data=perf_list)
             axes[ind].set_title(set_names[ind])
@@ -356,36 +381,3 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, perf_measure='d
         # plt.show()
         pp.savefig(fig)
     pp.close()
-
-
-def check_and_exclude(seg_dict, root_seg_path, seg_dict_path=None, exclude_json_path=None):
-    if not isinstance(seg_dict, dict):
-        seg_dict_path = seg_dict
-        seg_dict = open_json(seg_dict_path)
-    if Path(exclude_json_path).is_file():
-        exclude_dict = open_json(exclude_json_path)
-    else:
-        if not Path(exclude_json_path).parent.is_dir():
-            os.makedirs(Path(exclude_json_path).parent)
-        exclude_dict = {}
-    to_check_keys = []
-    for k in tqdm(list(seg_dict.keys())):
-        if k not in exclude_dict:
-            pred_data = nib.load(root_seg_path + seg_dict[k]['segmentation']).get_fdata()
-            if np.count_nonzero(pred_data):
-                to_check_keys.append(k)
-    for k in tqdm(to_check_keys):
-        display_img(root_seg_path + seg_dict[k]['b1000'], root_seg_path + seg_dict[k]['segmentation'],
-                    display='fsleyes')
-        resp = input(f'Keep[keep] or exclude[{set([exclude_dict[kk]["exclude"] for kk in exclude_dict])}]?')
-        if resp.lower() in ['quit', 'q', 'exit']:
-            break
-        if resp.lower() != 'keep':
-            exclude_dict[k] = seg_dict[k]
-            exclude_dict[k]['exclude'] = resp
-            del seg_dict[k]
-    print(len(exclude_dict))
-    save_json(exclude_json_path, exclude_dict)
-    save_json(seg_dict_path, seg_dict)
-    return exclude_dict
-
