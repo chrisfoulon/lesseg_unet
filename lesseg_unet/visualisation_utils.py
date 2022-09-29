@@ -362,8 +362,6 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
 
         fig, axes = plt.subplots((len(cluster_dicts) + img_plot_num)//4 + 1, len(cluster_dicts) + img_plot_num,
                                  figsize=(15, 5), sharey='none')
-        print(axes)
-        print(type(axes))
         if not isinstance(axes, np.ndarray):
             axes = np.ndarray([axes])
         fig.suptitle(cluster)
@@ -381,6 +379,7 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
             # axes[0].set_ylabel(perf_measure)
             # TODO calculate overlap in the cluster and plot it in axes[1]
         for ind, cluster_dict in enumerate(cluster_dicts):
+            print(ind)
             ind = ind + img_plot_num
             perf_list = [d[perf_measure] for d in cluster_dict[cluster]]
             sns.violinplot(ax=axes[ind], data=perf_list)
