@@ -354,6 +354,7 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
         img_plot_num = 0
         cluster_archetype = None
         overlap_image = None
+        seg_path_list = []
         if archetypes is not None:
             img_plot_num = 2
             cluster_archetype = [p for p in archetypes if p.name == cluster + '.nii.gz']
@@ -367,15 +368,17 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
         fig.suptitle(cluster)
         if archetypes is not None:
             img_plot_num = 2
-            if cluster == 'outside_clusters':
+            if cluster == 'outside_clusters' or len(seg_path_list) == 0:
                 axes[0].axis('off')
             else:
                 plot_stat_map(nib.load(cluster_archetype[0]), display_mode='yz', axes=axes[0], draw_cross=False,
                               colorbar=True)
             axes[0].set_title('Archetype')
-
-            plot_stat_map(overlap_image, display_mode='yz', axes=axes[1], draw_cross=False, colorbar=True)
-            axes[1].set_title('Prediction overlap')
+            if len(seg_path_list) != 0:
+                plot_stat_map(overlap_image, display_mode='yz', axes=axes[1], draw_cross=False, colorbar=True)
+                axes[1].set_title('Prediction overlap')
+            else:
+                axes[1].axis('off')
         for ind, cluster_dict in enumerate(cluster_dicts):
             perf_list = [d[perf_measure] for d in cluster_dict[cluster]]
             if len(perf_list) == 0:
