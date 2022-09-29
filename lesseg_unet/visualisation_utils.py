@@ -365,7 +365,10 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
         if archetypes is not None:
             img_plot_num = 2
             # TODO make an empty plot for the 'outside_clusters' images
-            plot_stat_map(nib.load(cluster_archetype[0]), display_mode='yz', axes=axes[0])
+            if cluster == 'outside_clusters':
+                axes[0].axis('off')
+            else:
+                plot_stat_map(nib.load(cluster_archetype[0]), display_mode='yz', axes=axes[0])
             # axes[0].set_title(set_names[ind])
             # axes[0].set_xlabel(f'{len(cluster_dict[cluster])} images | mean: {np.mean(perf_list)}')
             # axes[0].set_ylabel(perf_measure)

@@ -13,8 +13,9 @@ setup(
     include_package_data=True,
     packages=find_packages(exclude=['__pycache__']),
     # einops is only for the UNETR
-    install_requires=['nibabel>=3', 'numpy', 'nilearn', 'monai>=0.6', 'bcblib', 'torch>=1.8', 'torchio',
-                      'torchvision', 'matplotlib', 'pandas', 'scipy', 'tqdm', 'einops', 'python-dateutil', 'seaborn'],
+    install_requires=['nibabel>=3', 'numpy', 'nilearn==0.9.0', 'monai==0.7.0', 'bcblib', 'torch==1.10.2', 'torchio==0.18.73',
+                      'torchvision==0.11.3', 'matplotlib', 'pandas', 'scipy', 'tqdm', 'einops', 'python-dateutil',
+                      'seaborn'],
     package_data={
         # If any package contains *.txt or *.rst files, include them:
         "": ["*.txt", "*.rst", "*.md"],
