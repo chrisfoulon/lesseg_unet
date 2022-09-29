@@ -18,7 +18,7 @@ import seaborn as sns
 from scipy.ndimage import center_of_mass
 from bcblib.tools.nifti_utils import is_nifti
 from lesseg_unet.utils import LesionAreaFinder
-# from bcblib.tools.visualisation import mricron_display
+from bcblib.tools.nifti_utils import nifti_overlap_images
 
 
 def open_tensorboard_page(log_dir, port='8008', new_browser_window=False):
@@ -353,13 +353,17 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
     for cluster in cluster_dicts[0]:
         img_plot_num = 0
         cluster_archetype = None
+        overlap_image = None
         if archetypes is not None:
             img_plot_num = 2
             cluster_archetype = [p for p in archetypes if p.name == cluster + '.nii.gz']
             seg_path_list = [d['segmentation'] for d in cluster_dicts[0][cluster]]
+            overlap_image = nifti_overlap_images(seg_path_list)
 
         fig, axes = plt.subplots((len(cluster_dicts) + img_plot_num)//4 + 1, len(cluster_dicts),
                                  figsize=(15, 5), sharey='none')
+        print(axes)
+        print(type(axes))
         if not isinstance(axes, np.ndarray):
             axes = np.ndarray([axes])
         fig.suptitle(cluster)
@@ -370,6 +374,8 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
                 axes[0].axis('off')
             else:
                 plot_stat_map(nib.load(cluster_archetype[0]), display_mode='yz', axes=axes[0])
+
+            plot_stat_map(overlap_image, display_mode='yz', axes=axes[1])
             # axes[0].set_title(set_names[ind])
             # axes[0].set_xlabel(f'{len(cluster_dict[cluster])} images | mean: {np.mean(perf_list)}')
             # axes[0].set_ylabel(perf_measure)
