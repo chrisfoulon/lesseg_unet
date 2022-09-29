@@ -358,7 +358,7 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
             img_plot_num = 2
             cluster_archetype = [p for p in archetypes if p.name == cluster + '.nii.gz']
             seg_path_list = [d['segmentation'] for d in cluster_dicts[0][cluster]]
-            overlap_image = nifti_overlap_images(seg_path_list)
+            overlap_image = nifti_overlap_images(seg_path_list, mean=True)
 
         fig, axes = plt.subplots((len(cluster_dicts) + img_plot_num)//4 + 1, len(cluster_dicts) + img_plot_num,
                                  figsize=(15, 5), sharey='none')
@@ -367,7 +367,6 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
         fig.suptitle(cluster)
         if archetypes is not None:
             img_plot_num = 2
-            # TODO make an empty plot for the 'outside_clusters' images
             if cluster == 'outside_clusters':
                 axes[0].axis('off')
             else:
@@ -375,10 +374,6 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
                               colorbar=True)
 
             plot_stat_map(overlap_image, display_mode='yz', axes=axes[1], draw_cross=False, colorbar=True)
-            # axes[0].set_title(set_names[ind])
-            # axes[0].set_xlabel(f'{len(cluster_dict[cluster])} images | mean: {np.mean(perf_list)}')
-            # axes[0].set_ylabel(perf_measure)
-            # TODO calculate overlap in the cluster and plot it in axes[1]
         for ind, cluster_dict in enumerate(cluster_dicts):
             perf_list = [d[perf_measure] for d in cluster_dict[cluster]]
             sns.violinplot(ax=axes[ind + img_plot_num], data=perf_list)

@@ -273,7 +273,6 @@ def segmentation_loop(img_path_list: Sequence,
         device = torch.device(device)
 
     logging.info(f'Torch device used for this segmentation: {str(device)}')
-    original_size = original_size
     val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
     val_ds = data_loading.init_segmentation(img_path_list, img_pref, transform_dict, clamping=clamping)
     val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
