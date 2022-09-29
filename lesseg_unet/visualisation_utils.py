@@ -372,10 +372,15 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
             else:
                 plot_stat_map(nib.load(cluster_archetype[0]), display_mode='yz', axes=axes[0], draw_cross=False,
                               colorbar=True)
+            axes[0].set_title('Archetype')
 
             plot_stat_map(overlap_image, display_mode='yz', axes=axes[1], draw_cross=False, colorbar=True)
+            axes[1].set_title('Prediction overlap')
         for ind, cluster_dict in enumerate(cluster_dicts):
             perf_list = [d[perf_measure] for d in cluster_dict[cluster]]
+            if len(perf_list) == 0:
+                axes[ind + img_plot_num].axis('off')
+                continue
             sns.violinplot(ax=axes[ind + img_plot_num], data=perf_list)
             axes[ind + img_plot_num].set_title(set_names[ind])
             axes[ind + img_plot_num].set_xlabel(f'{len(cluster_dict[cluster])} images | mean: {np.mean(perf_list)}')
