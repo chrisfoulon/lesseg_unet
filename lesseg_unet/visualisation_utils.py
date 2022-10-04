@@ -371,11 +371,10 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
             if cluster == 'outside_clusters' or len(seg_path_list) == 0:
                 axes[0].axis('off')
             else:
-                plot_stat_map(nib.load(cluster_archetype[0]), display_mode='yz', axes=axes[0], draw_cross=False,
-                              colorbar=True)
+                plot_stat_map(nib.load(cluster_archetype[0]), display_mode='yz', axes=axes[0], draw_cross=False,)
             axes[0].set_title('Archetype')
             if len(seg_path_list) != 0:
-                plot_stat_map(overlap_image, display_mode='yz', axes=axes[1], draw_cross=False, colorbar=True)
+                plot_stat_map(overlap_image, display_mode='yz', axes=axes[1], draw_cross=False)
                 axes[1].set_title('Prediction overlap')
             else:
                 axes[1].axis('off')
