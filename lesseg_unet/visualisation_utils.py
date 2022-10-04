@@ -359,7 +359,7 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
             img_plot_num = 2
             cluster_archetype = [p for p in archetypes if p.name == cluster + '.nii.gz']
             seg_path_list = [d['segmentation'] for d in cluster_dicts[0][cluster]]
-            overlap_image = nifti_overlap_images(seg_path_list, mean=True)
+            overlap_image = nifti_overlap_images(seg_path_list, mean=False)
 
         fig, axes = plt.subplots((len(cluster_dicts) + img_plot_num)//4 + 1, len(cluster_dicts) + img_plot_num,
                                  figsize=(15, 5), sharey='none')
