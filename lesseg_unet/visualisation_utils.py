@@ -17,7 +17,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import seaborn as sns
 from scipy.ndimage import center_of_mass
 from bcblib.tools.nifti_utils import is_nifti
-from lesseg_unet.utils import LesionAreaFinder
+from lesseg_unet.utils import LesionAreaFinder, open_json
 from bcblib.tools.nifti_utils import nifti_overlap_images
 
 
@@ -391,3 +391,45 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
         # plt.show()
         pp.savefig(fig)
     pp.close()
+
+
+def plot_archetype_and_cluster_seg(cluster_dicts, output_path, bilateral=True):
+    if not isinstance(cluster_dicts, dict):
+        cluster_dicts = open_json(cluster_dicts)
+    if bilateral:
+        bilateral_cluster_dicts = []
+        for cluster_dict in cluster_dicts:
+            bilateral_cluster_dicts.append(get_bilateral_cluster_dict(cluster_dict))
+        cluster_dicts = bilateral_cluster_dicts
+
+    with rsc.path('lesseg_unet.data', 'Final_lesion_clusters') as p:
+        clusters_dir = str(p.resolve())
+    archetypes = [p for p in Path(clusters_dir).iterdir() if is_nifti(p)]
+
+    pp = PdfPages(output_path)
+    for cluster in cluster_dicts[0]:
+        img_plot_num = 0
+        cluster_archetype = None
+        overlap_image = None
+        seg_path_list = []
+        img_plot_num = 2
+        cluster_archetype = [p for p in archetypes if p.name == cluster + '.nii.gz']
+        seg_path_list = [d['segmentation'] for d in cluster_dicts[0][cluster]]
+        overlap_image = nifti_overlap_images(seg_path_list, mean=False)
+
+        fig, axes = plt.subplots(2, 1,
+                                 figsize=(15, 5), sharey='none')
+        fig.suptitle(cluster)
+        img_plot_num = 2
+        if cluster == 'outside_clusters' or len(seg_path_list) == 0:
+            axes[0].axis('off')
+        else:
+            plot_stat_map(nib.load(cluster_archetype[0]), display_mode='yz', axes=axes[0], draw_cross=False, )
+        axes[0].set_title('Archetype')
+        if len(seg_path_list) != 0:
+            plot_stat_map(overlap_image, display_mode='yz', axes=axes[1], draw_cross=False)
+            axes[1].set_title('Prediction overlap')
+        else:
+            axes[1].axis('off')
+        pp.savefig(fig)
+
