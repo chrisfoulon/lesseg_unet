@@ -410,7 +410,7 @@ def plot_archetype_and_cluster_seg(cluster_dict, output_path, bilateral=True):
         seg_path_list = [d['segmentation'] for d in cluster_dict[cluster]]
         overlap_image = nifti_overlap_images(seg_path_list, mean=False)
 
-        fig, axes = plt.subplots(2, 1,
+        fig, axes = plt.subplots(1, 2,
                                  figsize=(15, 5), sharey='none')
         fig.suptitle(cluster)
         if cluster == 'outside_clusters' or len(seg_path_list) == 0:
