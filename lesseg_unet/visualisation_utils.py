@@ -393,7 +393,7 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
     pp.close()
 
 
-def plot_archetype_and_cluster_seg(cluster_dict, output_path, bilateral=True):
+def plot_archetype_and_cluster_seg(cluster_dict, output_path, key='segmentation', bilateral=True, input_folder=''):
     if not isinstance(cluster_dict, dict):
         cluster_dict = open_json(cluster_dict)
     if bilateral:
@@ -407,7 +407,7 @@ def plot_archetype_and_cluster_seg(cluster_dict, output_path, bilateral=True):
     pp = PdfPages(output_path)
     for cluster in cluster_dict:
         cluster_archetype = [p for p in archetypes if p.name == cluster + '.nii.gz']
-        seg_path_list = [d['segmentation'] for d in cluster_dict[cluster]]
+        seg_path_list = [Path(input_folder, d[key]) for d in cluster_dict[cluster]]
         overlap_image = nifti_overlap_images(seg_path_list, mean=False)
 
         fig, axes = plt.subplots(1, 2,
