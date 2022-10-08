@@ -424,4 +424,5 @@ def plot_archetype_and_cluster_seg(cluster_dict, output_path, bilateral=True):
         else:
             axes[1].axis('off')
         pp.savefig(fig)
+    pp.close()
 
