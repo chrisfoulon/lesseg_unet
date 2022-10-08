@@ -393,34 +393,26 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
     pp.close()
 
 
-def plot_archetype_and_cluster_seg(cluster_dicts, output_path, bilateral=True):
-    if not isinstance(cluster_dicts, dict):
-        cluster_dicts = open_json(cluster_dicts)
+def plot_archetype_and_cluster_seg(cluster_dict, output_path, bilateral=True):
+    if not isinstance(cluster_dict, dict):
+        cluster_dict = open_json(cluster_dict)
     if bilateral:
-        bilateral_cluster_dicts = []
-        for cluster_dict in cluster_dicts:
-            bilateral_cluster_dicts.append(get_bilateral_cluster_dict(cluster_dict))
-        cluster_dicts = bilateral_cluster_dicts
+        bilateral_cluster_dicts = get_bilateral_cluster_dict(cluster_dict)
+        cluster_dict = bilateral_cluster_dicts
 
     with rsc.path('lesseg_unet.data', 'Final_lesion_clusters') as p:
         clusters_dir = str(p.resolve())
     archetypes = [p for p in Path(clusters_dir).iterdir() if is_nifti(p)]
 
     pp = PdfPages(output_path)
-    for cluster in cluster_dicts[0]:
-        img_plot_num = 0
-        cluster_archetype = None
-        overlap_image = None
-        seg_path_list = []
-        img_plot_num = 2
+    for cluster in cluster_dict:
         cluster_archetype = [p for p in archetypes if p.name == cluster + '.nii.gz']
-        seg_path_list = [d['segmentation'] for d in cluster_dicts[0][cluster]]
+        seg_path_list = [d['segmentation'] for d in cluster_dict[cluster]]
         overlap_image = nifti_overlap_images(seg_path_list, mean=False)
 
         fig, axes = plt.subplots(2, 1,
                                  figsize=(15, 5), sharey='none')
         fig.suptitle(cluster)
-        img_plot_num = 2
         if cluster == 'outside_clusters' or len(seg_path_list) == 0:
             axes[0].axis('off')
         else:
