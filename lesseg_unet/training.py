@@ -874,7 +874,7 @@ def training(img_path_list: Sequence,
                                                         device=transformations_device)
 
     """POST TRANSFORMATIONS"""
-    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
+    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
 
     """DATA LOADING"""
     if img_pref is not None and img_pref != '':
@@ -992,6 +992,7 @@ def training(img_path_list: Sequence,
                 if display_training:
                     img_name = Path(batch_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
                     # print(batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy())
+
                     plot_anat(
                         nib.Nifti1Image(inputs[0, 0, ...].cpu().detach().numpy(),
                                         batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy()),
@@ -1000,7 +1001,7 @@ def training(img_path_list: Sequence,
                         # cut_coords=(1, 1, 6)
                     )
                     # display.savefig('pretty_brain.png')
-                    print(f'inputs shape: {inputs.shape}')
+                    # print(f'inputs shape: {inputs.shape}')
                     # plot_2d_or_3d_image(inputs[0:,...], 12, writer, tag='tr_inputs')
                     # input(img_name + '  continue??')
                 logit_outputs = model(inputs)

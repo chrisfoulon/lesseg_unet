@@ -24,7 +24,7 @@ default_unet_hyper_params = {
 default_unetr_hyper_params = {
     'in_channels': 1,
     'out_channels': 1,
-    'img_size': (32, 32, 32),
+    'img_size': (96, 96, 96),
     'feature_size': 32,
     'hidden_size': 768,
     'mlp_dim': 3072,
