@@ -991,7 +991,7 @@ def training(img_path_list: Sequence,
                     device, non_blocking=non_blocking)
                 if display_training:
                     img_name = Path(batch_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
-                    print(batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy())
+                    # print(batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy())
                     plot_anat(
                         nib.Nifti1Image(inputs[0, 0, ...].cpu().detach().numpy(),
                                         batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy()),
