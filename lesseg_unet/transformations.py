@@ -498,10 +498,9 @@ class MyNormalizeIntensity(Transform):
         slices = (img != 0) if self.nonzero else pkg.ones(img.shape, dtype=pkg.bool)
         if not pkg.any(slices):
             return img
-
         _sub = pkg.mean(img[slices])
         if no_std:
-            _div = 1
+            _div = 1.0
         else:
             if pkg == np:
                 _div = pkg.std(img[slices])
@@ -509,9 +508,10 @@ class MyNormalizeIntensity(Transform):
                 # torch std is applying a correction that numpy does not.
                 # Disabling it to get the same results between the 2
                 _div = pkg.std(img[slices], unbiased=False)
-            if _div == 0.0:
-                _div = 1.0
-        img[slices] = (img[slices] - _sub) / _div
+        if _div == 1.0 or _div == 0.0:
+            img[slices] = (img[slices] - _sub)
+        else:
+            img[slices] = (img[slices] - _sub) / _div
         return img
 
     def _clamp(self, img):
