@@ -521,7 +521,6 @@ class MyNormalizeIntensity(Transform):
         else:
             cutoff = pkg.quantile(img, torch.tensor(self.clamp_quantile, device=img.device),
                                   interpolation=self.interpolation)
-            print('torch quantile')
         pkg.clip(img, *cutoff, out=img)
 
     def _rescale(

@@ -1168,7 +1168,7 @@ unetr_cc = {
 }
 
 unetr_cc_std_norm = deepcopy(unetr_cc)
-unetr_cc_std_norm['last_transform'][1]['MyNormalizeIntensityd']['no_std'] = True
+unetr_cc_std_norm['last_transform'][1]['MyNormalizeIntensityd']['no_std'] = False
 
 unetr_cc_patches = deepcopy(unetr_cc)
 del unetr_cc_patches['first_transform'][2]
