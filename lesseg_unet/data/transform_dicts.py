@@ -1,5 +1,6 @@
 from math import radians
 from copy import deepcopy
+
 high_prob = .2
 low_prob = .1
 tiny_prob = 0.05
@@ -28,7 +29,7 @@ full_hyper_dict = {
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
-         },
+        },
         {'NormalizeIntensityd': {'keys': ['image']}},
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'Fisrt resize'}},
@@ -45,7 +46,7 @@ full_hyper_dict = {
             'keys': ['image'],
             'num_control_points': (10, 15),
             'prob': low_prob}
-         },
+        },
         # TODO maybe 'Orientation': {} but it would interact with the flip,
         {'RandAffined': {
             'keys': ['image', 'label'],
@@ -56,7 +57,7 @@ full_hyper_dict = {
             'scale_range': 0.05,
             'padding_mode': 'border',
             'as_tensor_output': False}
-         },
+        },
         # TODO check
         # {'RandFlipd': {
         #     'keys': ['image', 'label'],
@@ -82,7 +83,7 @@ full_hyper_dict = {
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
             'as_tensor_output': False}
-         },
+        },
         # {'SqueezeDimd':
         #     {'keys': ["image", "label"],
         #      'dim': 0}
@@ -98,7 +99,7 @@ full_hyper_dict = {
             'mean': 0,
             'std': (0.01, 0.1),
             'p': low_prob}
-         },
+        },
         {'RandomGhosting': {
             'include': ['image'],
             'p': tiny_prob,
@@ -108,17 +109,17 @@ full_hyper_dict = {
             'include': ['image', 'label'],
             'std': (0.1, 0.5),
             'p': low_prob}
-         },
+        },
         {'RandomBiasField': {
             'include': ['image'],
             'p': high_prob,
             'coefficients': 0.5}
-         },
+        },
         {'RandomMotion': {
             'include': ['image', 'label'],
             'p': low_prob,
             'num_transforms': 1}
-         },
+        },
         {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'After TORCHIO'}},
         # {'SqueezeDimd': {'keys': ["image", "label"],
@@ -133,7 +134,7 @@ full_hyper_dict = {
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.5}
-         },
+        },
         # {'Resized': {
         #     'keys': ['image', 'label'],
         #     'spatial_size': def_spatial_size,
@@ -142,7 +143,7 @@ full_hyper_dict = {
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
-         },
+        },
         # 'ToTensord': {'keys': ['image', 'label']},
 
         # 'PrintDim': {'keys': ['image', 'label'], 'msg': 'after binarize and resize'},
@@ -178,7 +179,7 @@ minimal_hyper_dict = {
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
-         },
+        },
         # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER RESIZE'}},
         # {'NormalizeIntensityd': {'keys': ['image']}},
@@ -186,8 +187,8 @@ minimal_hyper_dict = {
             'keys': ['image'],
             'out_min_max': (-1, 1),
             # 'clamp_quantile': (.001, .999)
-            }
-         },
+        }
+        },
         # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE Binarize'}},
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
@@ -202,18 +203,18 @@ minimal_hyper_dict = {
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.25}
-         },
+        },
         {'ToNumpyd': {'keys': ['image', 'label']}},
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
-         },
+        },
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER second binarized'}},
         # {'NormalizeIntensityd': {'keys': ['image']}},
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (-1, 1)}
-         },
+        },
         {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'THE END'}},
     ]
@@ -232,7 +233,7 @@ new_dict = {
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
-         },
+        },
         {'NormalizeIntensityd': {'keys': ['image']}},
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
     ],
@@ -322,11 +323,11 @@ new_dict = {
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.5}
-         },
+        },
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
-         },
+        },
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER binarized'}},
         {'NormalizeIntensityd': {'keys': ['image']}},
     ]
@@ -345,7 +346,7 @@ curated_dict = {
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
-         },
+        },
         # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER RESIZE'}},
         # {'NormalizeIntensityd': {'keys': ['image']}},
@@ -353,8 +354,8 @@ curated_dict = {
             'keys': ['image'],
             'out_min_max': (-1, 1),
             # 'clamp_quantile': (.001, .999)
-            }
-         },
+        }
+        },
         # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE Binarize'}},
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
@@ -381,7 +382,7 @@ curated_dict = {
             'keys': ['image'],
             'num_control_points': (10, 15),
             'prob': low_prob}
-         },
+        },
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER HIST SHIFT'}},
         # {'RandBiasFieldd': {
         #     'keys': ['image'],
@@ -398,8 +399,8 @@ curated_dict = {
             'translate_range': 0.05,
             'scale_range': 0.05,
             'padding_mode': 'border',
-            }  # was False
-         },
+        }  # was False
+        },
         {'Rand3DElasticd': {
             'keys': ['image', 'label'],
             'sigma_range': (1, 3),
@@ -412,8 +413,8 @@ curated_dict = {
             'padding_mode': "reflection",
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
-            }
-         },
+        }
+        },
     ],
     'torchio_transform': [
         {'ToTensord': {'keys': ['image', 'label']}},
@@ -438,7 +439,7 @@ curated_dict = {
             'include': ['image'],
             'p': low_prob,
             'coefficients': 0.1}
-         },
+        },
         # {'RandomMotion': {
         #     'include': ['image', 'label'],
         #     'p': low_prob,
@@ -456,18 +457,18 @@ curated_dict = {
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.25}
-         },
+        },
         {'ToNumpyd': {'keys': ['image', 'label']}},
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
-         },
+        },
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER second binarized'}},
         # {'NormalizeIntensityd': {'keys': ['image']}},
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (-1, 1)}
-         },
+        },
         {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'THE END'}},
     ]
@@ -488,7 +489,6 @@ for di in std_dict['last_transform']:
 std_dict_cc = deepcopy(std_dict)
 std_dict_cc['last_transform'].append({'CoordConvd': {'keys': ['image']}})
 
-
 mod_full_dict = deepcopy(full_hyper_dict)
 mod_full_dict['last_transform'] = curated_dict['last_transform']
 mod_full_dict['first_transform'] = curated_dict['first_transform']
@@ -505,7 +505,7 @@ test_dict = {
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
-         },
+        },
         {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER RESIZE'}},
         {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE NORMALIZE start time'}},
@@ -526,7 +526,7 @@ test_dict = {
             'scale_range': 0.05,
             'padding_mode': 'border',
             'as_tensor_output': True}  # was False
-         },
+        },
         {'Rand3DElasticd': {
             'keys': ['image', 'label'],
             'sigma_range': (1, 3),
@@ -540,7 +540,7 @@ test_dict = {
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
             'as_tensor_output': True}
-         },
+        },
     ],
     'torchio_transform': [
         {'ToTensord': {'keys': ['image', 'label']}},
@@ -548,17 +548,17 @@ test_dict = {
             'include': ['image'],
             'p': 1,
             'coefficients': 0.1}
-         },
+        },
     ],
     'last_transform': [
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.25}
-         },
+        },
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
-         },
+        },
         {'MyNormalizeIntensityd': {'keys': ['image']}},
     ]
 }
@@ -581,8 +581,8 @@ crop_test = {
             'keys': ['image'],
             'out_min_max': (-1, 1),
             # 'clamp_quantile': (.001, .999)
-            }
-         },
+        }
+        },
         # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE Binarize'}},
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
@@ -609,7 +609,7 @@ crop_test = {
             'keys': ['image'],
             'num_control_points': (10, 15),
             'prob': low_prob}
-         },
+        },
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER HIST SHIFT'}},
         # {'RandBiasFieldd': {
         #     'keys': ['image'],
@@ -626,7 +626,7 @@ crop_test = {
             'scale_range': 0.05,
             'padding_mode': 'border',
             'as_tensor_output': True}  # was False
-         },
+        },
         {'Rand3DElasticd': {
             'keys': ['image', 'label'],
             'sigma_range': (1, 3),
@@ -640,7 +640,7 @@ crop_test = {
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
             'as_tensor_output': True}
-         },
+        },
     ],
     'torchio_transform': [
         {'ToTensord': {'keys': ['image', 'label']}},
@@ -665,7 +665,7 @@ crop_test = {
             'include': ['image'],
             'p': low_prob,
             'coefficients': 0.1}
-         },
+        },
         # {'RandomMotion': {
         #     'include': ['image', 'label'],
         #     'p': low_prob,
@@ -684,7 +684,7 @@ crop_test = {
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.25}
-         },
+        },
         # {'ResizeWithPadOrCropd': {
         #     'keys': ['image', 'label'],
         #     'spatial_size': def_spatial_size}
@@ -695,7 +695,7 @@ crop_test = {
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (-1, 1)}
-         },
+        },
         # {'ToNumpyd': {'keys': ['image', 'label']}},
         {'ToTensord': {'keys': ['image', 'label']}},
     ],
@@ -716,7 +716,6 @@ crop_test = {
 crop_test_cc = deepcopy(crop_test)
 crop_test_cc['last_transform'].append({'CoordConvd': {'keys': ['image']}})
 
-
 unetr_dict = {
     'first_transform': [
         {'LoadImaged': {
@@ -735,8 +734,8 @@ unetr_dict = {
             'keys': ['image'],
             'out_min_max': (0, 1),
             # 'clamp_quantile': (.001, .999)
-            }
-         },
+        }
+        },
         # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE Binarize'}},
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
@@ -763,7 +762,7 @@ unetr_dict = {
             'keys': ['image'],
             'num_control_points': (10, 15),
             'prob': low_prob}
-         },
+        },
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER HIST SHIFT'}},
         # {'RandBiasFieldd': {
         #     'keys': ['image'],
@@ -780,7 +779,7 @@ unetr_dict = {
             'scale_range': 0.05,
             'padding_mode': 'border',
             'as_tensor_output': True}  # was False
-         },
+        },
         {'Rand3DElasticd': {
             'keys': ['image', 'label'],
             'sigma_range': (1, 3),
@@ -794,7 +793,7 @@ unetr_dict = {
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
             'as_tensor_output': True}
-         },
+        },
     ],
     'torchio_transform': [
         {'ToTensord': {'keys': ['image', 'label']}},
@@ -819,7 +818,7 @@ unetr_dict = {
             'include': ['image'],
             'p': low_prob,
             'coefficients': 0.1}
-         },
+        },
         # {'RandomMotion': {
         #     'include': ['image', 'label'],
         #     'p': low_prob,
@@ -838,7 +837,7 @@ unetr_dict = {
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.25}
-         },
+        },
         # {'ResizeWithPadOrCropd': {
         #     'keys': ['image', 'label'],
         #     'spatial_size': def_spatial_size}
@@ -849,7 +848,7 @@ unetr_dict = {
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (0, 1)}
-         },
+        },
         # {'ToNumpyd': {'keys': ['image', 'label']}},
         {'ToTensord': {'keys': ['image', 'label']}},
     ],
@@ -867,27 +866,27 @@ unetr_dict = {
             'keys': ["image", "label"],
             'spatial_axis': [0],
             'prob': low_prob}
-         },
+        },
         {'RandFlipd': {
             'keys': ["image", "label"],
             'spatial_axis': [1],
             'prob': low_prob}
-         },
+        },
         {'RandFlipd': {
             'keys': ["image", "label"],
             'spatial_axis': [2],
             'prob': low_prob}
-         },
+        },
         {'RandRotate90d': {
             'keys': ["image", "label"],
             'prob': low_prob,
             'max_k': 3}
-         },
+        },
         {'RandShiftIntensityd': {
             'keys': ["image"],
             'offsets': 0.10,
             'prob': high_prob}
-         },
+        },
     ],
 }
 
@@ -912,8 +911,8 @@ unetr_dict_lastflip = {
             'keys': ['image'],
             'out_min_max': (0, 1),
             # 'clamp_quantile': (.001, .999)
-            }
-         },
+        }
+        },
         # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE Binarize'}},
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
@@ -940,7 +939,7 @@ unetr_dict_lastflip = {
             'keys': ['image'],
             'num_control_points': (10, 15),
             'prob': low_prob}
-         },
+        },
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'AFTER HIST SHIFT'}},
         # {'RandBiasFieldd': {
         #     'keys': ['image'],
@@ -957,7 +956,7 @@ unetr_dict_lastflip = {
             'scale_range': 0.05,
             'padding_mode': 'border',
             'as_tensor_output': True}  # was False
-         },
+        },
         {'Rand3DElasticd': {
             'keys': ['image', 'label'],
             'sigma_range': (1, 3),
@@ -971,7 +970,7 @@ unetr_dict_lastflip = {
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
             'as_tensor_output': True}
-         },
+        },
     ],
     'torchio_transform': [
         {'ToTensord': {'keys': ['image', 'label']}},
@@ -996,7 +995,7 @@ unetr_dict_lastflip = {
             'include': ['image'],
             'p': low_prob,
             'coefficients': 0.1}
-         },
+        },
         # {'RandomMotion': {
         #     'include': ['image', 'label'],
         #     'p': low_prob,
@@ -1009,7 +1008,7 @@ unetr_dict_lastflip = {
             'keys': ["image", "label"],
             'spatial_axis': [0],
             'prob': low_prob}
-         },
+        },
         # {'RandFlipd': {
         #     'keys': ["image", "label"],
         #     'spatial_axis': [1],
@@ -1029,7 +1028,7 @@ unetr_dict_lastflip = {
             'keys': ["image"],
             'offsets': 0.10,
             'prob': high_prob}
-         },
+        },
     ],
     'last_transform': [
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'end of augmentations'}},
@@ -1042,7 +1041,7 @@ unetr_dict_lastflip = {
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.25}
-         },
+        },
         # {'ResizeWithPadOrCropd': {
         #     'keys': ['image', 'label'],
         #     'spatial_size': def_spatial_size}
@@ -1053,7 +1052,7 @@ unetr_dict_lastflip = {
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (0, 1)}
-         },
+        },
         # {'ToNumpyd': {'keys': ['image', 'label']}},
         {'ToTensord': {'keys': ['image', 'label']}},
     ],
@@ -1076,13 +1075,13 @@ unetr_cc = {
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
-         },
+        },
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (0, 1),
             # 'clamp_quantile': (.001, .999)
-            }
-         },
+        }
+        },
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
     ],
     'monai_transform': [
@@ -1090,7 +1089,7 @@ unetr_cc = {
             'keys': ['image'],
             'num_control_points': (10, 15),
             'prob': low_prob}
-         },
+        },
         # TODO maybe 'Orientation': {} but it would interact with the flip,
         {'RandAffined': {
             'keys': ['image', 'label'],
@@ -1101,7 +1100,7 @@ unetr_cc = {
             'scale_range': 0.05,
             'padding_mode': 'border',
             'mode': 'nearest'}  # was False
-         },
+        },
         {'Rand3DElasticd': {
             'keys': ['image', 'label'],
             'sigma_range': (1, 3),
@@ -1115,8 +1114,8 @@ unetr_cc = {
             'mode': 'nearest',
             # 'padding_mode': "border",
             # 'padding_mode': "zeros",
-            }
-         },
+        }
+        },
     ],
     'torchio_transform': [
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'PrintDim before ToTensord'}},
@@ -1125,25 +1124,25 @@ unetr_cc = {
             'include': ['image'],
             'p': low_prob,
             'coefficients': 0.1}
-         },
+        },
         {'RandomNoise': {
             'include': ['image'],
             'p': low_prob,
             'mean': 0.0,
             'std': (0, 0.1)}
-         },
+        },
     ],
     'unetr_transform': [
         {'RandFlipd': {
             'keys': ["image", "label"],
             'spatial_axis': [0],
             'prob': low_prob}
-         },
+        },
         {'RandShiftIntensityd': {
             'keys': ["image"],
             'offsets': 0.10,
             'prob': high_prob}
-         },
+        },
         # {'RandRicianNoised': {
         #     'keys': ['image'],
         #     'prob': low_prob,
@@ -1157,11 +1156,11 @@ unetr_cc = {
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.25}
-         },
+        },
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (0, 1)}
-         },
+        },
         {'ToTensord': {'keys': ['image', 'label']}},
         {'CoordConvd': {'keys': ['image']}}
     ],
@@ -1174,24 +1173,24 @@ unetr_cc_std_norm['last_transform'][1]['MyNormalizeIntensityd']['no_std'] = Fals
 unetr_cc_patches = deepcopy(unetr_cc)
 del unetr_cc_patches['first_transform'][2]
 unetr_cc_patches.update({'crop': [
-        {'RandCropByPosNegLabeld': {
-            'keys': ['image', 'label'],
-            'label_key': 'label',
-            'spatial_size': [80, 80, 80],
-            'pos': 1,
-            'neg': 1,
-            'num_samples': 4}},
-        {'RandFlipd': {
-            'keys': ["image", "label"],
-            'spatial_axis': [1],
-            'prob': low_prob}
-         },
-        {'RandFlipd': {
-            'keys': ["image", "label"],
-            'spatial_axis': [2],
-            'prob': low_prob}
-         },
-    ],
+    {'RandCropByPosNegLabeld': {
+        'keys': ['image', 'label'],
+        'label_key': 'label',
+        'spatial_size': [80, 80, 80],
+        'pos': 1,
+        'neg': 1,
+        'num_samples': 4}},
+    {'RandFlipd': {
+        'keys': ["image", "label"],
+        'spatial_axis': [1],
+        'prob': low_prob}
+    },
+    {'RandFlipd': {
+        'keys': ["image", "label"],
+        'spatial_axis': [2],
+        'prob': low_prob}
+    },
+],
 })
 
 low_prob = high_prob = tiny_prob = 1
@@ -1203,13 +1202,13 @@ unetr_aug_test = {
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
-         },
+        },
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (0, 1),
             # 'clamp_quantile': (.001, .999)
-            }
-         },
+        }
+        },
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
     ],
     'monai_transform': [
@@ -1217,7 +1216,7 @@ unetr_aug_test = {
             'keys': ['image'],
             'num_control_points': (10, 15),
             'prob': low_prob}
-         },
+        },
         # TODO maybe 'Orientation': {} but it would interact with the flip,
         {'RandAffined': {
             'keys': ['image', 'label'],
@@ -1228,7 +1227,7 @@ unetr_aug_test = {
             'scale_range': 0.05,
             'padding_mode': 'border',
             'mode': 'nearest'}  # was False
-         },
+        },
         {'Rand3DElasticd': {
             'keys': ['image', 'label'],
             'sigma_range': (1, 3),
@@ -1242,8 +1241,8 @@ unetr_aug_test = {
             'mode': 'nearest',
             # 'padding_mode': "border",
             # 'padding_mode': "zeros"
-            }
-         },
+        }
+        },
     ],
     'torchio_transform': [
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'PrintDim before ToTensord'}},
@@ -1252,25 +1251,25 @@ unetr_aug_test = {
             'include': ['image'],
             'p': low_prob,
             'coefficients': 0.1}
-         },
+        },
         {'RandomNoise': {
             'include': ['image'],
             'p': low_prob,
             'mean': 0.0,
             'std': (0, 0.1)}
-         },
+        },
     ],
     'unetr_transform': [
         {'RandFlipd': {
             'keys': ["image", "label"],
             'spatial_axis': [0],
             'prob': low_prob}
-         },
+        },
         {'RandShiftIntensityd': {
             'keys': ["image"],
             'offsets': 0.10,
             'prob': high_prob}
-         },
+        },
         # {'RandRicianNoised': {
         #     'keys': ['image'],
         #     'prob': low_prob,
@@ -1284,12 +1283,72 @@ unetr_aug_test = {
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.25}
-         },
+        },
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (0, 1)}
-         },
+        },
         {'ToTensord': {'keys': ['image', 'label']}},
         {'CoordConvd': {'keys': ['image']}}
     ],
 }
+
+unetr_no_aug = {
+    'first_transform': [
+        {'LoadImaged': {
+            'keys': ['image', 'label']}},
+        {'EnsureChannelFirstd': {'keys': ['image', 'label']}},
+        {'ResizeWithPadOrCropd': {
+            'keys': ['image', 'label'],
+            'spatial_size': def_spatial_size}
+        },
+        {'MyNormalizeIntensityd': {
+            'keys': ['image'],
+            'out_min_max': (0, 1),
+            # 'clamp_quantile': (.001, .999)
+        }
+        },
+        {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
+    ],
+    'mid_transform': [
+
+    ],
+    'last_transform': [
+        {'Binarized': {
+            'keys': ['label'],
+            'lower_threshold': 0.25}
+        },
+        {'MyNormalizeIntensityd': {
+            'keys': ['image'],
+            'out_min_max': (0, 1)}
+        },
+        {'ToTensord': {'keys': ['image', 'label']}},
+        {'CoordConvd': {'keys': ['image']}}
+    ],
+}
+
+unetr_gibbs = deepcopy(unetr_no_aug)
+unetr_gibbs['mid_transform'].append({
+    'RandGibbsNoised': {'keys': ['image'],
+                        'prob': high_prob,
+                        'alpha': (0.5, 0.7)
+                        },
+})
+
+unetr_spike = deepcopy(unetr_no_aug)
+unetr_spike['mid_transform'].append({
+    'RandKSpaceSpikeNoised': {'keys': ['image'],
+                              'global_prob': high_prob,
+                              'prob': 1,
+                              'intensity_range': (0.95, 1.10)
+                              },
+})
+
+unetr_rician = deepcopy(unetr_no_aug)
+unetr_rician['mid_transform'].append({
+    'RandRicianNoised': {'keys': ['image'],
+                         'prob': 1,
+                         'mean': 0.5,
+                         'std': 0.1
+                         },
+})

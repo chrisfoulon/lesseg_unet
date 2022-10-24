@@ -805,9 +805,14 @@ def training(img_path_list: Sequence,
             print(f'Displaying training images')
             display_training = True
             shuffle_training = False
+    one_loop = False
+    if 'one_loop' in kwargs:
+        v = kwargs['one_loop']
+        if v == 'True' or v == 1:
+            print(f'Stopping after one training loop')
+            one_loop = True
     # Apparently it can potentially improve the performance when the model does not change its size. (Source tuto UNETR)
     torch.backends.cudnn.benchmark = True
-
     """MODEL PARAMETERS"""
     # device = torch.device(f"cuda:{args.local_rank}")
     # torch.cuda.set_device(device)
@@ -992,14 +997,17 @@ def training(img_path_list: Sequence,
                 if display_training:
                     img_name = Path(batch_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
                     # print(batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy())
-
-                    plot_anat(
-                        nib.Nifti1Image(inputs[0, 0, ...].cpu().detach().numpy(),
-                                        batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy()),
-                        output_file=Path(img_dir, f'{img_name}.png'),
-                        display_mode='tiled', title=img_name, draw_cross=False,
-                        # cut_coords=(1, 1, 6)
-                    )
+                    nii = nib.Nifti1Image(inputs[0, 0, ...].cpu().detach().numpy(),
+                                          batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy())
+                    plot_anat(nii,
+                              output_file=Path(img_dir, f'{img_name}.png'),
+                              display_mode='tiled', title=img_name, draw_cross=False,
+                              # cut_coords=(1, 1, 6)
+                              )
+                    data = inputs[0, 0, ...].cpu().detach().numpy()
+                    print(img_name)
+                    print(np.mean(data))
+                    nib.save(nii, Path(img_dir, f'{img_name}.nii.gz'))
                     # display.savefig('pretty_brain.png')
                     # print(f'inputs shape: {inputs.shape}')
                     # plot_2d_or_3d_image(inputs[0:,...], 12, writer, tag='tr_inputs')
@@ -1021,7 +1029,8 @@ def training(img_path_list: Sequence,
             epoch_loss /= step
             print(f'epoch {epoch + 1} average loss: {epoch_loss:.4f}')
             writer.add_scalar('epoch_train_loss', epoch_loss, epoch + 1)
-
+            if one_loop:
+                return
             """VALIDATION"""
             if (epoch + 1) % val_interval == 0:
                 model.eval()
