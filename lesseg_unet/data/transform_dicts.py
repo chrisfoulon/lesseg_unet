@@ -1212,11 +1212,11 @@ unetr_aug_test = {
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
     ],
     'monai_transform': [
-        {'RandHistogramShiftd': {
-            'keys': ['image'],
-            'num_control_points': (10, 15),
-            'prob': low_prob}
-        },
+        # {'RandHistogramShiftd': {
+        #     'keys': ['image'],
+        #     'num_control_points': (10, 15),
+        #     'prob': low_prob}
+        # },
         # TODO maybe 'Orientation': {} but it would interact with the flip,
         {'RandAffined': {
             'keys': ['image', 'label'],
@@ -1243,6 +1243,22 @@ unetr_aug_test = {
             # 'padding_mode': "zeros"
         }
         },
+        {'RandGibbsNoised': {'keys': ['image'],
+                             'prob': high_prob,
+                             'alpha': (0.5, 0.7)
+                             },
+        },
+        {'RandRicianNoised': {'keys': ['image'],
+                              'prob': 1,
+                              'mean': 0.5,
+                              'std': 0.025
+                              },
+        },
+        {'RandKSpaceSpikeNoised': {'keys': ['image'],
+                                   'prob': high_prob,
+                                   'intensity_range': (8, 10),
+                                   },
+        }
     ],
     'torchio_transform': [
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'PrintDim before ToTensord'}},
@@ -1252,12 +1268,12 @@ unetr_aug_test = {
             'p': low_prob,
             'coefficients': 0.1}
         },
-        {'RandomNoise': {
-            'include': ['image'],
-            'p': low_prob,
-            'mean': 0.0,
-            'std': (0, 0.1)}
-        },
+        # {'RandomNoise': {
+        #     'include': ['image'],
+        #     'p': low_prob,
+        #     'mean': 0.5,
+        #     'std': (0, 0.025)}
+        # },
     ],
     'unetr_transform': [
         {'RandFlipd': {
@@ -1270,14 +1286,6 @@ unetr_aug_test = {
             'offsets': 0.10,
             'prob': high_prob}
         },
-        # {'RandRicianNoised': {
-        #     'keys': ['image'],
-        #     'prob': low_prob,
-        #     'mean': 0.0,
-        #     'std': 5,
-        #     'sample_std': True,
-        #     'relative': False}
-        #  },
     ],
     'last_transform': [
         {'Binarized': {
@@ -1338,17 +1346,43 @@ unetr_gibbs['mid_transform'].append({
 unetr_spike = deepcopy(unetr_no_aug)
 unetr_spike['mid_transform'].append({
     'RandKSpaceSpikeNoised': {'keys': ['image'],
-                              'global_prob': high_prob,
-                              'prob': 1,
-                              'intensity_range': (0.95, 1.10)
+                              'prob': high_prob,
+                              'intensity_range': (8, 10),
+                              # 'allow_missing_keys': True
                               },
 })
 
 unetr_rician = deepcopy(unetr_no_aug)
-unetr_rician['mid_transform'].append({
-    'RandRicianNoised': {'keys': ['image'],
-                         'prob': 1,
-                         'mean': 0.5,
-                         'std': 0.1
-                         },
+unetr_rician['mid_transform'].append({'RandRicianNoised': {'keys': ['image'],
+                                                           'prob': 1,
+                                                           'mean': 0.5,
+                                                           'std': 0.025,
+                                                           },
 })
+
+unetr_hist = deepcopy(unetr_no_aug)
+unetr_hist['mid_transform'].append(
+    {'RandHistogramShiftd': {
+            'keys': ['image'],
+            'num_control_points': (11, 13),
+            'prob': low_prob}
+     },
+)
+
+unetr_bias = deepcopy(unetr_no_aug)
+unetr_bias['mid_transform'].append(
+    {'RandomBiasField': {
+            'include': ['image'],
+            'p': low_prob,
+            'coefficients': 0.1}
+     },
+)
+
+unetr_shift = deepcopy(unetr_no_aug)
+unetr_shift['mid_transform'].append(
+    {'RandShiftIntensityd': {
+            'keys': ["image"],
+            'offsets': 0.10,
+            'prob': high_prob}
+     },
+)

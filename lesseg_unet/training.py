@@ -779,7 +779,7 @@ def training(img_path_list: Sequence,
              transform_dict=None,
              pretrained_point=None,
              device: str = None,
-             batch_size: int = 10,
+             batch_size: int = 1,
              val_batch_size: int = 1,
              epoch_num: int = 50,
              dataloader_workers: int = 4,
@@ -1002,7 +1002,7 @@ def training(img_path_list: Sequence,
                     plot_anat(nii,
                               output_file=Path(img_dir, f'{img_name}.png'),
                               display_mode='tiled', title=img_name, draw_cross=False,
-                              # cut_coords=(1, 1, 6)
+                              cut_coords=(50, 54, 45)
                               )
                     data = inputs[0, 0, ...].cpu().detach().numpy()
                     print(img_name)
