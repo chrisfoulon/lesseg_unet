@@ -1212,11 +1212,11 @@ unetr_aug_test = {
         {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
     ],
     'monai_transform': [
-        # {'RandHistogramShiftd': {
-        #     'keys': ['image'],
-        #     'num_control_points': (10, 15),
-        #     'prob': low_prob}
-        # },
+        {'RandHistogramShiftd': {
+            'keys': ['image'],
+            'num_control_points': 20,
+            'prob': low_prob}
+        },
         # TODO maybe 'Orientation': {} but it would interact with the flip,
         {'RandAffined': {
             'keys': ['image', 'label'],
@@ -1266,7 +1266,7 @@ unetr_aug_test = {
         {'RandomBiasField': {
             'include': ['image'],
             'p': low_prob,
-            'coefficients': 0.1}
+            'coefficients': 0.05}
         },
         # {'RandomNoise': {
         #     'include': ['image'],
@@ -1339,7 +1339,7 @@ unetr_gibbs = deepcopy(unetr_no_aug)
 unetr_gibbs['mid_transform'].append({
     'RandGibbsNoised': {'keys': ['image'],
                         'prob': high_prob,
-                        'alpha': (0.5, 0.7)
+                        'alpha': (0.4, 0.6)
                         },
 })
 
@@ -1364,7 +1364,7 @@ unetr_hist = deepcopy(unetr_no_aug)
 unetr_hist['mid_transform'].append(
     {'RandHistogramShiftd': {
             'keys': ['image'],
-            'num_control_points': (11, 13),
+            'num_control_points': 20,
             'prob': low_prob}
      },
 )
