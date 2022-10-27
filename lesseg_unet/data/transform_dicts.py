@@ -1347,8 +1347,7 @@ unetr_spike = deepcopy(unetr_no_aug)
 unetr_spike['mid_transform'].append({
     'RandKSpaceSpikeNoised': {'keys': ['image'],
                               'prob': high_prob,
-                              'intensity_range': (8, 10),
-                              # 'allow_missing_keys': True
+                              'intensity_range': (8, 10)
                               },
 })
 
