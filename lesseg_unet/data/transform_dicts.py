@@ -1075,7 +1075,7 @@ unetr_cc = {
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
-        },
+         },
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (0, 1),
@@ -1087,9 +1087,9 @@ unetr_cc = {
     'monai_transform': [
         {'RandHistogramShiftd': {
             'keys': ['image'],
-            'num_control_points': (10, 15),
+            'num_control_points': 20,
             'prob': low_prob}
-        },
+         },
         # TODO maybe 'Orientation': {} but it would interact with the flip,
         {'RandAffined': {
             'keys': ['image', 'label'],
@@ -1100,7 +1100,7 @@ unetr_cc = {
             'scale_range': 0.05,
             'padding_mode': 'border',
             'mode': 'nearest'}  # was False
-        },
+         },
         {'Rand3DElasticd': {
             'keys': ['image', 'label'],
             'sigma_range': (1, 3),
@@ -1113,9 +1113,25 @@ unetr_cc = {
             'padding_mode': "reflection",
             'mode': 'nearest',
             # 'padding_mode': "border",
-            # 'padding_mode': "zeros",
+            # 'padding_mode': "zeros"
         }
         },
+        {'RandGibbsNoised': {'keys': ['image'],
+                             'prob': high_prob,
+                             'alpha': (0.5, 0.7)
+                             },
+         },
+        {'RandRicianNoised': {'keys': ['image'],
+                              'prob': 1,
+                              'mean': 0.5,
+                              'std': 0.025
+                              },
+         },
+        {'RandKSpaceSpikeNoised': {'keys': ['image'],
+                                   'prob': high_prob,
+                                   'intensity_range': (8, 10),
+                                   },
+        }
     ],
     'torchio_transform': [
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'PrintDim before ToTensord'}},
@@ -1123,44 +1139,36 @@ unetr_cc = {
         {'RandomBiasField': {
             'include': ['image'],
             'p': low_prob,
-            'coefficients': 0.1}
-        },
-        {'RandomNoise': {
-            'include': ['image'],
-            'p': low_prob,
-            'mean': 0.0,
-            'std': (0, 0.1)}
-        },
+            'coefficients': 0.05}
+         },
+        # {'RandomNoise': {
+        #     'include': ['image'],
+        #     'p': low_prob,
+        #     'mean': 0.5,
+        #     'std': (0, 0.025)}
+        # },
     ],
     'unetr_transform': [
         {'RandFlipd': {
             'keys': ["image", "label"],
             'spatial_axis': [0],
             'prob': low_prob}
-        },
+         },
         {'RandShiftIntensityd': {
             'keys': ["image"],
             'offsets': 0.10,
             'prob': high_prob}
-        },
-        # {'RandRicianNoised': {
-        #     'keys': ['image'],
-        #     'prob': low_prob,
-        #     'mean': 0.0,
-        #     'std': 5,
-        #     'sample_std': True,
-        #     'relative': False}
-        #  },
+         },
     ],
     'last_transform': [
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.25}
-        },
+         },
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (0, 1)}
-        },
+         },
         {'ToTensord': {'keys': ['image', 'label']}},
         {'CoordConvd': {'keys': ['image']}}
     ],
@@ -1202,7 +1210,7 @@ unetr_aug_test = {
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
-        },
+         },
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (0, 1),
@@ -1216,7 +1224,7 @@ unetr_aug_test = {
             'keys': ['image'],
             'num_control_points': 20,
             'prob': low_prob}
-        },
+         },
         # TODO maybe 'Orientation': {} but it would interact with the flip,
         {'RandAffined': {
             'keys': ['image', 'label'],
@@ -1227,7 +1235,7 @@ unetr_aug_test = {
             'scale_range': 0.05,
             'padding_mode': 'border',
             'mode': 'nearest'}  # was False
-        },
+         },
         {'Rand3DElasticd': {
             'keys': ['image', 'label'],
             'sigma_range': (1, 3),
@@ -1247,13 +1255,13 @@ unetr_aug_test = {
                              'prob': high_prob,
                              'alpha': (0.5, 0.7)
                              },
-        },
+         },
         {'RandRicianNoised': {'keys': ['image'],
                               'prob': 1,
                               'mean': 0.5,
                               'std': 0.025
                               },
-        },
+         },
         {'RandKSpaceSpikeNoised': {'keys': ['image'],
                                    'prob': high_prob,
                                    'intensity_range': (8, 10),
@@ -1267,7 +1275,7 @@ unetr_aug_test = {
             'include': ['image'],
             'p': low_prob,
             'coefficients': 0.05}
-        },
+         },
         # {'RandomNoise': {
         #     'include': ['image'],
         #     'p': low_prob,
@@ -1280,22 +1288,22 @@ unetr_aug_test = {
             'keys': ["image", "label"],
             'spatial_axis': [0],
             'prob': low_prob}
-        },
+         },
         {'RandShiftIntensityd': {
             'keys': ["image"],
             'offsets': 0.10,
             'prob': high_prob}
-        },
+         },
     ],
     'last_transform': [
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.25}
-        },
+         },
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (0, 1)}
-        },
+         },
         {'ToTensord': {'keys': ['image', 'label']}},
         {'CoordConvd': {'keys': ['image']}}
     ],
