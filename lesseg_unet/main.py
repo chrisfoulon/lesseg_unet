@@ -56,8 +56,6 @@ def main():
     default_label_group.add_argument('-dl', '--default_label', type=str,
                                      help='Path to a default mask that will be used in case no '
                                           'lesion mask is found for the b1000')
-    parser.add_argument('-lab_smo', '--label_smoothing', action='store_true',
-                        help='Apply a label smoothing during the training')
     parser.add_argument('-pt', '--checkpoint', type=str, help='file path to a torch checkpoint file'
                                                               ' or directory (in that case, the most recent '
                                                               'checkpoint will be used)')
@@ -111,7 +109,7 @@ def main():
             exit()
     # print MONAI config
     print_config()
-    with open(Path(args.output_dir, 'run_command.txt'), 'w+') as f:
+    with open(Path(args.output, 'run_command.txt'), 'w+') as f:
         f.write(' '.join(sys.argv))
 
     if args.distributed:
