@@ -130,7 +130,8 @@ def main_worker(args, kwargs):
         sys.stdout = sys.stderr = f
 
     # initialize the distributed training process, every GPU runs in a process
-    dist.init_process_group(backend="nccl", init_method="env://")
+    if args.distributed:
+        dist.init_process_group(backend="nccl", init_method="env://")
     device = torch.device(f"cuda:{args.local_rank}")
     torch.cuda.set_device(device)
     # TODO use amp to accelerate training
