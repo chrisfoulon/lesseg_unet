@@ -95,6 +95,7 @@ def main():
     parser.add_argument('-cache', '--cache', action='store_true',
                         help='Cache the non-random transformation in cache in output directory')
     # DDP arguments
+    parser.add_argument("--distributed", action="store_true", help="start distributed training")
     parser.add_argument("--world_size", default=1, type=int, help="number of nodes for distributed training")
     parser.add_argument("--local_rank", type=int, help="node rank for distributed training")
     # args = parser.parse_args()
