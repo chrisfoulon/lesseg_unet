@@ -128,8 +128,6 @@ def main_worker(args, kwargs):
     if args.local_rank != 0:
         f = open(os.devnull, "w")
         sys.stdout = sys.stderr = f
-    if not os.path.exists(args.dir):
-        raise FileNotFoundError(f"missing directory {args.dir}")
 
     # initialize the distributed training process, every GPU runs in a process
     dist.init_process_group(backend="nccl", init_method="env://")
