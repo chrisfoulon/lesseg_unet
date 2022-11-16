@@ -1,5 +1,4 @@
 import logging
-from copy import deepcopy
 
 from monai.networks.nets import UNETR, UNet
 import torch

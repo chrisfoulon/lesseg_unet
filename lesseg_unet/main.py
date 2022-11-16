@@ -10,6 +10,10 @@ from lesseg_unet import utils, training, segmentation
 from bcblib.tools.nifti_utils import file_to_list, overlaps_subfolders, nifti_overlap_images
 import lesseg_unet.data.transform_dicts as tr_dicts
 import nibabel as nib
+import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
+
 
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 
@@ -92,6 +96,9 @@ def main():
                                                                                        'spatial_size of the model')
     parser.add_argument('-cache', '--cache', action='store_true',
                         help='Cache the non-random transformation in cache in output directory')
+    # DDP arguments
+    parser.add_argument("--world_size", default=1, type=int, help="number of nodes for distributed training")
+    parser.add_argument("--local_rank", type=int, help="node rank for distributed training")
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args()
     kwargs = {}
@@ -104,6 +111,31 @@ def main():
             exit()
     # print MONAI config
     print_config()
+
+    if args.distributed:
+        args.ngpus_per_node = torch.cuda.device_count()
+        print("Found total gpus", args.ngpus_per_node)
+        args.world_size = args.ngpus_per_node * args.world_size
+        mp.spawn(main_worker, nprocs=args.ngpus_per_node, args=(args, kwargs))
+    else:
+        args.local_rank = 0
+        main_worker(args=args, kwargs=kwargs)
+
+
+def main_worker(args, kwargs):
+    # disable logging for processes except 0 on every node
+    if args.local_rank != 0:
+        f = open(os.devnull, "w")
+        sys.stdout = sys.stderr = f
+    if not os.path.exists(args.dir):
+        raise FileNotFoundError(f"missing directory {args.dir}")
+
+    # initialize the distributed training process, every GPU runs in a process
+    dist.init_process_group(backend="nccl", init_method="env://")
+    device = torch.device(f"cuda:{args.local_rank}")
+    torch.cuda.set_device(device)
+    # TODO use amp to accelerate training
+    # scaler = torch.cuda.amp.GradScaler()
     # logs init
     if args.stop_best_epoch is None:
         stop_best_epoch = -1
@@ -115,7 +147,7 @@ def main():
     os.makedirs(output_root, exist_ok=True)
 
     log_file_path = str(Path(output_root, '__logging_training.txt'))
-    logging.basicConfig(filename=log_file_path, filemode='w', level=logging.INFO)
+    logging.basicConfig(filename=log_file_path, filemode='w+', level=logging.INFO)
     file_handler = logging.StreamHandler(sys.stdout)
     logging.getLogger().addHandler(file_handler)
     # if args.default_label is not None:
@@ -256,6 +288,8 @@ def main():
                           folds_number=args.folds_number,
                           dropout=args.dropout,
                           cache_dir=cache_dir,
+                          world_size=args.world_size,
+                          rank=args.local_rank,
                           **kwargs)
     else:
         if args.checkpoint is None:

@@ -1,13 +1,11 @@
 import math
 import logging
-import os
 from pathlib import Path
-import random
 from typing import Sequence, Tuple, Union, List
 
 import numpy as np
-import nibabel as nib
 import torch
+from torch.utils.data.distributed import DistributedSampler
 import monai
 from monai.data import list_data_collate, DataLoader
 from monai.data import Dataset, PersistentDataset, CacheDataset
@@ -69,26 +67,28 @@ def create_training_data_loader(train_ds: monai.data.Dataset,
                                 batch_size: int = 10,
                                 dataloader_workers: int = 4,
                                 persistent_workers=True,
-                                shuffle=True):
+                                sampler=None):
     print('Creating training data loader')
     train_loader = DataLoader(
         train_ds,
         batch_size=batch_size,
-        shuffle=shuffle,
+        shuffle=(sampler is None),
         drop_last=True,
         num_workers=dataloader_workers,
         pin_memory=torch.cuda.is_available(),
-        persistent_workers=True
+        persistent_workers=persistent_workers,
+        sampler=sampler
     )
     return train_loader
 
 
 def create_validation_data_loader(val_ds: monai.data.Dataset,
                                   batch_size: int = 1,
-                                  dataloader_workers: int = 4):
+                                  dataloader_workers: int = 4,
+                                  sampler=None):
     print('Creating validation data loader')
     val_loader = DataLoader(val_ds, batch_size=batch_size, num_workers=dataloader_workers,
-                            pin_memory=torch.cuda.is_available(), persistent_workers=True)
+                            pin_memory=torch.cuda.is_available(), persistent_workers=True, sampler=sampler)
     return val_loader
 
 
@@ -151,7 +151,8 @@ def init_segmentation(img_path_list: Sequence,
 
 
 def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_transforms, batch_size,
-                            dataloader_workers, val_batch_size=1, cache_dir=None, shuffle_training=True):
+                            dataloader_workers, val_batch_size=1, cache_dir=None, world_size=1, rank=0,
+                            shuffle_training=True):
     train_data_list = []
     val_data_list = []
     for ind, chunk in enumerate(split_lists):
@@ -172,8 +173,20 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
         val_ds = PersistentDataset(val_data_list, transform=val_img_transforms, cache_dir=cache_dir)
     else:
         val_ds = CacheDataset(val_data_list, transform=val_img_transforms)
+    if world_size > 0:
+        if dataloader_workers > 1:
+            dataloader_workers = 1
+            print('Number of workers for the dataloader changed to 1 as DDP is activated')
+        train_sampler = DistributedSampler(train_ds, num_replicas=world_size, rank=rank, shuffle=True, drop_last=True)
+        # val_sampler = DistributedSampler(val_ds, num_replicas=world_size, rank=rank, shuffle=False, drop_last=False)
+        # TODO It would speed up the validation to have ddp there as well but it is too tricky for now
+        val_sampler = None
+    else:
+        train_sampler = None
+        val_sampler = None
     # val_ds = Dataset(val_data_list, transform=val_img_transforms)
     # data_loader_checker_first(train_ds, 'validation')
-    train_loader = create_training_data_loader(train_ds, batch_size, dataloader_workers, shuffle=shuffle_training)
-    val_loader = create_validation_data_loader(val_ds, val_batch_size, dataloader_workers)
+    train_loader = create_training_data_loader(train_ds, batch_size, dataloader_workers,
+                                               sampler=train_sampler, shuffle_training=True)
+    val_loader = create_validation_data_loader(val_ds, val_batch_size, dataloader_workers, sampler=val_sampler)
     return train_loader, val_loader

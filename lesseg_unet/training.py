@@ -5,6 +5,8 @@ import logging
 from pathlib import Path
 from typing import Sequence, Union
 import time
+import signal
+import sys
 
 from tqdm import tqdm
 import numpy as np
@@ -22,6 +24,27 @@ from monai.transforms import (
 )
 from torch.utils.tensorboard import SummaryWriter
 from lesseg_unet import net, utils, data_loading, transformations
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel
+
+
+def handler(signum, frame):
+    res = input("Ctrl-c was pressed. Do you really want to exit? y/n ")
+    if res == 'y':
+        dist.destroy_process_group()
+        exit(1)
+
+
+signal.signal(signal.SIGINT, handler)
+
+
+def setup(rank, world_size, port='1234', cpu=False):
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = port
+    if not cpu:
+        dist.init_process_group('nccl', rank=rank, world_size=world_size)
+    else:
+        dist.init_process_group('gloo', rank=rank, world_size=world_size)
 
 
 def testing(train_loader, output_dir):
@@ -795,6 +818,8 @@ def training(img_path_list: Sequence,
              dropout=0,
              cache_dir=None,
              save_every_decent_best_epoch=True,
+             rank=0,
+             world_size=1,
              **kwargs
              ):
     shuffle_training = True
@@ -813,13 +838,26 @@ def training(img_path_list: Sequence,
             one_loop = True
     # Apparently it can potentially improve the performance when the model does not change its size. (Source tuto UNETR)
     torch.backends.cudnn.benchmark = True
+    # disable logging for processes except 0 on every node
+    if rank != 0:
+        f = open(os.devnull, "w")
+        sys.stdout = sys.stderr = f
+    # rank = int(os.environ["LOCAL_RANK"])
+    print(f'################RANK : {rank}####################')
     """MODEL PARAMETERS"""
-    # device = torch.device(f"cuda:{args.local_rank}")
-    # torch.cuda.set_device(device)
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
+    # TODO just see what the performance looks like on only one GPU with DDP
+    if world_size > 0:
+        cpu_device = device.type == 'cpu'
+
+        setup(rank, world_size, cpu=cpu_device)
+        if not cpu_device:
+            device = torch.device(f"cuda:{rank}")
+        torch.cuda.set_device(device)
+
     logging.info(f'Torch device used for this training: {str(device)}')
 
     if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
@@ -933,6 +971,10 @@ def training(img_path_list: Sequence,
                 model = net.create_unet_model(device, hyper_params)
             optimizer = torch.optim.Adam(model.parameters(), 1e-3)
             params = list(model.model.parameters())
+        # TODO the segmentation might require to add 'module' after model. to access the state_dict and all
+        if torch.cuda.is_available():
+            model.to(rank)
+            model = DistributedDataParallel(model, device_ids=[rank], output_device=rank, find_unused_parameters=False)
         if folds_number == 1:
             output_fold_dir = output_dir
         else:
@@ -944,7 +986,7 @@ def training(img_path_list: Sequence,
         train_loader, val_loader = data_loading.create_fold_dataloaders(
             split_lists, fold, train_img_transforms,
             val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
-            shuffle_training=shuffle_training
+            world_size, rank, shuffle_training=shuffle_training
         )
 
         """EPOCHS LOOP VARIABLES"""
@@ -1017,6 +1059,7 @@ def training(img_path_list: Sequence,
                 masks_only_labels = labels[:, :1, :, :, :]
                 loss = loss_function(logit_outputs, masks_only_labels)
                 # Regularisation
+                # TODO might be a cause of crash with DDP
                 loss += utils.sum_non_bias_l2_norms(params, 1e-4)
                 loss.backward()
                 optimizer.step()
@@ -1026,13 +1069,16 @@ def training(img_path_list: Sequence,
                 else:
                     train_iter.set_description(
                         f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss/step:.4f}]')
-            epoch_loss /= step
-            print(f'epoch {epoch + 1} average loss: {epoch_loss:.4f}')
-            writer.add_scalar('epoch_train_loss', epoch_loss, epoch + 1)
+            print(f"[{dist.get_rank()}] " + f"epoch {epoch + 1}, average loss: {epoch_loss/step:.4f}")
+            if dist.get_rank() == 0:
+                epoch_loss /= step
+                print(f'epoch {epoch + 1} average loss: {epoch_loss:.4f}')
+                writer.add_scalar('epoch_train_loss', epoch_loss, epoch + 1)
             if one_loop:
                 return
             """VALIDATION"""
             if (epoch + 1) % val_interval == 0:
+            # if (epoch + 1) % val_interval == 0 and dist.get_rank() == 0:
                 model.eval()
                 with torch.no_grad():
                     step = 0
@@ -1063,8 +1109,8 @@ def training(img_path_list: Sequence,
 
                         if val_batch_dist_list is not None:
                             hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
-                            dist = hausdorff_metric.aggregate().item()
-                            val_batch_dist_list.append(dist)
+                            distance = hausdorff_metric.aggregate().item()
+                            val_batch_dist_list.append(distance)
                         val_batch_dice_list.append(dice)
                         pbar.set_description(f'Val[{epoch + 1}] mean_loss:[{np.mean(loss_list)}]')
                     mean_loss_val = np.mean(loss_list)
@@ -1089,7 +1135,7 @@ def training(img_path_list: Sequence,
                         writer.add_scalar('val_best_mean_dice', best_dice, epoch + 1)
                         writer.add_scalar('val_best_mean_loss', best_avg_loss, epoch + 1)
                         if save_every_decent_best_epoch:
-                            if best_dice > 0.7:
+                            if best_dice > 0.75:
                                 epoch_suffix = '_' + str(epoch + 1)
                         # True here means that we track and keep the distance and that both dice and dist improved
                         if (mean_dist_val is not None and keep_dice_and_dist) and (
@@ -1118,7 +1164,7 @@ def training(img_path_list: Sequence,
                             print(f'New best model saved in {checkpoint_path}')
                             str_best_epoch = (
                                 f'\n{best_epoch_pref_str} {best_metric_epoch} '
-                                # f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
+                                # f'metric {best_metric:.4f}/distance {best_distance}/avgloss {best_avg_loss}\n'
                                 f'Dice metric {best_dice:.4f} / mean loss {best_avg_loss}'
                             )
                     if keep_dice_and_dist:
@@ -1155,3 +1201,4 @@ def training(img_path_list: Sequence,
         print(f'Training completed\n')
         logging.info(str_best_epoch)
         writer.close()
+        dist.destroy_process_group()
