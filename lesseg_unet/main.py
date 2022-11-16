@@ -111,6 +111,8 @@ def main():
             exit()
     # print MONAI config
     print_config()
+    with open(Path(args.output_dir, 'run_command.txt'), 'w+') as f:
+        f.write(' '.join(sys.argv))
 
     if args.distributed:
         args.ngpus_per_node = torch.cuda.device_count()
