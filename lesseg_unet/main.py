@@ -104,10 +104,10 @@ def main():
     if unknown:
         kwargs = utils.kwargs_argparse(unknown)
         print(f'Unlisted arguments : {kwargs}')
-        resp = input('If the additional parameters you entered are not what you wanted type quit/q/stop/s/no/n')
-        if resp.lower() in ['quit', 'q', 'stop', 's', 'no', 'n']:
-            print('Sorry little parameter but, your parents never wanted you. Good bye.')
-            exit()
+        # resp = input('If the additional parameters you entered are not what you wanted type quit/q/stop/s/no/n')
+        # if resp.lower() in ['quit', 'q', 'stop', 's', 'no', 'n']:
+        #     print('Sorry little parameter but, your parents never wanted you. Good bye.')
+        #     exit()
     # print MONAI config
     print_config()
     with open(Path(args.output, 'run_command.txt'), 'w+') as f:
@@ -117,7 +117,9 @@ def main():
         args.ngpus_per_node = torch.cuda.device_count()
         print("Found total gpus", args.ngpus_per_node)
         args.world_size = args.ngpus_per_node * args.world_size
-        mp.spawn(main_worker, nprocs=args.ngpus_per_node, args=(*args, *kwargs))
+        print(args)
+        print(kwargs)
+        mp.spawn(main_worker, nprocs=args.ngpus_per_node, args=(args, kwargs))
     else:
         args.local_rank = 0
         main_worker(args=args, kwargs=kwargs)
