@@ -280,7 +280,7 @@ def main_worker(args, kwargs):
                           train_val_percentage=train_val_percentage,
                           lesion_set_clamp=clamp_lesion_set,
                           controls_clamping=clamp_tuple,
-                          label_smoothing=args.label_smoothing,
+                          # label_smoothing=args.label_smoothing,
                           stop_best_epoch=stop_best_epoch,
                           training_loss_fct=args.loss_function,
                           val_loss_fct=args.val_loss_function,
