@@ -181,7 +181,8 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
         if dataloader_workers > 1:
             dataloader_workers = 1
             print('Number of workers for the dataloader changed to 1 as DDP is activated')
-        train_sampler = DistributedSampler(train_ds, num_replicas=world_size, rank=rank, shuffle=True, drop_last=True)
+        train_sampler = DistributedSampler(train_ds, num_replicas=world_size, rank=rank, shuffle=shuffle_training,
+                                           drop_last=True)
         # val_sampler = DistributedSampler(val_ds, num_replicas=world_size, rank=rank, shuffle=False, drop_last=False)
         # TODO It would speed up the validation to have ddp there as well but it is too tricky for now
         val_sampler = None
@@ -191,6 +192,6 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
     # val_ds = Dataset(val_data_list, transform=val_img_transforms)
     # data_loader_checker_first(train_ds, 'validation')
     train_loader = create_training_data_loader(train_ds, batch_size, dataloader_workers,
-                                               sampler=train_sampler, shuffle_training=True)
+                                               sampler=train_sampler, shuffle=shuffle_training)
     val_loader = create_validation_data_loader(val_ds, val_batch_size, dataloader_workers, sampler=val_sampler)
     return train_loader, val_loader
