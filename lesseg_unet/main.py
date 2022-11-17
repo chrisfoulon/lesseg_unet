@@ -117,7 +117,7 @@ def main():
         args.ngpus_per_node = torch.cuda.device_count()
         print("Found total gpus", args.ngpus_per_node)
         args.world_size = args.ngpus_per_node * args.world_size
-        mp.spawn(main_worker, nprocs=args.ngpus_per_node, args=(args, kwargs))
+        mp.spawn(main_worker, nprocs=args.ngpus_per_node, args=(*args, *kwargs))
     else:
         args.local_rank = 0
         main_worker(args=args, kwargs=kwargs)
