@@ -67,12 +67,16 @@ def create_training_data_loader(train_ds: monai.data.Dataset,
                                 batch_size: int = 10,
                                 dataloader_workers: int = 4,
                                 persistent_workers=True,
+                                shuffle=True,
                                 sampler=None):
     print('Creating training data loader')
+    # The shuffle option is determined in the sampler
+    if sampler is not None:
+        shuffle = False
     train_loader = DataLoader(
         train_ds,
         batch_size=batch_size,
-        shuffle=(sampler is None),
+        shuffle=shuffle,
         drop_last=True,
         num_workers=dataloader_workers,
         pin_memory=torch.cuda.is_available(),
