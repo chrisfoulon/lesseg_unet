@@ -98,6 +98,7 @@ def main():
     parser.add_argument("--distributed", action="store_true", help="start distributed training")
     parser.add_argument("--world_size", default=1, type=int, help="number of nodes for distributed training")
     parser.add_argument("--local_rank", type=int, help="node rank for distributed training")
+    parser.add_argument('--debug', action='store_true', help='debug mode')
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args()
     kwargs = {}
@@ -117,27 +118,38 @@ def main():
         args.ngpus_per_node = torch.cuda.device_count()
         print("Found total gpus", args.ngpus_per_node)
         args.world_size = args.ngpus_per_node * args.world_size
-        print(args)
-        print(kwargs)
-        mp.spawn(main_worker, nprocs=args.ngpus_per_node, args=(args, kwargs))
+        try:
+            mp.spawn(main_worker, nprocs=args.ngpus_per_node, args=(args, kwargs))
+        except KeyboardInterrupt:
+            print('Interrupted')
+            try:
+                dist.destroy_process_group()
+            except KeyboardInterrupt:
+                os.system("kill $(ps aux | grep multiprocessing.spawn | grep -v grep | awk '{print $2}') ")
+
     else:
-        args.local_rank = 0
-        main_worker(args=args, kwargs=kwargs)
+        main_worker(local_rank=args.local_rank, args=args, kwargs=kwargs)
 
 
-def main_worker(args, kwargs):
+def main_worker(local_rank, args, kwargs):
     # disable logging for processes except 0 on every node
-    if args.local_rank != 0:
-        f = open(os.devnull, "w")
-        sys.stdout = sys.stderr = f
-
+    # if local_rank != 0:
+    #     f = open(os.devnull, "w")
+    #     sys.stdout = sys.stderr = f
     # initialize the distributed training process, every GPU runs in a process
-    if args.distributed:
-        dist.init_process_group(backend="nccl", init_method="env://")
-    device = torch.device(f"cuda:{args.local_rank}")
-    torch.cuda.set_device(device)
+    # if args.distributed:
+    #     dist.init_process_group(backend="nccl", init_method="env://")
+    # device = torch.device(f"cuda:{local_rank}")
+    # torch.cuda.set_device(device)
     # TODO use amp to accelerate training
     # scaler = torch.cuda.amp.GradScaler()
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '1234'
+    print(f'WORLD SIZE: {args.world_size}')
+    if args.torch_device != 'cpu':
+        dist.init_process_group('nccl', rank=local_rank, world_size=args.world_size)
+    else:
+        dist.init_process_group('gloo', rank=local_rank, world_size=args.world_size)
     # logs init
     if args.stop_best_epoch is None:
         stop_best_epoch = -1
@@ -149,14 +161,13 @@ def main_worker(args, kwargs):
     os.makedirs(output_root, exist_ok=True)
 
     log_file_path = str(Path(output_root, '__logging_training.txt'))
-    logging.basicConfig(filename=log_file_path, filemode='w+', level=logging.INFO)
+    if args.debug:
+        logging_level = logging.DEBUG
+    else:
+        logging_level = logging.INFO
+    logging.basicConfig(filename=log_file_path, filemode='w+', level=logging_level)
     file_handler = logging.StreamHandler(sys.stdout)
     logging.getLogger().addHandler(file_handler)
-    # if args.default_label is not None:
-    #     logging.info(f'{args.default_label} will be used to fill up missing labels')
-    # if args.create_default_label:
-    #     args.default_label = output_root
-    #     print(f'Missing labels will be replaced by a zero-filled default image')
     if not output_root.is_dir():
         raise ValueError('{} is not an existing directory and could not be created'.format(output_root))
     cache_dir = None
@@ -291,7 +302,7 @@ def main_worker(args, kwargs):
                           dropout=args.dropout,
                           cache_dir=cache_dir,
                           world_size=args.world_size,
-                          rank=args.local_rank,
+                          rank=local_rank,
                           **kwargs)
     else:
         if args.checkpoint is None:
