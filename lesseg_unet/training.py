@@ -116,7 +116,6 @@ def training(img_path_list: Sequence,
              world_size=1,
              **kwargs
              ):
-    print(f'################RANK : {rank}####################')
     # disable logging for processes except 0 on every node
     # if rank != 0:
     #     f = open(os.devnull, "w")
@@ -280,6 +279,9 @@ def training(img_path_list: Sequence,
         writer = SummaryWriter(log_dir=str(output_fold_dir))
         # Creates both the training and validation loaders based on the fold number
         # (e.g. fold 0 means the first sublist of split_lists will be the validation set for this fold)
+        # TODO Share the data over the ranks
+        # TODO https://scm4.cs.ucl.ac.uk/radiology-system/multimodalgenerativemodel/-/blob/main/modules/orchestration/training_script.py
+        # line 221 to ~270
         train_loader, val_loader = data_loading.create_fold_dataloaders(
             split_lists, fold, train_img_transforms,
             val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
@@ -356,16 +358,31 @@ def training(img_path_list: Sequence,
                 masks_only_labels = labels[:, :1, :, :, :]
                 loss = loss_function(logit_outputs, masks_only_labels)
                 # Regularisation
-                # TODO might be a cause of crash with DDP
                 loss += utils.sum_non_bias_l2_norms(params, 1e-4)
                 loss.backward()
                 optimizer.step()
-                epoch_loss += loss.item()
-                if no_progressbar_training:
-                    print(f'[{fold}]{step}/{batches_per_epoch}, train loss: {loss.item():.4f}')
-                else:
-                    train_iter.set_description(
-                        f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss / step:.4f}]')
+                # epoch_loss += loss.item()
+                # if no_progressbar_training:
+                #     print(f'[{fold}]{step}/{batches_per_epoch}, train loss: {loss.item():.4f}')
+                # else:
+                #     train_iter.set_description(
+                #         f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss / step:.4f}]')
+
+                loss = 0
+                epoch_loss = 0
+                # with torch.no_grad():
+                #     epoch_loss += loss
+                #     if no_progressbar_training:
+                #         print(f'[{fold}]{step}/{batches_per_epoch}, train loss: {loss.item():.4f}')
+                #     else:
+                #         train_iter.set_description(
+                #             f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss / step:.4f}]')
+
+            if world_size > 1:
+                dist.all_reduce(epoch_loss, op=dist.ReduceOp.SUM)
+                epoch_loss /= world_size
+            epoch_loss = epoch_loss.item()
+
             print(f"[{dist.get_rank()}] " + f"epoch {epoch + 1}, average loss: {epoch_loss / step:.4f}")
             if dist.get_rank() == 0:
                 epoch_loss /= step
@@ -418,7 +435,11 @@ def training(img_path_list: Sequence,
 
                     mean_dist_val = None
                     mean_dist_str = ''
-                    # TODO if rank == 0:
+                    # # TODO
+                    # if world_size > 1:
+                    #     dist.all_reduce(epoch_loss, op=dist.ReduceOp.SUM)
+                    #     epoch_loss /= world_size
+                    # epoch_loss = epoch_loss.item()
 
                     if val_batch_dist_list is not None:
                         mean_dist_val = np.mean(val_batch_dist_list)
@@ -426,7 +447,7 @@ def training(img_path_list: Sequence,
                         mean_dist_str = f'/ Current mean distance {mean_dist_val}'
                         writer.add_scalar('val_distance', mean_dist_val, epoch + 1)
                     """IF NEW BEST EPOCH"""
-                    if best_dice < mean_dice_val:
+                    if best_dice < mean_dice_val and rank == 0:
                         best_epoch_pref_str = 'Best dice epoch'
                         best_metric_epoch = epoch + 1
                         best_dice = mean_dice_val
@@ -445,6 +466,7 @@ def training(img_path_list: Sequence,
                             best_dist = mean_dist_val
                             best_dist_str = f'/ Best Distance {best_dist}'
                             writer.add_scalar('val_best_mean_distance', best_dist, epoch + 1)
+                            # TODO add dist_barrier
                             checkpoint_path = utils.save_checkpoint(
                                 model, epoch + 1, optimizer, output_fold_dir,
                                 f'best_dice_and_dist_model_segmentation3d_epo{epoch_suffix}.pth')
@@ -466,6 +488,7 @@ def training(img_path_list: Sequence,
                                 # f'metric {best_metric:.4f}/distance {best_distance}/avgloss {best_avg_loss}\n'
                                 f'Dice metric {best_dice:.4f} / mean loss {best_avg_loss}'
                             )
+                    dist.barrier()
                     if keep_dice_and_dist:
                         best_epoch_count = epoch + 1 - best_metric_dist_epoch
                     else:

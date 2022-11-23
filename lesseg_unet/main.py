@@ -114,21 +114,68 @@ def main():
     with open(Path(args.output, 'run_command.txt'), 'w+') as f:
         f.write(' '.join(sys.argv))
 
-    if args.distributed:
-        args.ngpus_per_node = torch.cuda.device_count()
-        print("Found total gpus", args.ngpus_per_node)
-        args.world_size = args.ngpus_per_node * args.world_size
-        try:
-            mp.spawn(main_worker, nprocs=args.ngpus_per_node, args=(args, kwargs))
-        except KeyboardInterrupt:
-            print('Interrupted')
-            try:
-                dist.destroy_process_group()
-            except KeyboardInterrupt:
-                os.system("kill $(ps aux | grep multiprocessing.spawn | grep -v grep | awk '{print $2}') ")
-
+    # if args.local_rank is None:
+    #     args.local_rank = int(os.environ["LOCAL_RANK"])
+    # else:
+    #     print(args.local_rank)
+    if args.local_rank is not None:
+        # Starting the model manually
+        local_rank = args.local_rank
+        os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(['0', '1'])
+        # os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(['0'])
+        print('A')
     else:
-        main_worker(local_rank=args.local_rank, args=args, kwargs=kwargs)
+        # Starting the model using torchrun
+        # os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(['0', '1'])
+        # os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(['0'])
+        print('B')
+        local_rank = int(os.environ["LOCAL_RANK"])
+
+    # if args.distributed:
+    #     args.ngpus_per_node = torch.cuda.device_count()
+    #     print("Found total gpus", args.ngpus_per_node)
+    #     args.world_size = args.ngpus_per_node * args.world_size
+    #     try:
+    #         mp.spawn(main_worker, nprocs=args.ngpus_per_node, args=(args, kwargs))
+    #     except KeyboardInterrupt:
+    #         print('Interrupted')
+    #         try:
+    #             dist.destroy_process_group()
+    #         except KeyboardInterrupt:
+    #             os.system("kill $(ps aux | grep multiprocessing.spawn | grep -v grep | awk '{print $2}') ")
+    #
+    # else:
+    #     main_worker(local_rank=args.local_rank, args=args, kwargs=kwargs)
+    # main_worker(local_rank=args.local_rank, args=args, kwargs=kwargs)
+    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    print(local_rank)
+    print(os.environ['WORLD_SIZE'])
+    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+
+    if 'GLOBAL_WORLD_SIZE' in os.environ:
+        print('?????????????????????????????????')
+        print('?????????????????????????????????')
+        print('?????????????????????????????????')
+        print('?????????????????????????????????')
+        print('?????????????????????????????????')
+        print('?????????????????????????????????')
+
+    if 'GLOBAL_RANK' in os.environ:
+        print('££££££££££££££££££££££££££££££££££££')
+        print('££££££££££££££££££££££££££££££££££££')
+        print('££££££££££££££££££££££££££££££££££££')
+        print('££££££££££££££££££££££££££££££££££££')
+        print('££££££££££££££££££££££££££££££££££££')
+        print('££££££££££££££££££££££££££££££££££££')
+
+
+    if 'WORLD_SIZE' not in os.environ:
+        os.environ['WORLD_SIZE'] = '2'
+    main_worker(local_rank=local_rank, args=args, kwargs=kwargs)
 
 
 def main_worker(local_rank, args, kwargs):
@@ -143,13 +190,20 @@ def main_worker(local_rank, args, kwargs):
     # torch.cuda.set_device(device)
     # TODO use amp to accelerate training
     # scaler = torch.cuda.amp.GradScaler()
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '1234'
+    if 'MASTER_ADDR' not in os.environ:
+        os.environ['MASTER_ADDR'] = 'localhost'
+    if 'MASTER_PORT' not in os.environ:
+        os.environ['MASTER_PORT'] = '1234'
+    args.world_size = len(os.environ['CUDA_VISIBLE_DEVICES'].split(','))
     print(f'WORLD SIZE: {args.world_size}')
+    print(f'################RANK : {local_rank}####################')
+
+    print("Waiting for all DDP processes to establish contact...")
     if args.torch_device != 'cpu':
         dist.init_process_group('nccl', rank=local_rank, world_size=args.world_size)
     else:
         dist.init_process_group('gloo', rank=local_rank, world_size=args.world_size)
+    print('Contact established!')
     # logs init
     if args.stop_best_epoch is None:
         stop_best_epoch = -1
@@ -382,4 +436,5 @@ def main_worker(local_rank, args, kwargs):
 
 
 if __name__ == "__main__":
+    torch.multiprocessing.set_start_method('spawn')
     main()
