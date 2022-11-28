@@ -7,7 +7,8 @@ tiny_prob = 0.05
 # high_prob = 1
 # low_prob = 1
 # tiny_prob = 1
-def_spatial_size = [96, 128, 96]
+# def_spatial_size = [96, 128, 96]
+def_spatial_size = [96, 96, 96]
 # for 1mm images
 # def_spatial_size = [192, 224, 192]
 

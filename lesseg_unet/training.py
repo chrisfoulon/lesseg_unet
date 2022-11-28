@@ -246,8 +246,6 @@ def training(img_path_list: Sequence,
         logging.info(f'Will stop after {stop_best_epoch} epochs without improvement')
     # TODO ADD SCALER
     for fold in range(folds_number):
-
-        torch.cuda.empty_cache()
         # TODO REFACTOR THAT SH**
         if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
             hyper_params['img_size'] = training_img_size

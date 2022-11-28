@@ -99,6 +99,7 @@ def main():
     parser.add_argument("--world_size", default=1, type=int, help="number of nodes for distributed training")
     parser.add_argument("--local_rank", type=int, help="node rank for distributed training")
     parser.add_argument('--debug', action='store_true', help='debug mode')
+    parser.add_argument('-din', '--debug_img_num', type=int, help='Number of images from the input list')
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args()
     kwargs = {}
@@ -118,6 +119,7 @@ def main():
     #     args.local_rank = int(os.environ["LOCAL_RANK"])
     # else:
     #     print(args.local_rank)
+    torch.multiprocessing.set_sharing_strategy('file_system')
     if args.local_rank is not None:
         # Starting the model manually
         local_rank = args.local_rank
@@ -245,6 +247,8 @@ def main_worker(local_rank, args, kwargs):
         img_list = [img_path for sublist in seg_input_dict for img_path in sublist]
     if args.output in img_list:
         raise ValueError("The output directory CANNOT be one of the input directories")
+    if args.debug_img_num is not None:
+        img_list = img_list[:args.debug_img_num]
     print('loading input lesion label path list')
     if args.lesion_input_path is not None:
         logging.info(f'Input lesion directory : {args.lesion_input_path}')
@@ -257,7 +261,8 @@ def main_worker(local_rank, args, kwargs):
         les_list = file_to_list(args.lesion_input_list)
     else:
         les_list = None
-
+    # if args.debug_img_num is not None and les_list is not None:
+    #     img_list = les_list[:args.debug_img_num]
     if args.controls_path is not None:
         ctr_list = utils.create_input_path_list_from_root(args.controls_path)
         if args.controls_path == args.output:
