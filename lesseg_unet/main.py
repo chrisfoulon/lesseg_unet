@@ -147,14 +147,15 @@ def main():
     # else:
     #     main_worker(local_rank=args.local_rank, args=args, kwargs=kwargs)
     # main_worker(local_rank=args.local_rank, args=args, kwargs=kwargs)
-    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    print(local_rank)
-    print(os.environ['WORLD_SIZE'])
-    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    if 'GLOBAL_WORLD_SIZE' in os.environ:
+        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        print(local_rank)
+        print(os.environ['WORLD_SIZE'])
+        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
     if 'GLOBAL_WORLD_SIZE' in os.environ:
         print('?????????????????????????????????')
@@ -172,9 +173,9 @@ def main():
         print('££££££££££££££££££££££££££££££££££££')
         print('££££££££££££££££££££££££££££££££££££')
 
-
     if 'WORLD_SIZE' not in os.environ:
-        os.environ['WORLD_SIZE'] = '2'
+        os.environ['WORLD_SIZE'] = str(torch.cuda.device_count())
+        # os.environ['WORLD_SIZE'] = '2'
     main_worker(local_rank=local_rank, args=args, kwargs=kwargs)
 
 
@@ -194,7 +195,7 @@ def main_worker(local_rank, args, kwargs):
         os.environ['MASTER_ADDR'] = 'localhost'
     if 'MASTER_PORT' not in os.environ:
         os.environ['MASTER_PORT'] = '1234'
-    args.world_size = len(os.environ['CUDA_VISIBLE_DEVICES'].split(','))
+    args.world_size = int(os.environ['WORLD_SIZE'])
     print(f'WORLD SIZE: {args.world_size}')
     print(f'################RANK : {local_rank}####################')
 

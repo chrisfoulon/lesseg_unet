@@ -81,7 +81,9 @@ def create_training_data_loader(train_ds: monai.data.Dataset,
         num_workers=dataloader_workers,
         pin_memory=torch.cuda.is_available(),
         persistent_workers=persistent_workers,
-        sampler=sampler
+        sampler=sampler,
+        # TODO check which number is faster
+        prefetch_factor=2
     )
     return train_loader
 
@@ -165,6 +167,7 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
         else:
             train_data_list = np.concatenate([train_data_list, chunk])
     print(f'Create training monai dataset for fold {fold}')
+    # TODO Maybe try again with standard Monai Dataset
     if cache_dir is not None:
         train_ds = PersistentDataset(train_data_list, transform=train_img_transforms, cache_dir=cache_dir)
     else:
@@ -183,9 +186,8 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
             print('Number of workers for the dataloader changed to 1 as DDP is activated')
         train_sampler = DistributedSampler(train_ds, num_replicas=world_size, rank=rank, shuffle=shuffle_training,
                                            drop_last=True)
-        # val_sampler = DistributedSampler(val_ds, num_replicas=world_size, rank=rank, shuffle=False, drop_last=False)
-        # TODO It would speed up the validation to have ddp there as well but it is too tricky for now
-        val_sampler = None
+        # val_sampler = None
+        val_sampler = DistributedSampler(val_ds, num_replicas=world_size, rank=rank, shuffle=False, drop_last=False)
     else:
         train_sampler = None
         val_sampler = None

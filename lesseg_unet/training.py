@@ -146,13 +146,12 @@ def training(img_path_list: Sequence,
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
-    if world_size > 0:
-        cpu_device = device.type == 'cpu'
+    cpu_device = device.type == 'cpu'
 
-        # setup(rank, world_size, cpu=cpu_device)
-        if not cpu_device:
-            device = torch.device(f"cuda:{rank}")
-        torch.cuda.set_device(device)
+    # setup(rank, world_size, cpu=cpu_device)
+    if not cpu_device:
+        device = torch.device(f"cuda:{rank}")
+    torch.cuda.set_device(device)
 
     logging.info(f'Torch device used for this training: {str(device)}')
 
@@ -245,14 +244,22 @@ def training(img_path_list: Sequence,
     # val_trash_thr = 0.3
     if stop_best_epoch != -1:
         logging.info(f'Will stop after {stop_best_epoch} epochs without improvement')
-
+    # TODO ADD SCALER
     for fold in range(folds_number):
+
+        torch.cuda.empty_cache()
+        # TODO REFACTOR THAT SH**
         if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
             hyper_params['img_size'] = training_img_size
             if 'feature_size' in kwargs:
                 hyper_params['feature_size'] = int(kwargs['feature_size'])
             if pretrained_point is not None:
-                model = utils.load_model_from_checkpoint(pretrained_point, device, hyper_params, model_name='unetr')
+                if dist.get_rank() == 0:
+                    checkpoint_to_share = [torch.load(pretrained_point, map_location="cpu")]
+                else:
+                    checkpoint_to_share = [None]
+                torch.distributed.broadcast_object_list(checkpoint_to_share, src=0)
+                model = utils.load_model_from_checkpoint(checkpoint_to_share, device, hyper_params, model_name='unetr')
                 logging.info(f'UNETR created and succesfully loaded from {pretrained_point}')
             else:
                 model = net.create_unetr_model(device, hyper_params)
@@ -261,7 +268,12 @@ def training(img_path_list: Sequence,
             params = list(model.parameters())
         else:
             if pretrained_point is not None:
-                model = utils.load_model_from_checkpoint(pretrained_point, device, hyper_params, model_name='unet')
+                if dist.get_rank() == 0:
+                    checkpoint_to_share = [torch.load(pretrained_point, map_location="cpu")]
+                else:
+                    checkpoint_to_share = [None]
+                torch.distributed.broadcast_object_list(checkpoint_to_share, src=0)
+                model = utils.load_model_from_checkpoint(checkpoint_to_share, device, hyper_params, model_name='unet')
                 logging.info(f'UNet created and succesfully loaded from {pretrained_point}')
             else:
                 model = net.create_unet_model(device, hyper_params)
@@ -309,13 +321,31 @@ def training(img_path_list: Sequence,
         for epoch in range(epoch_num):
             print('-' * 10)
             print(f'epoch {epoch + 1}/{epoch_num}')
+            # This is required with multi-gpu
+            train_loader.sampler.set_epoch(epoch)
+            # if epoch == 0:
+            #     sampler_train.set_epoch(0)
+            # else:
+            #     """
+            #     Recreate the DataLoader each time to ensure I get a different ordering of the data each epoch
+            #     Running set_epoch is necessary according to the documentation, but do I really need to recreate the
+            #     loader?
+            #     """
+            #     sampler_train.set_epoch(epoch)  # Shuffle each epoch
+            #     loader_train = DataLoader(dataset_train, sampler=sampler_train, batch_size=hyper_params['batch_size'],
+            #               drop_last=True, num_workers=hyper_params['workers_per_process'],
+            #               pin_memory=hyper_params['pin_memory'],
+            #               prefetch_factor=hyper_params['prefetch_factor'])
+
             model.train()
             epoch_loss = 0
             step = 0
             start_time = time.time()
             loading_time = True
 
-            """TRAINING LOOP"""
+            """
+            TRAINING INITIALISATION
+            """
             train_iter = tqdm(train_loader, desc=f'Training[{epoch + 1}] loss/mean_loss:[N/A]')
             no_progressbar_training = False
             if 'no_progressbar_training' in kwargs:
@@ -323,6 +353,9 @@ def training(img_path_list: Sequence,
                 if v == 'True' or v == 0:
                     train_iter = train_loader
                     no_progressbar_training = True
+            """
+            INNER TRAINING LOOP
+            """
             for batch_data in train_iter:
                 if loading_time:
                     end_time = time.time()
@@ -335,6 +368,9 @@ def training(img_path_list: Sequence,
                 optimizer.zero_grad()
                 inputs, labels = batch_data['image'].to(device, non_blocking=non_blocking), batch_data['label'].to(
                     device, non_blocking=non_blocking)
+                """
+                DEBUG AND IMAGE DISPLAY BLOCK
+                """
                 if display_training:
                     img_name = Path(batch_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
                     # print(batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy())
@@ -360,16 +396,21 @@ def training(img_path_list: Sequence,
                 # Regularisation
                 loss += utils.sum_non_bias_l2_norms(params, 1e-4)
                 loss.backward()
+                """
+                The different ranks are coming together here
+                """
                 optimizer.step()
-                # epoch_loss += loss.item()
-                # if no_progressbar_training:
-                #     print(f'[{fold}]{step}/{batches_per_epoch}, train loss: {loss.item():.4f}')
-                # else:
-                #     train_iter.set_description(
-                #         f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss / step:.4f}]')
+                epoch_loss += loss
+                # TODO: if dist.get_rank() == 0:
+                if no_progressbar_training:
+                    print(f'[{fold}]{step}/{batches_per_epoch}, train loss: {loss.item():.4f}')
+                else:
+                    train_iter.set_description(
+                        f'Training[{epoch + 1}] batch_loss:[{loss.item():.4f}]')
+                        # f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss / step:.4f}]')
 
-                loss = 0
-                epoch_loss = 0
+                # loss = 0
+                # epoch_loss = 0
                 # with torch.no_grad():
                 #     epoch_loss += loss
                 #     if no_progressbar_training:
@@ -377,33 +418,39 @@ def training(img_path_list: Sequence,
                 #     else:
                 #         train_iter.set_description(
                 #             f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss / step:.4f}]')
-
+            """
+            GLOBAL TRAINING MEASURES HANDLING
+            """
             if world_size > 1:
                 dist.all_reduce(epoch_loss, op=dist.ReduceOp.SUM)
                 epoch_loss /= world_size
-            epoch_loss = epoch_loss.item()
-
-            print(f"[{dist.get_rank()}] " + f"epoch {epoch + 1}, average loss: {epoch_loss / step:.4f}")
+            mean_epoch_loss = epoch_loss.item() / step
             if dist.get_rank() == 0:
-                epoch_loss /= step
-                print(f'epoch {epoch + 1} average loss: {epoch_loss:.4f}')
-                writer.add_scalar('epoch_train_loss', epoch_loss, epoch + 1)
+                print(f"[{dist.get_rank()}] " + f"epoch {epoch + 1}, average loss: {mean_epoch_loss:.4f}")
+                writer.add_scalar('epoch_train_loss', mean_epoch_loss, epoch + 1)
             if one_loop:
                 return
-            """VALIDATION"""
+            """
+            VALIDATION LOOP
+            """
             if (epoch + 1) % val_interval == 0:
                 # if (epoch + 1) % val_interval == 0 and dist.get_rank() == 0:
                 model.eval()
                 with torch.no_grad():
                     step = 0
-                    loss_list = []
-                    val_batch_dice_list = []
-                    val_batch_dist_list = None
+                    val_epoch_loss = 0
+                    # loss_list = []
+                    # val_batch_dice_list = []
+                    val_epoch_dice = 0
+                    # val_batch_dist_list = None
                     if 'dist' in val_loss_fct.lower():
-                        val_batch_dist_list = []
+                        # val_batch_dist_list = []
+                        val_epoch_dist = 0
                     pbar = tqdm(val_loader, desc=f'Val[{epoch + 1}] avg_metric:[N/A]')
 
-                    """VALIDATION LOOP"""
+                    """
+                    VALIDATION LOOP
+                    """
                     for val_data in pbar:
                         step += 1
                         val_inputs, val_labels = val_data['image'].to(
@@ -413,40 +460,62 @@ def training(img_path_list: Sequence,
                         masks_only_val_labels = val_labels[:, :1, :, :, :]
                         val_outputs = sliding_window_inference(val_inputs, training_img_size,
                                                                val_batch_size, model)
-                        loss_list.append(val_loss_function(val_outputs, masks_only_val_labels).item())
+                        val_loss = val_loss_function(val_outputs, masks_only_val_labels)
+                        # loss_list.append(val_loss.item())
+                        val_epoch_loss += val_loss
                         val_outputs_list = decollate_batch(val_outputs)
+                        """
+                        Apply post transformations on prediction tensor
+                        It can then be used with other metrics
+                        """
                         val_output_convert = [
                             post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
                         ]
                         dice_metric(y_pred=val_output_convert, y=masks_only_val_labels)
-                        dice = dice_metric.aggregate().item()
-
-                        if val_batch_dist_list is not None:
+                        dice = dice_metric.aggregate()
+                        val_epoch_dice += dice
+                        if 'dist' in val_loss_fct.lower():
                             hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
-                            distance = hausdorff_metric.aggregate().item()
-                            val_batch_dist_list.append(distance)
-                        val_batch_dice_list.append(dice)
-                        pbar.set_description(f'Val[{epoch + 1}] mean_loss:[{np.mean(loss_list)}]')
-                    mean_loss_val = np.mean(loss_list)
+                            distance = hausdorff_metric.aggregate()
+                            # val_batch_dist_list.append(distance.item())
+                            val_epoch_dist += distance
+                        # val_batch_dice_list.append(dice.item())
+                        pbar.set_description(f'Val[{epoch + 1}] mean_loss:[{val_epoch_loss/step}]')
+
+                    """
+                    GLOBAL VALIDATION MEASURES HANDLING
+                    """
+                    if world_size > 1:
+                        dist.all_reduce(val_epoch_loss, op=dist.ReduceOp.SUM)
+                        val_epoch_loss /= world_size
+
+                        dist.all_reduce(val_epoch_dice, op=dist.ReduceOp.SUM)
+                        val_epoch_dice /= world_size
+                        if 'dist' in val_loss_fct.lower():
+                            dist.all_reduce(val_epoch_dist, op=dist.ReduceOp.SUM)
+                            val_epoch_dist /= world_size
+
+                    val_epoch_loss /= step
+                    val_epoch_dice /= step
+                    mean_loss_val = val_epoch_loss
                     dice_metric.reset()
-                    mean_dice_val = np.mean(val_batch_dice_list)
-                    writer.add_scalar('val_mean_dice', mean_dice_val, epoch + 1)
-                    writer.add_scalar('val_mean_loss', mean_loss_val, epoch + 1)
+                    mean_dice_val = val_epoch_dice
+                    # mean_dice_val = np.mean(val_batch_dice_list)
+                    writer.add_scalar('val_mean_dice', val_epoch_dice.item(), epoch + 1)
+                    writer.add_scalar('val_mean_loss', val_epoch_loss.item(), epoch + 1)
 
                     mean_dist_val = None
                     mean_dist_str = ''
-                    # # TODO
-                    # if world_size > 1:
-                    #     dist.all_reduce(epoch_loss, op=dist.ReduceOp.SUM)
-                    #     epoch_loss /= world_size
-                    # epoch_loss = epoch_loss.item()
 
-                    if val_batch_dist_list is not None:
-                        mean_dist_val = np.mean(val_batch_dist_list)
+                    if 'dist' in val_loss_fct.lower():
+                        val_epoch_dist /= step
+                        mean_dist_val = val_epoch_dist
                         hausdorff_metric.reset()
-                        mean_dist_str = f'/ Current mean distance {mean_dist_val}'
-                        writer.add_scalar('val_distance', mean_dist_val, epoch + 1)
-                    """IF NEW BEST EPOCH"""
+                        mean_dist_str = f'/ Current mean distance {val_epoch_dist.item()}'
+                        writer.add_scalar('val_distance', val_epoch_dist, epoch + 1)
+                    """
+                    BEST EPOCH CONDITION AND SAVE CHECKPOINT
+                    """
                     if best_dice < mean_dice_val and rank == 0:
                         best_epoch_pref_str = 'Best dice epoch'
                         best_metric_epoch = epoch + 1
@@ -464,8 +533,8 @@ def training(img_path_list: Sequence,
                             best_metric_dist_epoch = epoch + 1
                             best_epoch_pref_str = 'Best dice and best distance epoch'
                             best_dist = mean_dist_val
-                            best_dist_str = f'/ Best Distance {best_dist}'
-                            writer.add_scalar('val_best_mean_distance', best_dist, epoch + 1)
+                            best_dist_str = f'/ Best Distance {best_dist.item()}'
+                            writer.add_scalar('val_best_mean_distance', best_dist.item(), epoch + 1)
                             # TODO add dist_barrier
                             checkpoint_path = utils.save_checkpoint(
                                 model, epoch + 1, optimizer, output_fold_dir,
@@ -474,7 +543,7 @@ def training(img_path_list: Sequence,
                             str_best_dist_epoch = (
                                     f'\n{best_epoch_pref_str} {best_metric_dist_epoch} '
                                     # f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
-                                    f'Dice metric {best_dice:.4f} / mean loss {best_avg_loss}'
+                                    f'Dice metric {best_dice.item():.4f} / mean loss {val_epoch_loss.item()}'
                                     + best_dist_str
                             )
                         # Here, only dice improved
@@ -486,7 +555,7 @@ def training(img_path_list: Sequence,
                             str_best_epoch = (
                                 f'\n{best_epoch_pref_str} {best_metric_epoch} '
                                 # f'metric {best_metric:.4f}/distance {best_distance}/avgloss {best_avg_loss}\n'
-                                f'Dice metric {best_dice:.4f} / mean loss {best_avg_loss}'
+                                f'Dice metric {best_dice.item():.4f} / mean loss {best_avg_loss}'
                             )
                     dist.barrier()
                     if keep_dice_and_dist:

@@ -96,8 +96,8 @@ def save_checkpoint(model, epoch, optimizer, output_folder, filename=None):
     return out_path
 
 
-def load_model_from_checkpoint(checkpoint_path, device, hyper_params=None, model_name='UNet'):
-    checkpoint = torch.load(checkpoint_path, map_location=torch.device(device))
+def load_model_from_checkpoint(checkpoint_to_share, device, hyper_params=None, model_name='UNet'):
+    checkpoint = torch.load(checkpoint_to_share[0], map_location=torch.device(device))
     if model_name.lower() == 'unet':
         model = create_unet_model(device, hyper_params)
     elif model_name.lower() == 'unetr':
