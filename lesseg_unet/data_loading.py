@@ -158,7 +158,7 @@ def init_segmentation(img_path_list: Sequence,
 
 def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_transforms, batch_size,
                             dataloader_workers, val_batch_size=1, cache_dir=None, world_size=1, rank=0,
-                            shuffle_training=True, debug=False):
+                            shuffle_training=True, cache_num=None, debug=False):
     train_data_list = []
     val_data_list = []
     for ind, chunk in enumerate(split_lists):
@@ -167,23 +167,31 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
         else:
             train_data_list = np.concatenate([train_data_list, chunk])
     print(f'Create training monai dataset for fold {fold}')
-    # TODO Maybe try again with standard Monai Dataset
-    if debug:
-        train_ds = Dataset(train_data_list, transform=train_img_transforms)
-    elif cache_dir is not None:
+    if cache_dir is not None:
         train_ds = PersistentDataset(train_data_list, transform=train_img_transforms, cache_dir=cache_dir)
     else:
-        train_ds = CacheDataset(train_data_list, transform=train_img_transforms)
+        if debug:
+            cache_rate = 0
+        else:
+            cache_rate = 1
+        if cache_num is None:
+            cache_num = len(train_data_list)
+        train_ds = CacheDataset(train_data_list, transform=train_img_transforms, cache_num=cache_num,
+                                cache_rate=cache_rate)
     # train_ds = Dataset(train_data_list, transform=train_img_transforms)
     # data_loader_checker_first(train_ds, 'training')
     # define dataset, data loader
     print(f'Create validation monai dataset')
-    if debug:
-        val_ds = Dataset(val_data_list, transform=val_img_transforms)
-    elif cache_dir is not None:
+    if cache_dir is not None:
         val_ds = PersistentDataset(val_data_list, transform=val_img_transforms, cache_dir=cache_dir)
     else:
-        val_ds = CacheDataset(val_data_list, transform=val_img_transforms)
+        if debug:
+            cache_rate = 0
+        else:
+            cache_rate = 1
+        # val_ds = CacheDataset(val_data_list, transform=val_img_transforms, cache_num=cache_num,
+        val_ds = CacheDataset(val_data_list, transform=val_img_transforms, cache_num=0,
+                              cache_rate=cache_rate)
     if world_size > 0:
         # if dataloader_workers > 1:
         #     dataloader_workers = 1

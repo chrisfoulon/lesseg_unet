@@ -115,6 +115,7 @@ def training(img_path_list: Sequence,
              save_every_decent_best_epoch=True,
              rank=0,
              world_size=1,
+             cache_num=None,
              debug=False,
              **kwargs
              ):
@@ -141,9 +142,9 @@ def training(img_path_list: Sequence,
         if v == 'True' or v == 1:
             print(f'Stopping after one training loop')
             one_loop = True
+    """MODEL PARAMETERS"""
     # Apparently it can potentially improve the performance when the model does not change its size. (Source tuto UNETR)
     torch.backends.cudnn.benchmark = True
-    """MODEL PARAMETERS"""
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -157,22 +158,9 @@ def training(img_path_list: Sequence,
 
     logging.info(f'Torch device used for this training: {str(device)}')
 
-    if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
-        hyper_params = net.default_unetr_hyper_params
-    else:
-        hyper_params = net.default_unet_hyper_params
-    # checking is CoordConv is used and change the input channel dimension
-    if transform_dict is not None:
-        for li in transform_dict:
-            for d in transform_dict[li]:
-                for t in d:
-                    if t == 'CoordConvd' or t == 'CoordConvAltd':
-                        hyper_params['in_channels'] = 4
-    if dropout is not None and dropout == 0:
-        hyper_params['dropout'] = dropout
-        logging.info(f'Dropout rate used: {dropout}')
-
-    """LOSS FUNCTIONS"""
+    """
+    LOSS FUNCTIONS
+    """
     if training_loss_fct.lower() in ['dice_ce', 'dicece', 'dice_ce_loss', 'diceceloss', 'dice_cross_entropy']:
         loss_function = DiceCELoss(sigmoid=True)
     else:
@@ -185,7 +173,9 @@ def training(img_path_list: Sequence,
         val_loss_function = DiceLoss(sigmoid=True)
     logging.info(f'Validation loss fct: {val_loss_function}')
 
-    """METRICS"""
+    """
+    METRICS
+    """
     dice_metric = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
     hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean", percentile=95)
     keep_dice_and_dist = True
@@ -248,7 +238,23 @@ def training(img_path_list: Sequence,
         logging.info(f'Will stop after {stop_best_epoch} epochs without improvement')
     # TODO ADD SCALER
     for fold in range(folds_number):
-
+        """
+        SET MODEL PARAM AND CREATE / LOAD MODEL OBJECT
+        """
+        if model_type.lower() == 'unetr':
+            hyper_params = net.default_unetr_hyper_params
+        else:
+            hyper_params = net.default_unet_hyper_params
+        # checking is CoordConv is used and change the input channel dimension
+        if transform_dict is not None:
+            for li in transform_dict:
+                for d in transform_dict[li]:
+                    for t in d:
+                        if t == 'CoordConvd' or t == 'CoordConvAltd':
+                            hyper_params['in_channels'] = 4
+        if dropout is not None and dropout == 0:
+            hyper_params['dropout'] = dropout
+            logging.info(f'Dropout rate used: {dropout}')
         # TODO REFACTOR THAT SH**
         if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
             hyper_params['img_size'] = training_img_size
@@ -298,7 +304,7 @@ def training(img_path_list: Sequence,
         train_loader, val_loader = data_loading.create_fold_dataloaders(
             split_lists, fold, train_img_transforms,
             val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
-            world_size, rank, shuffle_training=shuffle_training, debug=debug
+            world_size, rank, shuffle_training=shuffle_training, cache_num=cache_num, debug=debug
         )
 
         """EPOCHS LOOP VARIABLES"""

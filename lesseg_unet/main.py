@@ -96,6 +96,8 @@ def main():
                                                                                        'spatial_size of the model')
     parser.add_argument('-cache', '--cache', action='store_true',
                         help='Cache the non-random transformation in cache in output directory')
+    parser.add_argument('-cn', '--cache_num', type=int,
+                        help='Number of images to be cached with CacheDataset (default)')
     # DDP arguments
     parser.add_argument("--distributed", action="store_true", help="start distributed training")
     parser.add_argument("--world_size", default=1, type=int, help="number of nodes for distributed training")
@@ -122,7 +124,15 @@ def main():
     #     args.local_rank = int(os.environ["LOCAL_RANK"])
     # else:
     #     print(args.local_rank)
+    """
+    Set enrivonment variables to overwrite torchrun default config and allow 
+    1) more open files allowed
+    2) Max OpenMP threads increased to the number of workers
+    3) also set the number of threads in torch to the number of workers 
+    """
     torch.multiprocessing.set_sharing_strategy('file_system')
+    os.environ['OMP_NUM_THREADS'] = str(args.num_workers)
+    torch.set_num_threads(args.num_workers)
     if args.local_rank is not None:
         # Starting the model manually
         local_rank = args.local_rank
@@ -215,7 +225,8 @@ def main_worker(local_rank, args, kwargs):
         stop_best_epoch = -1
     else:
         stop_best_epoch = args.stop_best_epoch
-
+    if args.debug:
+        print(torch.__config__.parallel_info())
     # Gather input data and setup based on script arguments
     output_root = Path(args.output)
     os.makedirs(output_root, exist_ok=True)
@@ -367,6 +378,7 @@ def main_worker(local_rank, args, kwargs):
                           cache_dir=cache_dir,
                           world_size=args.world_size,
                           rank=local_rank,
+                          cache_num=args.cache_num,
                           debug=args.debug,
                           **kwargs)
     else:
