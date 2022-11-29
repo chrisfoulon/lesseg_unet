@@ -64,6 +64,8 @@ def main():
                                                                     'checkpoint will be used)')
     parser.add_argument('-sa', '--segmentation_area', action='store_true', help='Associate the segmentated masks'
                                                                                 ' to lesion areas in a csv file')
+    parser.add_argument('-mt', '--model_type', type=str, default='UNETR',
+                        help='Select the model architecture (UNet, UNETR)')
     parser.add_argument('-d', '--torch_device', type=str, help='Device type and number given to'
                                                                'torch.device()')
     parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
@@ -98,6 +100,7 @@ def main():
     parser.add_argument("--distributed", action="store_true", help="start distributed training")
     parser.add_argument("--world_size", default=1, type=int, help="number of nodes for distributed training")
     parser.add_argument("--local_rank", type=int, help="node rank for distributed training")
+    # DEBUG options
     parser.add_argument('--debug', action='store_true', help='debug mode')
     parser.add_argument('-din', '--debug_img_num', type=int, help='Number of images from the input list')
     # args = parser.parse_args()
@@ -345,6 +348,7 @@ def main_worker(local_rank, args, kwargs):
                           img_pref=b1000_pref,
                           transform_dict=transform_dict,
                           pretrained_point=pretrained_point,
+                          model_type='UNETR',
                           device=args.torch_device,
                           batch_size=args.batch_size,
                           val_batch_size=args.val_batch_size,
@@ -363,6 +367,7 @@ def main_worker(local_rank, args, kwargs):
                           cache_dir=cache_dir,
                           world_size=args.world_size,
                           rank=local_rank,
+                          debug=args.debug,
                           **kwargs)
     else:
         if args.checkpoint is None:

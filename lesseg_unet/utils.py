@@ -84,19 +84,19 @@ def nifti_affine_from_dataset(nifti_path: Union[str, bytes, os.PathLike]):
 
 
 def save_checkpoint(model, epoch, optimizer, output_folder, filename=None):
-    state = {'epoch': epoch,
-             'state_dict': model.state_dict(),
-             'optim_dict': optimizer.state_dict(),
-             }
+    state_dict = {'epoch': epoch,
+                  'state_dict': model.state_dict(),
+                  'optim_dict': optimizer.state_dict(),
+                  }
     if filename is None:
         out_path = Path(output_folder, 'state_dictionary_{}.pt'.format(epoch))
     else:
         out_path = Path(output_folder, filename)
-    torch.save(state, out_path)
+    torch.save(state_dict, out_path)
     return out_path
 
 
-def load_model_from_checkpoint(checkpoint_to_share, device, hyper_params=None, model_name='UNet'):
+def load_model_from_checkpoint(checkpoint_to_share, device, hyper_params, model_name='UNet'):
     checkpoint = torch.load(checkpoint_to_share[0], map_location=torch.device(device))
     if model_name.lower() == 'unet':
         model = create_unet_model(device, hyper_params)

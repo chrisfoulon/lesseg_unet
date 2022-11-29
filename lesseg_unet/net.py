@@ -42,7 +42,7 @@ def create_unetr_model(device: torch.device,
     # create UNet
     logging.info('Creating monai UNETR with params: {}'.format(unetr_hyper_params))
     model = UNETR(**unetr_hyper_params).to(device)
-    return model
+    return model, unetr_hyper_params
 
 
 def create_unet_model(device: torch.device,
@@ -52,4 +52,13 @@ def create_unet_model(device: torch.device,
     # create UNet
     logging.info('Creating monai UNet with params: {}'.format(unet_hyper_params))
     model = UNet(**unet_hyper_params).to(device)
-    return model
+    return model, unet_hyper_params
+
+
+def create_model(device: torch.device, hyper_params: dict = None, model_class_name: str = 'UNETR') -> torch.nn.Module:
+    if model_class_name.lower() == 'unetr':
+        model, hyper_params = create_unetr_model(device, hyper_params)
+    if model_class_name.lower() == 'unet':
+        model, hyper_params = create_unet_model(device, hyper_params)
+    return model, hyper_params
+

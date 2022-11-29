@@ -95,6 +95,7 @@ def training(img_path_list: Sequence,
              img_pref: str = None,
              transform_dict=None,
              pretrained_point=None,
+             model_type='UNETR',
              device: str = None,
              batch_size: int = 1,
              val_batch_size: int = 1,
@@ -114,6 +115,7 @@ def training(img_path_list: Sequence,
              save_every_decent_best_epoch=True,
              rank=0,
              world_size=1,
+             debug=False,
              **kwargs
              ):
     # disable logging for processes except 0 on every node
@@ -246,6 +248,7 @@ def training(img_path_list: Sequence,
         logging.info(f'Will stop after {stop_best_epoch} epochs without improvement')
     # TODO ADD SCALER
     for fold in range(folds_number):
+
         # TODO REFACTOR THAT SH**
         if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
             hyper_params['img_size'] = training_img_size
@@ -260,7 +263,7 @@ def training(img_path_list: Sequence,
                 model = utils.load_model_from_checkpoint(checkpoint_to_share, device, hyper_params, model_name='unetr')
                 logging.info(f'UNETR created and succesfully loaded from {pretrained_point}')
             else:
-                model = net.create_unetr_model(device, hyper_params)
+                model, hyper_params = net.create_unetr_model(device, hyper_params)
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
             # For the regularisation
             params = list(model.parameters())
@@ -274,7 +277,7 @@ def training(img_path_list: Sequence,
                 model = utils.load_model_from_checkpoint(checkpoint_to_share, device, hyper_params, model_name='unet')
                 logging.info(f'UNet created and succesfully loaded from {pretrained_point}')
             else:
-                model = net.create_unet_model(device, hyper_params)
+                model, hyper_params = net.create_unet_model(device, hyper_params)
             optimizer = torch.optim.Adam(model.parameters(), 1e-3)
             params = list(model.model.parameters())
         # TODO the segmentation might require to add 'module' after model. to access the state_dict and all
@@ -295,7 +298,7 @@ def training(img_path_list: Sequence,
         train_loader, val_loader = data_loading.create_fold_dataloaders(
             split_lists, fold, train_img_transforms,
             val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
-            world_size, rank, shuffle_training=shuffle_training
+            world_size, rank, shuffle_training=shuffle_training, debug=debug
         )
 
         """EPOCHS LOOP VARIABLES"""
@@ -321,19 +324,6 @@ def training(img_path_list: Sequence,
             print(f'epoch {epoch + 1}/{epoch_num}')
             # This is required with multi-gpu
             train_loader.sampler.set_epoch(epoch)
-            # if epoch == 0:
-            #     sampler_train.set_epoch(0)
-            # else:
-            #     """
-            #     Recreate the DataLoader each time to ensure I get a different ordering of the data each epoch
-            #     Running set_epoch is necessary according to the documentation, but do I really need to recreate the
-            #     loader?
-            #     """
-            #     sampler_train.set_epoch(epoch)  # Shuffle each epoch
-            #     loader_train = DataLoader(dataset_train, sampler=sampler_train, batch_size=hyper_params['batch_size'],
-            #               drop_last=True, num_workers=hyper_params['workers_per_process'],
-            #               pin_memory=hyper_params['pin_memory'],
-            #               prefetch_factor=hyper_params['prefetch_factor'])
 
             model.train()
             epoch_loss = 0
@@ -383,10 +373,6 @@ def training(img_path_list: Sequence,
                     print(img_name)
                     print(np.mean(data))
                     nib.save(nii, Path(img_dir, f'{img_name}.nii.gz'))
-                    # display.savefig('pretty_brain.png')
-                    # print(f'inputs shape: {inputs.shape}')
-                    # plot_2d_or_3d_image(inputs[0:,...], 12, writer, tag='tr_inputs')
-                    # input(img_name + '  continue??')
                 logit_outputs = model(inputs)
                 # In case we use CoordConv, we only take the mask of the labels without the coordinates
                 masks_only_labels = labels[:, :1, :, :, :]
@@ -404,8 +390,8 @@ def training(img_path_list: Sequence,
                     print(f'[{fold}]{step}/{batches_per_epoch}, train loss: {loss.item():.4f}')
                 else:
                     train_iter.set_description(
-                        f'Training[{epoch + 1}] batch_loss:[{loss.item():.4f}]')
-                        # f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss / step:.4f}]')
+                        # f'Training[{epoch + 1}] batch_loss:[{loss.item():.4f}]')
+                        f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss.item() / step:.4f}]')
 
                 # loss = 0
                 # epoch_loss = 0
@@ -514,7 +500,7 @@ def training(img_path_list: Sequence,
                     """
                     BEST EPOCH CONDITION AND SAVE CHECKPOINT
                     """
-                    if best_dice < mean_dice_val and rank == 0:
+                    if rank == 0 and best_dice < mean_dice_val:
                         best_epoch_pref_str = 'Best dice epoch'
                         best_metric_epoch = epoch + 1
                         best_dice = mean_dice_val
@@ -553,7 +539,7 @@ def training(img_path_list: Sequence,
                             str_best_epoch = (
                                 f'\n{best_epoch_pref_str} {best_metric_epoch} '
                                 # f'metric {best_metric:.4f}/distance {best_distance}/avgloss {best_avg_loss}\n'
-                                f'Dice metric {best_dice.item():.4f} / mean loss {best_avg_loss}'
+                                f'Dice metric {best_dice.item():.4f} / mean loss {best_avg_loss.item()}'
                             )
                     dist.barrier()
                     if keep_dice_and_dist:
@@ -561,8 +547,8 @@ def training(img_path_list: Sequence,
                     else:
                         best_epoch_count = epoch + 1 - best_metric_epoch
                     str_current_epoch = (
-                            f'[Fold: {fold}]Current epoch: {epoch + 1} current mean loss: {mean_loss_val:.4f}'
-                            f' current mean dice metric: {mean_dice_val}' + mean_dist_str + '\n'
+                            f'[Fold: {fold}]Current epoch: {epoch + 1} current mean loss: {mean_loss_val.item():.4f}'
+                            f' current mean dice metric: {mean_dice_val.item()}' + mean_dist_str + '\n'
                             + str_best_epoch + str_best_dist_epoch + '\n'
                     )
                     print(str_current_epoch)

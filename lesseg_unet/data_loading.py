@@ -158,7 +158,7 @@ def init_segmentation(img_path_list: Sequence,
 
 def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_transforms, batch_size,
                             dataloader_workers, val_batch_size=1, cache_dir=None, world_size=1, rank=0,
-                            shuffle_training=True):
+                            shuffle_training=True, debug=False):
     train_data_list = []
     val_data_list = []
     for ind, chunk in enumerate(split_lists):
@@ -168,7 +168,9 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
             train_data_list = np.concatenate([train_data_list, chunk])
     print(f'Create training monai dataset for fold {fold}')
     # TODO Maybe try again with standard Monai Dataset
-    if cache_dir is not None:
+    if debug:
+        train_ds = Dataset(train_data_list, transform=train_img_transforms)
+    elif cache_dir is not None:
         train_ds = PersistentDataset(train_data_list, transform=train_img_transforms, cache_dir=cache_dir)
     else:
         train_ds = CacheDataset(train_data_list, transform=train_img_transforms)
@@ -176,14 +178,16 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
     # data_loader_checker_first(train_ds, 'training')
     # define dataset, data loader
     print(f'Create validation monai dataset')
-    if cache_dir is not None:
+    if debug:
+        val_ds = Dataset(val_data_list, transform=val_img_transforms)
+    elif cache_dir is not None:
         val_ds = PersistentDataset(val_data_list, transform=val_img_transforms, cache_dir=cache_dir)
     else:
         val_ds = CacheDataset(val_data_list, transform=val_img_transforms)
     if world_size > 0:
-        if dataloader_workers > 1:
-            dataloader_workers = 1
-            print('Number of workers for the dataloader changed to 1 as DDP is activated')
+        # if dataloader_workers > 1:
+        #     dataloader_workers = 1
+        #     print('Number of workers for the dataloader changed to 1 as DDP is activated')
         train_sampler = DistributedSampler(train_ds, num_replicas=world_size, rank=rank, shuffle=shuffle_training,
                                            drop_last=True)
         # val_sampler = None
