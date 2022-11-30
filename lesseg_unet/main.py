@@ -98,7 +98,7 @@ def main():
     parser.add_argument('-vbs', '--val_batch_size', default=10, type=int, help='Batch size for the validation loop')
     parser.add_argument('-cache', '--cache', action='store_true',
                         help='Cache the non-random transformation in cache in output directory')
-    parser.add_argument('-cn', '--cache_num', type=int,
+    parser.add_argument('-cn', '--cache_num', type=int, default=0,
                         help='Number of images to be cached with CacheDataset (default)')
     # Epochs parameters
     parser.add_argument('-ne', '--num_epochs', default=50, type=int, help='Number of epochs')
@@ -108,6 +108,7 @@ def main():
     parser.add_argument("--distributed", action="store_true", help="start distributed training")
     parser.add_argument("--world_size", default=1, type=int, help="number of nodes for distributed training")
     parser.add_argument("--local_rank", type=int, help="node rank for distributed training")
+    parser.add_argument("-cvd", "--cuda_visible_devices", type=str, help="List of visible devices for cuda")
     # DEBUG options
     parser.add_argument('--debug', action='store_true', help='debug mode')
     parser.add_argument('-din', '--debug_img_num', type=int, help='Number of images from the input list')
@@ -139,10 +140,13 @@ def main():
     torch.multiprocessing.set_sharing_strategy('file_system')
     os.environ['OMP_NUM_THREADS'] = str(args.num_workers)
     torch.set_num_threads(args.num_workers)
+    if args.cuda_visible_devices is not None:
+        os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda_visible_devices
     if args.local_rank is not None:
         # Starting the model manually
         local_rank = args.local_rank
-        os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(['0', '1'])
+        if 'CUDA_VISIBLE_DEVICES' not in os.environ:
+            os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(['0', '1'])
         # os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(['0'])
         print('A')
     else:

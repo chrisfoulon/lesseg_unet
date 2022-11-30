@@ -39,11 +39,11 @@ default_swinunetr_hyper_params = {
     'in_channels': 1,
     'out_channels': 1,
     'img_size': (96, 96, 96),
-    'feature_size': 32,
+    'feature_size': 36,
     'attn_drop_rate': 0.0,
     'dropout_path_rate': 0.0,
-    'use_checkpoint': True,
-    'dropout_rate': 0.0,
+    'use_checkpoint': False,
+    'drop_rate': 0.0,
 }
 
 
@@ -52,7 +52,7 @@ def create_swinunetr_model(device: torch.device,
     if hyper_params is None:
         hyper_params = default_swinunetr_hyper_params
     # create UNet
-    logging.info('Creating monai UNETR with params: {}'.format(hyper_params))
+    logging.info('Creating monai SWIN-UNETR with params: {}'.format(hyper_params))
     model = SwinUNETR(**hyper_params).to(device)
     return model, hyper_params
 

@@ -24,7 +24,7 @@ from bcblib.tools.nifti_utils import nifti_overlap_images
 def open_tensorboard_page(log_dir, port='8008', new_browser_window=False):
     if not Path(log_dir).is_dir():
         raise ValueError('{} is not an existing directory with the logs'.format(log_dir))
-    return_value = subprocess.call(['tensorboard', '--logdir', log_dir, '--port', port])
+    return_value = subprocess.call(['python', '-m', 'tensorboard.main', '--logdir', log_dir, '--port', port])
     print('###############')
     print('Return value:', return_value)
     tb_url = 'http://localhost:{}'.format(port)

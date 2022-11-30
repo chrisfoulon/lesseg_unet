@@ -15,7 +15,7 @@ from scipy.stats import entropy
 import monai.transforms
 from monai.metrics import HausdorffDistanceMetric, DiceMetric
 from bcblib.tools.nifti_utils import is_nifti, centre_of_mass_difference
-from lesseg_unet.net import create_unet_model, create_unetr_model
+from lesseg_unet.net import create_model
 import nibabel as nib
 import torch
 import numpy as np
@@ -91,20 +91,17 @@ def save_checkpoint(model, epoch, optimizer, scaler, hyper_params, output_folder
                   'scaler_dict': scaler.state_dict(),
                   }
     if filename is None:
-        out_path = Path(output_folder, 'state_dictionary_{}.pt'.format(epoch))
+        out_path = Path(output_folder, 'checkpoint_dictionary_{}.pt'.format(epoch))
     else:
         out_path = Path(output_folder, filename)
     torch.save(state_dict, out_path)
     return out_path
 
 
-def load_model_from_checkpoint(loaded_checkpoint, device, hyper_params, model_name='UNETR'):
-    if model_name.lower() == 'unet':
-        model = create_unet_model(device, hyper_params)
-    elif model_name.lower() == 'unetr':
-        model = create_unetr_model(device, hyper_params)
-    else:
-        raise ValueError(f'model "{model_name}" unknown')
+def load_model_from_checkpoint(loaded_checkpoint, device, hyper_params=None, model_name='UNETR'):
+    if hyper_params is None:
+        hyper_params = loaded_checkpoint['hyper_params']
+    model, hyper_params = create_model(device, hyper_params, model_name)
     model.load_state_dict(loaded_checkpoint['state_dict'])
     # model.eval()
     # bottom_up_graph.model.load_state_dict(checkpoint['bottom_up_graph_state_dict'])
@@ -270,7 +267,7 @@ def percent_vox_loss(img, sigmoid=True, discrete=True, divide_max_vox=1):
     if sigmoid:
         img = torch.sigmoid(img)
     if discrete:
-        img = monai.transforms.AsDiscrete(threshold_values=True)(img)
+        img = monai.transforms.AsDiscrete(threshold=0.5)(img)
     max_vox = torch.prod(torch.as_tensor(img.shape))
     if divide_max_vox != 1:
         max_vox = max_vox // divide_max_vox

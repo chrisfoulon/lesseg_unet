@@ -38,13 +38,22 @@ from torch.nn.parallel import DistributedDataParallel
 # signal.signal(signal.SIGINT, handler)
 
 
-def setup(rank, world_size, port='1234', cpu=False):
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = port
-    if not cpu:
-        dist.init_process_group('nccl', rank=rank, world_size=world_size)
-    else:
-        dist.init_process_group('gloo', rank=rank, world_size=world_size)
+def count_unique_parameters(parameters):
+    """
+    Credit: James Ruffle
+    :param parameters:
+    :return:
+    """
+    # Only counts unique params
+    count = 0
+    list_of_names = []
+    for p in parameters:
+        name = p[0]
+        param = p[1]
+        if name not in list_of_names:
+            list_of_names.append(name)
+            count += np.prod(param.size())
+    return count
 
 
 def testing(train_loader, output_dir):
@@ -185,7 +194,9 @@ def training(img_path_list: Sequence,
             keep_dice_and_dist = False
         if v == 'True' or v == 1:
             keep_dice_and_dist = True
-    """TRANSFORMATIONS AND AUGMENTATIONS"""
+    """
+    TRANSFORMATIONS AND AUGMENTATIONS
+    """
     # Attempt to send the transformations / augmentations on the GPU when possible (disabled by default)
     transformations_device = None
     if 'tr_device' in kwargs:
@@ -203,17 +214,21 @@ def training(img_path_list: Sequence,
     val_img_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp,
                                                         device=transformations_device)
 
-    """POST TRANSFORMATIONS"""
+    """
+    POST TRANSFORMATIONS
+    """
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
 
-    """DATA LOADING"""
+    """
+    DATA LOADING
+    """
     if img_pref is not None and img_pref != '':
         logging.info(f'Abnormal images prefix: {img_pref}')
 
     # Get the images from the image and label list and tries to match them
     img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, seg_path_list, img_pref)
 
-    split_lists = utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage)
+    split_lists = utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage, shuffle=True)
     # Save the split_lists to easily get the content of the folds and all
     with open(Path(output_dir, 'split_lists.json'), 'w+') as f:
         json.dump(split_lists, f, indent=4)
@@ -223,7 +238,9 @@ def training(img_path_list: Sequence,
     if training_img_size is None:
         training_img_size = utils.get_img_size(split_lists[0][0]['image'])
 
-    """FOLDS LOOP VARIABLES"""
+    """
+    FOLDS LOOP VARIABLES
+    """
     non_blocking = True
     if 'non_blocking' in kwargs:
         v = kwargs['non_blocking']
@@ -248,15 +265,18 @@ def training(img_path_list: Sequence,
                 checkpoint_to_share = [None]
             torch.distributed.broadcast_object_list(checkpoint_to_share, src=0)
             checkpoint = checkpoint_to_share[0]
-            hyper_params = checkpoint['state_dict']['hyper_params']
+            hyper_params = checkpoint['hyper_params']
             model = utils.load_model_from_checkpoint(checkpoint, device, hyper_params, model_name=model_type)
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
             optimizer.load_state_dict(checkpoint['optim_dict'])
             scaler.load_state_dict(checkpoint['scaler_dict'])
             logging.info(f'{model_type} created and succesfully loaded from {pretrained_point}')
         else:
-            if model_type.lower() == 'unetr':
-                hyper_params = net.default_unetr_hyper_params
+            if model_type.lower() == 'unetr' or model_type.lower() == 'swinunetr':
+                if model_type.lower() == 'unetr':
+                    hyper_params = net.default_unetr_hyper_params
+                else:
+                    hyper_params = net.default_swinunetr_hyper_params
                 hyper_params['img_size'] = training_img_size
                 if 'feature_size' in kwargs:
                     hyper_params['feature_size'] = int(kwargs['feature_size'])
@@ -269,14 +289,15 @@ def training(img_path_list: Sequence,
                         for t in d:
                             if t == 'CoordConvd' or t == 'CoordConvAltd':
                                 hyper_params['in_channels'] = 4
-            if dropout is not None and dropout == 0:
-                hyper_params['dropout'] = dropout
-                logging.info(f'Dropout rate used: {dropout}')
+            # if dropout is not None and dropout == 0:
+            #     hyper_params['dropout'] = dropout
+            #     logging.info(f'Dropout rate used: {dropout}')
 
-            model, _ = net.create_model(device, hyper_params)
+            model, _ = net.create_model(device, hyper_params, model_class_name=model_type)
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
             # use amp to accelerate training
-
+        total_param_count = count_unique_parameters(model.named_parameters())
+        print(f'Total number of parameters in the model: {str(total_param_count)}')
         params = list(model.parameters())
         # TODO the segmentation might require to add 'module' after model. to access the state_dict and all
         if torch.cuda.is_available():
@@ -290,9 +311,6 @@ def training(img_path_list: Sequence,
         writer = SummaryWriter(log_dir=str(output_fold_dir))
         # Creates both the training and validation loaders based on the fold number
         # (e.g. fold 0 means the first sublist of split_lists will be the validation set for this fold)
-        # TODO Share the data over the ranks
-        # TODO https://scm4.cs.ucl.ac.uk/radiology-system/multimodalgenerativemodel/-/blob/main/modules/orchestration/training_script.py
-        # line 221 to ~270
         train_loader, val_loader = data_loading.create_fold_dataloaders(
             split_lists, fold, train_img_transforms,
             val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
