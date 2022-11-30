@@ -30,8 +30,6 @@ def main():
                                    help='[Segmentation only] The path to a json dict containing the keys of the '
                                         'different populations (subfolder names) with the list of images paths'
                                         '[Cannot be used for Validation]')
-    # # Hidden param, do not use
-    # nifti_paths_group.add_argument('-bm', '--benchmark', action='store_true', help=argparse.SUPPRESS)
     lesion_paths_group = parser.add_mutually_exclusive_group(required=False)
     lesion_paths_group.add_argument('-lp', '--lesion_input_path', type=str,
                                     help='Root folder of the b1000 dataset')
@@ -42,62 +40,70 @@ def main():
                                      help='folder containing the control images (image_prefix not applied)')
     control_paths_group.add_argument('-lctr', '--controls_list', type=str,
                                      help='file path of the list of control images (image_prefix not applied)')
+    # Tranformation
     parser.add_argument('-trs', '--transform_dict', type=str,
-                                     help='file path to a json dictionary of transformations')
+                        help='file path to a json dictionary of transformations')
+    parser.add_argument('-clamp', action='store_true', help='Apply intensity clamping (with default value if not given'
+                                                            ' with --clamp_low and --clamp_high)')
+    parser.add_argument('-cl', '--clamp_low', type=float, help='Define the low quantile of intensity clamping')
+    parser.add_argument('-ch', '--clamp_high', type=float, help='Define the high quantile of intensity clamping')
+    parser.add_argument('-clamp_lesion_set', action='store_true',
+                        help='Apply intensity clamping on the training lesioned set as well'
+                             ' (with default value if not given with --clamp_low and --clamp_high)')
+    # Losses and metric parameters
     parser.add_argument('-lfct', '--loss_function', type=str, default='dice',
                         help='Loss function used for training')
     parser.add_argument('-wf', '--weight_factor', type=float, default=1,
                         help='Multiply the control loss by this factor')
     parser.add_argument('-vlfct', '--val_loss_function', type=str, default='dice',
                         help='Loss function used for validation')
+    # Parameters for control data
     default_label_group = parser.add_mutually_exclusive_group(required=False)
     default_label_group.add_argument('-cdl', '--create_default_label', action='store_true',
                                      help='Creates a default image filled with zeros for control images label')
     default_label_group.add_argument('-dl', '--default_label', type=str,
                                      help='Path to a default mask that will be used in case no '
                                           'lesion mask is found for the b1000')
+    # Segmentation parameters
     parser.add_argument('-pt', '--checkpoint', type=str, help='file path to a torch checkpoint file'
                                                               ' or directory (in that case, the most recent '
                                                               'checkpoint will be used)')
-    parser.add_argument('-pp', '--pretrained_point', type=str, help='[Training opt]file path to a torch checkpoint file'
-                                                                    ' or directory (in that case, the most recent '
-                                                                    'checkpoint will be used)')
     parser.add_argument('-sa', '--segmentation_area', action='store_true', help='Associate the segmentated masks'
                                                                                 ' to lesion areas in a csv file')
-    parser.add_argument('-mt', '--model_type', type=str, default='UNETR',
-                        help='Select the model architecture (UNet, UNETR)')
-    parser.add_argument('-d', '--torch_device', type=str, help='Device type and number given to'
-                                                               'torch.device()')
-    parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
-    # TODO maybe
-    # parser.add_argument('-ctr_pref', '--control_image_prefix', type=str,
-    #                     help='Define a prefix to filter the control images')
-    parser.add_argument('-nw', '--num_workers', default=4, type=int, help='Number of dataloader workers')
-    parser.add_argument('-bs', '--batch_size', default=10, type=int, help='Batch size for the training loop')
-    parser.add_argument('-vbs', '--val_batch_size', default=10, type=int, help='Batch size for the validation loop')
-    parser.add_argument('-ne', '--num_epochs', default=50, type=int, help='Number of epochs')
-    parser.add_argument('-tv', '--train_val', type=int, help='Training / validation percentage cut')
-    parser.add_argument('-sbe', '--stop_best_epoch', type=int, help='Number of epochs without improvement before it '
-                                                                    'stops')
-    # parser.add_argument('-ns', '--num_nifti_save', default=25, type=int, help='Number of niftis saved '
-    #                                                                           'during validation')
-    parser.add_argument('-dropout', type=float, help='Set a dropout value for the model')
-    parser.add_argument('-nf', '--folds_number', default=1, type=int, help='Set a dropout value for the model')
-    parser.add_argument('-clamp', action='store_true', help='Apply intensity clamping (with default value if not given'
-                                                            ' with --clamp_low and --clamp_high)')
-    parser.add_argument('-cl', '--clamp_low', type=float, help='Define the low quantile of intensity clamping')
-    parser.add_argument('-ch', '--clamp_high', type=float, help='Define the high quantile of intensity clamping')
     parser.add_argument('-overlap', action='store_true', help='Create the overlap of the segmentations')
-    parser.add_argument('-clamp_lesion_set', action='store_true',
-                        help='Apply intensity clamping on the training lesioned set as well'
-                             ' (with default value if not given with --clamp_low and --clamp_high)')
     parser.add_argument('-kmos', '--keep_model_output_size', action='store_true', help='Keep the output of the '
                                                                                        'segmentation in the '
                                                                                        'spatial_size of the model')
+
+    # Model parameters
+    parser.add_argument('-pp', '--pretrained_point', type=str, help='[Training opt]file path to a torch checkpoint file'
+                                                                    ' or directory (in that case, the most recent '
+                                                                    'checkpoint will be used)')
+    parser.add_argument('-mt', '--model_type', type=str, default='UNETR',
+                        help='Select the model architecture (UNet, UNETR, SWINUNETR)')
+    parser.add_argument('-d', '--torch_device', type=str, help='Device type and number given to'
+                                                               'torch.device()')
+    parser.add_argument('-dropout', type=float, help='Set a dropout value for the model')
+    parser.add_argument('-fs', '--feature_size', type=int, help='Set the feature size for (SWIN)UNETR')
+    # TODO maybe
+    # parser.add_argument('-ctr_pref', '--control_image_prefix', type=str,
+    #                     help='Define a prefix to filter the control images')
+    # Files split and matching options
+    parser.add_argument('-tv', '--train_val', type=int, help='Training / validation percentage cut')
+    parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
+    parser.add_argument('-nf', '--folds_number', default=1, type=int, help='Set a dropout value for the model')
+    # Datasets and Loaders parameters
+    parser.add_argument('-nw', '--num_workers', default=4, type=int, help='Number of dataloader workers')
+    parser.add_argument('-bs', '--batch_size', default=10, type=int, help='Batch size for the training loop')
+    parser.add_argument('-vbs', '--val_batch_size', default=10, type=int, help='Batch size for the validation loop')
     parser.add_argument('-cache', '--cache', action='store_true',
                         help='Cache the non-random transformation in cache in output directory')
     parser.add_argument('-cn', '--cache_num', type=int,
                         help='Number of images to be cached with CacheDataset (default)')
+    # Epochs parameters
+    parser.add_argument('-ne', '--num_epochs', default=50, type=int, help='Number of epochs')
+    parser.add_argument('-sbe', '--stop_best_epoch', type=int, help='Number of epochs without improvement before it '
+                                                                    'stops')
     # DDP arguments
     parser.add_argument("--distributed", action="store_true", help="start distributed training")
     parser.add_argument("--world_size", default=1, type=int, help="number of nodes for distributed training")

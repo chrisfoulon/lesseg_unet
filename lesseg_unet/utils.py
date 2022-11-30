@@ -83,10 +83,12 @@ def nifti_affine_from_dataset(nifti_path: Union[str, bytes, os.PathLike]):
     return nib.load(nifti_path).affine
 
 
-def save_checkpoint(model, epoch, optimizer, output_folder, filename=None):
+def save_checkpoint(model, epoch, optimizer, scaler, hyper_params, output_folder, filename=None):
     state_dict = {'epoch': epoch,
                   'state_dict': model.state_dict(),
                   'optim_dict': optimizer.state_dict(),
+                  'hyper_params': hyper_params,
+                  'scaler_dict': scaler.state_dict(),
                   }
     if filename is None:
         out_path = Path(output_folder, 'state_dictionary_{}.pt'.format(epoch))
@@ -96,15 +98,14 @@ def save_checkpoint(model, epoch, optimizer, output_folder, filename=None):
     return out_path
 
 
-def load_model_from_checkpoint(checkpoint_to_share, device, hyper_params, model_name='UNet'):
-    checkpoint = torch.load(checkpoint_to_share[0], map_location=torch.device(device))
+def load_model_from_checkpoint(loaded_checkpoint, device, hyper_params, model_name='UNETR'):
     if model_name.lower() == 'unet':
         model = create_unet_model(device, hyper_params)
     elif model_name.lower() == 'unetr':
         model = create_unetr_model(device, hyper_params)
     else:
         raise ValueError(f'model "{model_name}" unknown')
-    model.load_state_dict(checkpoint['state_dict'])
+    model.load_state_dict(loaded_checkpoint['state_dict'])
     # model.eval()
     # bottom_up_graph.model.load_state_dict(checkpoint['bottom_up_graph_state_dict'])
     return model

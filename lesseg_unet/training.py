@@ -241,51 +241,44 @@ def training(img_path_list: Sequence,
         """
         SET MODEL PARAM AND CREATE / LOAD MODEL OBJECT
         """
-        if model_type.lower() == 'unetr':
-            hyper_params = net.default_unetr_hyper_params
-        else:
-            hyper_params = net.default_unet_hyper_params
-        # checking is CoordConv is used and change the input channel dimension
-        if transform_dict is not None:
-            for li in transform_dict:
-                for d in transform_dict[li]:
-                    for t in d:
-                        if t == 'CoordConvd' or t == 'CoordConvAltd':
-                            hyper_params['in_channels'] = 4
-        if dropout is not None and dropout == 0:
-            hyper_params['dropout'] = dropout
-            logging.info(f'Dropout rate used: {dropout}')
-        # TODO REFACTOR THAT SH**
-        if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
-            hyper_params['img_size'] = training_img_size
-            if 'feature_size' in kwargs:
-                hyper_params['feature_size'] = int(kwargs['feature_size'])
-            if pretrained_point is not None:
-                if dist.get_rank() == 0:
-                    checkpoint_to_share = [torch.load(pretrained_point, map_location="cpu")]
-                else:
-                    checkpoint_to_share = [None]
-                torch.distributed.broadcast_object_list(checkpoint_to_share, src=0)
-                model = utils.load_model_from_checkpoint(checkpoint_to_share, device, hyper_params, model_name='unetr')
-                logging.info(f'UNETR created and succesfully loaded from {pretrained_point}')
+        if pretrained_point is not None:
+            if dist.get_rank() == 0:
+                checkpoint_to_share = [torch.load(pretrained_point, map_location="cpu")]
             else:
-                model, hyper_params = net.create_unetr_model(device, hyper_params)
+                checkpoint_to_share = [None]
+            torch.distributed.broadcast_object_list(checkpoint_to_share, src=0)
+            checkpoint = checkpoint_to_share[0]
+            hyper_params = checkpoint['state_dict']['hyper_params']
+            model = utils.load_model_from_checkpoint(checkpoint, device, hyper_params, model_name=model_type)
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
-            # For the regularisation
-            params = list(model.parameters())
+            optimizer.load_state_dict(checkpoint['optim_dict'])
+            scaler.load_state_dict(checkpoint['scaler_dict'])
+            logging.info(f'{model_type} created and succesfully loaded from {pretrained_point}')
         else:
-            if pretrained_point is not None:
-                if dist.get_rank() == 0:
-                    checkpoint_to_share = [torch.load(pretrained_point, map_location="cpu")]
-                else:
-                    checkpoint_to_share = [None]
-                torch.distributed.broadcast_object_list(checkpoint_to_share, src=0)
-                model = utils.load_model_from_checkpoint(checkpoint_to_share, device, hyper_params, model_name='unet')
-                logging.info(f'UNet created and succesfully loaded from {pretrained_point}')
+            if model_type.lower() == 'unetr':
+                hyper_params = net.default_unetr_hyper_params
+                hyper_params['img_size'] = training_img_size
+                if 'feature_size' in kwargs:
+                    hyper_params['feature_size'] = int(kwargs['feature_size'])
             else:
-                model, hyper_params = net.create_unet_model(device, hyper_params)
-            optimizer = torch.optim.Adam(model.parameters(), 1e-3)
-            params = list(model.model.parameters())
+                hyper_params = net.default_unet_hyper_params
+            # checking is CoordConv is used and change the input channel dimension
+            if transform_dict is not None:
+                for li in transform_dict:
+                    for d in transform_dict[li]:
+                        for t in d:
+                            if t == 'CoordConvd' or t == 'CoordConvAltd':
+                                hyper_params['in_channels'] = 4
+            if dropout is not None and dropout == 0:
+                hyper_params['dropout'] = dropout
+                logging.info(f'Dropout rate used: {dropout}')
+
+            model, _ = net.create_model(device, hyper_params)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
+            # use amp to accelerate training
+            scaler = torch.cuda.amp.GradScaler()
+
+        params = list(model.model.parameters())
         # TODO the segmentation might require to add 'module' after model. to access the state_dict and all
         if torch.cuda.is_available():
             model.to(rank)
@@ -379,17 +372,22 @@ def training(img_path_list: Sequence,
                     print(img_name)
                     print(np.mean(data))
                     nib.save(nii, Path(img_dir, f'{img_name}.nii.gz'))
-                logit_outputs = model(inputs)
-                # In case we use CoordConv, we only take the mask of the labels without the coordinates
-                masks_only_labels = labels[:, :1, :, :, :]
-                loss = loss_function(logit_outputs, masks_only_labels)
-                # Regularisation
-                loss += utils.sum_non_bias_l2_norms(params, 1e-4)
-                loss.backward()
-                """
-                The different ranks are coming together here
-                """
-                optimizer.step()
+                with torch.cuda.amp.autocast():
+                    logit_outputs = model(inputs)
+                    # In case we use CoordConv, we only take the mask of the labels without the coordinates
+                    masks_only_labels = labels[:, :1, :, :, :]
+                    loss = loss_function(logit_outputs, masks_only_labels)
+                    # Regularisation
+                    loss += utils.sum_non_bias_l2_norms(params, 1e-4)
+
+                    scaler.scale(loss).backward()
+                    # loss.backward()
+                    """
+                    The different ranks are coming together here
+                    """
+                    # optimizer.step()
+                    scaler.step(optimizer)
+                    scaler.update()
                 epoch_loss += loss
                 # TODO: if dist.get_rank() == 0:
                 if no_progressbar_training:
@@ -527,7 +525,7 @@ def training(img_path_list: Sequence,
                             writer.add_scalar('val_best_mean_distance', best_dist.item(), epoch + 1)
                             # TODO add dist_barrier
                             checkpoint_path = utils.save_checkpoint(
-                                model, epoch + 1, optimizer, output_fold_dir,
+                                model, epoch + 1, optimizer, scaler, hyper_params, output_fold_dir,
                                 f'best_dice_and_dist_model_segmentation3d_epo{epoch_suffix}.pth')
                             print(f'New best (dice and dist) model saved in {checkpoint_path}')
                             str_best_dist_epoch = (
@@ -539,7 +537,7 @@ def training(img_path_list: Sequence,
                         # Here, only dice improved
                         else:
                             checkpoint_path = utils.save_checkpoint(
-                                model, epoch + 1, optimizer, output_fold_dir,
+                                model, epoch + 1, optimizer, scaler, hyper_params, output_fold_dir,
                                 f'best_dice_model_segmentation3d_epo{epoch_suffix}.pth')
                             print(f'New best model saved in {checkpoint_path}')
                             str_best_epoch = (
