@@ -190,8 +190,7 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
         else:
             cache_rate = 1
         # val_ds = CacheDataset(val_data_list, transform=val_img_transforms, cache_num=cache_num,
-        val_ds = CacheDataset(val_data_list, transform=val_img_transforms, cache_num=0,
-                              cache_rate=cache_rate)
+        val_ds = CacheDataset(val_data_list, transform=val_img_transforms, cache_rate=cache_rate)
     if world_size > 0:
         # if dataloader_workers > 1:
         #     dataloader_workers = 1
