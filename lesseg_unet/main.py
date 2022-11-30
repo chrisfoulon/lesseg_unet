@@ -115,6 +115,10 @@ def main():
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args()
     kwargs = {}
+
+    # Gather input data and setup based on script arguments
+    output_root = Path(args.output)
+    os.makedirs(output_root, exist_ok=True)
     if unknown:
         kwargs = utils.kwargs_argparse(unknown)
         print(f'Unlisted arguments : {kwargs}')
@@ -237,9 +241,6 @@ def main_worker(local_rank, args, kwargs):
         stop_best_epoch = args.stop_best_epoch
     if args.debug:
         print(torch.__config__.parallel_info())
-    # Gather input data and setup based on script arguments
-    output_root = Path(args.output)
-    os.makedirs(output_root, exist_ok=True)
 
     log_file_path = str(Path(output_root, '__logging_training.txt'))
     if args.debug:
