@@ -242,6 +242,7 @@ def main_worker(local_rank, args, kwargs):
     if args.debug:
         print(torch.__config__.parallel_info())
 
+    output_root = Path(args.output)
     log_file_path = str(Path(output_root, '__logging_training.txt'))
     if args.debug:
         logging_level = logging.DEBUG
