@@ -236,11 +236,11 @@ def training(img_path_list: Sequence,
     # val_trash_thr = 0.3
     if stop_best_epoch != -1:
         logging.info(f'Will stop after {stop_best_epoch} epochs without improvement')
-    # TODO ADD SCALER
     for fold in range(folds_number):
         """
         SET MODEL PARAM AND CREATE / LOAD MODEL OBJECT
         """
+        scaler = torch.cuda.amp.GradScaler()
         if pretrained_point is not None:
             if dist.get_rank() == 0:
                 checkpoint_to_share = [torch.load(pretrained_point, map_location="cpu")]
@@ -276,9 +276,8 @@ def training(img_path_list: Sequence,
             model, _ = net.create_model(device, hyper_params)
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
             # use amp to accelerate training
-            scaler = torch.cuda.amp.GradScaler()
 
-        params = list(model.model.parameters())
+        params = list(model.parameters())
         # TODO the segmentation might require to add 'module' after model. to access the state_dict and all
         if torch.cuda.is_available():
             model.to(rank)

@@ -365,7 +365,7 @@ def main_worker(local_rank, args, kwargs):
                           img_pref=b1000_pref,
                           transform_dict=transform_dict,
                           pretrained_point=pretrained_point,
-                          model_type='UNETR',
+                          model_type=args.model_type,
                           device=args.torch_device,
                           batch_size=args.batch_size,
                           val_batch_size=args.val_batch_size,
