@@ -98,7 +98,7 @@ def save_checkpoint(model, epoch, optimizer, scaler, hyper_params, output_folder
                   'state_dict': model.state_dict(),
                   'optim_dict': optimizer.state_dict(),
                   # 'hyper_params': hyper_params,
-                  # 'scaler_dict': scaler.state_dict(),
+                  'scaler_dict': scaler.state_dict(),
                   }
     if filename is None:
         out_path = Path(output_folder, 'checkpoint_dictionary_{}.pt'.format(epoch))
