@@ -259,10 +259,9 @@ def training(img_path_list: Sequence,
         """
         scaler = torch.cuda.amp.GradScaler()
         if pretrained_point is not None:
-            print(pretrained_point)
-            print(Path(pretrained_point).is_file())
             if dist.get_rank() == 0:
-                checkpoint_to_share = [torch.load(pretrained_point, map_location="cpu")]
+                checkpoint_to_share = [torch.load(pretrained_point, map_location="cpu",
+                                                  _use_new_zipfile_serialization=False)]
             else:
                 checkpoint_to_share = [None]
             torch.distributed.broadcast_object_list(checkpoint_to_share, src=0)
@@ -536,8 +535,6 @@ def training(img_path_list: Sequence,
                             if best_dice > 0.75:
                                 epoch_suffix = '_' + str(epoch + 1)
                         # True here means that we track and keep the distance and that both dice and dist improved
-                        print(hyper_params)
-                        input()
                         if (mean_dist_val is not None and keep_dice_and_dist) and (
                                 best_dist > mean_dist_val and best_dice_with_dist < mean_dice_val):
                             best_dice_with_dist = mean_dice_val

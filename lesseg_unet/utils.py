@@ -104,7 +104,7 @@ def save_checkpoint(model, epoch, optimizer, scaler, hyper_params, output_folder
         out_path = Path(output_folder, 'checkpoint_dictionary_{}.pt'.format(epoch))
     else:
         out_path = Path(output_folder, filename)
-    torch.save(state_dict, out_path)
+    torch.save(state_dict, out_path, _use_new_zipfile_serialization=False)
     return out_path
 
 
