@@ -260,8 +260,7 @@ def training(img_path_list: Sequence,
         scaler = torch.cuda.amp.GradScaler()
         if pretrained_point is not None:
             if dist.get_rank() == 0:
-                checkpoint_to_share = [torch.load(pretrained_point, map_location="cpu",
-                                                  _use_new_zipfile_serialization=False)]
+                checkpoint_to_share = [torch.load(pretrained_point, map_location="cpu")]
             else:
                 checkpoint_to_share = [None]
             torch.distributed.broadcast_object_list(checkpoint_to_share, src=0)
