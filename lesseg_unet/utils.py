@@ -96,7 +96,7 @@ def nifti_affine_from_dataset(nifti_path: Union[str, bytes, os.PathLike]):
 def save_checkpoint(model, epoch, optimizer, scaler, hyper_params, output_folder, filename=None):
     print(list(model.state_dict().keys()))
     state_dict = {'epoch': epoch,
-                  'state_dict': model.state_dict(),
+                  'state_dict': model.module.state_dict(),
                   'optim_dict': optimizer.state_dict(),
                   'hyper_params': hyper_params,
                   'scaler_dict': scaler.state_dict(),
@@ -112,8 +112,8 @@ def save_checkpoint(model, epoch, optimizer, scaler, hyper_params, output_folder
 def load_model_from_checkpoint(loaded_checkpoint, device, hyper_params=None, model_name='UNETR'):
     if hyper_params is None:
         hyper_params = loaded_checkpoint['hyper_params']
-    print(list(loaded_checkpoint.keys()))
-    print(list(loaded_checkpoint['state_dict'].keys()))
+    # print(list(loaded_checkpoint.keys()))
+    # print(list(loaded_checkpoint['state_dict'].keys()))
     model, hyper_params = create_model(device, hyper_params, model_name)
     model.load_state_dict(loaded_checkpoint['state_dict'])
     # model.eval()
