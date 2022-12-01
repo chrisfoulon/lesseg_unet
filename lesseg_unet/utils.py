@@ -112,6 +112,7 @@ def save_checkpoint(model, epoch, optimizer, scaler, hyper_params, output_folder
 def load_model_from_checkpoint(loaded_checkpoint, device, hyper_params=None, model_name='UNETR'):
     if hyper_params is None:
         hyper_params = loaded_checkpoint['hyper_params']
+    print(list(loaded_checkpoint.keys()))
     model, hyper_params = create_model(device, hyper_params, model_name)
     model.load_state_dict(loaded_checkpoint['state_dict'])
     # model.eval()
