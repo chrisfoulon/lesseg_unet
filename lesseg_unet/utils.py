@@ -113,6 +113,7 @@ def load_model_from_checkpoint(loaded_checkpoint, device, hyper_params=None, mod
     if hyper_params is None:
         hyper_params = loaded_checkpoint['hyper_params']
     print(list(loaded_checkpoint.keys()))
+    print(list(loaded_checkpoint['state_dict'].keys()))
     model, hyper_params = create_model(device, hyper_params, model_name)
     model.load_state_dict(loaded_checkpoint['state_dict'])
     # model.eval()
