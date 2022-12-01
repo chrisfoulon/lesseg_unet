@@ -94,7 +94,7 @@ def nifti_affine_from_dataset(nifti_path: Union[str, bytes, os.PathLike]):
 
 
 def save_checkpoint(model, epoch, optimizer, scaler, hyper_params, output_folder, filename=None):
-    print(model.state_dict())
+    print(list(model.state_dict().keys()))
     state_dict = {'epoch': epoch,
                   'state_dict': model.state_dict(),
                   'optim_dict': optimizer.state_dict(),
