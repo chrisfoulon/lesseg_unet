@@ -265,6 +265,7 @@ def training(img_path_list: Sequence,
                 checkpoint_to_share = [None]
             torch.distributed.broadcast_object_list(checkpoint_to_share, src=0)
             checkpoint = checkpoint_to_share[0]
+            print(list(checkpoint.keys()))
             hyper_params = checkpoint['hyper_params']
             model = utils.load_model_from_checkpoint(checkpoint, device, hyper_params, model_name=model_type)
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
@@ -335,6 +336,7 @@ def training(img_path_list: Sequence,
             if img_dir.is_dir():
                 shutil.rmtree(img_dir)
             os.makedirs(img_dir, exist_ok=True)
+        stop_epoch = False
         for epoch in range(epoch_num):
             print('-' * 10)
             print(f'epoch {epoch + 1}/{epoch_num}')
@@ -563,34 +565,41 @@ def training(img_path_list: Sequence,
                                 f'Dice metric {best_dice.item():.4f} / mean loss {best_avg_loss.item()}'
                             )
                     dist.barrier()
-                    if keep_dice_and_dist:
-                        best_epoch_count = epoch + 1 - best_metric_dist_epoch
-                    else:
-                        best_epoch_count = epoch + 1 - best_metric_epoch
-                    str_current_epoch = (
-                            f'[Fold: {fold}]Current epoch: {epoch + 1} current mean loss: {mean_loss_val.item():.4f}'
-                            f' current mean dice metric: {mean_dice_val.item()}' + mean_dist_str + '\n'
-                            + str_best_epoch + str_best_dist_epoch + '\n'
-                    )
-                    print(str_current_epoch)
-                    print(f'It has been [{best_epoch_count}] since a best epoch has been found')
-                    if stop_best_epoch > -1:
-                        print(f'The training will stop after [{stop_best_epoch}] epochs without improvement')
-                    epoch_end_time = time.time()
-                    epoch_time = epoch_end_time - start_time
-                    print(f'Epoch Time: {epoch_time}')
-                    epoch_time_list.append(epoch_time)
-                    print(f'First epoch time: '
-                          f'{epoch_time_list[0]} and average epoch time {np.mean(epoch_time_list)}')
-                    if stop_best_epoch != -1:
-                        if best_epoch_count > stop_best_epoch:
-                            print(f'More than {stop_best_epoch} without improvement')
-                            # df.to_csv(Path(output_fold_dir, 'perf_measures.csv'), columns=perf_measure_names)
-                            print(f'Training completed\n')
-                            logging.info(str_best_epoch)
-                            writer.close()
-                            break
-                    # utils.save_checkpoint(model, epoch + 1, optimizer, output_dir)
+                    if rank == 0:
+                        if keep_dice_and_dist:
+                            best_epoch_count = epoch + 1 - best_metric_dist_epoch
+                        else:
+                            best_epoch_count = epoch + 1 - best_metric_epoch
+                        str_current_epoch = (
+                                f'[Fold: {fold}]Current epoch: {epoch + 1} current mean loss: {mean_loss_val.item():.4f}'
+                                f' current mean dice metric: {mean_dice_val.item()}' + mean_dist_str + '\n'
+                                + str_best_epoch + str_best_dist_epoch + '\n'
+                        )
+                        print(str_current_epoch)
+                        print(f'It has been [{best_epoch_count}] since a best epoch has been found')
+                        if stop_best_epoch > -1:
+                            print(f'The training will stop after [{stop_best_epoch}] epochs without improvement')
+                        epoch_end_time = time.time()
+                        epoch_time = epoch_end_time - start_time
+                        print(f'Epoch Time: {epoch_time}')
+                        epoch_time_list.append(epoch_time)
+                        print(f'First epoch time: '
+                              f'{epoch_time_list[0]} and average epoch time {np.mean(epoch_time_list)}')
+                        if stop_best_epoch != -1:
+                            if best_epoch_count > stop_best_epoch:
+                                stop_epoch = True
+                                print(f'More than {stop_best_epoch} without improvement')
+                                # df.to_csv(Path(output_fold_dir, 'perf_measures.csv'), columns=perf_measure_names)
+                                print(f'Training completed\n')
+                                logging.info(str_best_epoch)
+                                writer.close()
+                                break
+            if stop_epoch:
+                # TODO handle end of epoch correctly
+                logging.info(str_best_epoch)
+                writer.close()
+                break
+                # utils.save_checkpoint(model, epoch + 1, optimizer, output_dir)
         # df.to_csv(Path(output_fold_dir, f'perf_measures_{fold}.csv'), columns=perf_measure_names)
         # with open(Path(output_fold_dir, f'trash_img_count_dict_{fold}.json'), 'w+') as j:
         #     json.dump(trash_seg_path_count_dict, j, indent=4)

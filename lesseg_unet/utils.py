@@ -41,6 +41,16 @@ def save_list(path, li):
     np.savetxt(path, li, delimiter='\n', fmt='%s')
 
 
+def print_rank_0(string, rank):
+    if rank == 0:
+        print(string)
+
+
+def tensorboard_write_rank_0(writer, key, value, epoch, rank):
+    if rank == 0:
+        writer.add_scalar(key, value, epoch)
+
+
 def kwargs_argparse(unknown_param_list):
     kwargs_dict = {}
     key = None
