@@ -604,4 +604,7 @@ def training(img_path_list: Sequence,
         print(f'Training completed\n')
         logging.info(str_best_epoch)
         writer.close()
+        # Not sure this is necessary
+        dist.barrier()
+        utils.print_rank_0(f'Fold {fold} finished', rank)
     dist.destroy_process_group()
