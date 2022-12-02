@@ -176,6 +176,16 @@ def main_worker(local_rank, args, kwargs):
     #     dist.init_process_group(backend="nccl", init_method="env://")
     # device = torch.device(f"cuda:{local_rank}")
     # torch.cuda.set_device(device)
+
+    output_root = Path(args.output)
+    log_file_path = str(Path(output_root, '__logging_training.txt'))
+    if args.debug:
+        logging_level = logging.DEBUG
+    else:
+        logging_level = logging.INFO
+    logging.basicConfig(filename=log_file_path, level=logging_level, force=True)
+    file_handler = logging.StreamHandler(sys.stdout)
+    logging.getLogger().addHandler(file_handler)
     # TODO use amp to accelerate training
     # scaler = torch.cuda.amp.GradScaler()
     if 'MASTER_ADDR' not in os.environ:
@@ -200,15 +210,6 @@ def main_worker(local_rank, args, kwargs):
     if args.debug:
         print(torch.__config__.parallel_info())
 
-    output_root = Path(args.output)
-    log_file_path = str(Path(output_root, '__logging_training.txt'))
-    if args.debug:
-        logging_level = logging.DEBUG
-    else:
-        logging_level = logging.INFO
-    logging.basicConfig(filename=log_file_path, level=logging_level, force=True)
-    file_handler = logging.StreamHandler(sys.stdout)
-    logging.getLogger().addHandler(file_handler)
     if not Path(log_file_path).is_file():
         raise ValueError(f'{log_file_path} was not created!')
     if not output_root.is_dir():
