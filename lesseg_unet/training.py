@@ -128,15 +128,6 @@ def training(img_path_list: Sequence,
              debug=False,
              **kwargs
              ):
-    # disable logging for processes except 0 on every node
-    # if rank != 0:
-    #     f = open(os.devnull, "w")
-    #     sys.stdout = sys.stderr = f
-    # rank = int(os.environ["LOCAL_RANK"])
-    ####################################################################################################################
-    # Checking the external parameters
-    # TODO: add it to the main param when we are are sure we need them permanently
-    ####################################################################################################################
     shuffle_training = True
     display_training = False
     if 'display_training' in kwargs:
@@ -170,17 +161,19 @@ def training(img_path_list: Sequence,
     """
     LOSS FUNCTIONS
     """
+    # Training
     if training_loss_fct.lower() in ['dice_ce', 'dicece', 'dice_ce_loss', 'diceceloss', 'dice_cross_entropy']:
         loss_function = DiceCELoss(sigmoid=True)
     else:
         loss_function = DiceLoss(sigmoid=True)
-    logging.info(f'Training loss fct: {loss_function}')
+    utils.logging_rank_0(f'Training loss fct: {loss_function}', dist.get_rank())
+    # Validation
     if any([s in val_loss_fct.lower() for s in
             ['dice_ce', 'dicece', 'dice_ce_loss', 'diceceloss', 'dice_cross_entropy']]):
         val_loss_function = DiceCELoss(sigmoid=True)
     else:
         val_loss_function = DiceLoss(sigmoid=True)
-    logging.info(f'Validation loss fct: {val_loss_function}')
+    utils.logging_rank_0(f'Validation loss fct: {val_loss_function}', dist.get_rank())
 
     """
     METRICS
@@ -206,13 +199,15 @@ def training(img_path_list: Sequence,
         if v == 'True' or v == 1:
             print(f'ToTensord transformation will be called on {device}')
             transformations_device = device
-    logging.info('Initialisation of the training transformations')
+    utils.print_rank_0('Initialisation of the training transformations', dist.get_rank())
     # Extract all the transformations from transform_dict
     train_img_transforms = transformations.train_transformd(transform_dict, lesion_set_clamp,
-                                                            device=transformations_device)
+                                                            device=transformations_device,
+                                                            writing_rank=dist.get_rank())
     # Extract only the 'first' and 'last' transformations from transform_dict ignoring the augmentations
     val_img_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp,
-                                                        device=transformations_device)
+                                                        device=transformations_device,
+                                                        writing_rank=dist.get_rank())
 
     """
     POST TRANSFORMATIONS
@@ -223,7 +218,7 @@ def training(img_path_list: Sequence,
     DATA LOADING
     """
     if img_pref is not None and img_pref != '':
-        logging.info(f'Abnormal images prefix: {img_pref}')
+        utils.logging_rank_0(f'Abnormal images prefix: {img_pref}', dist.get_rank())
 
     # Get the images from the image and label list and tries to match them
     img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, seg_path_list, img_pref)
@@ -252,11 +247,12 @@ def training(img_path_list: Sequence,
     # val_meh_thr = 0.7
     # val_trash_thr = 0.3
     if stop_best_epoch != -1:
-        logging.info(f'Will stop after {stop_best_epoch} epochs without improvement')
+        utils.logging_rank_0(f'Will stop after {stop_best_epoch} epochs without improvement', dist.get_rank())
     for fold in range(folds_number):
         """
         SET MODEL PARAM AND CREATE / LOAD MODEL OBJECT
         """
+        utils.logging_rank_0(f'Creating monai {model_type}', dist.get_rank())
         scaler = torch.cuda.amp.GradScaler()
         if pretrained_point is not None:
             if dist.get_rank() == 0:
@@ -270,7 +266,9 @@ def training(img_path_list: Sequence,
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
             optimizer.load_state_dict(checkpoint['optim_dict'])
             scaler.load_state_dict(checkpoint['scaler_dict'])
-            logging.info(f'{model_type} created and succesfully loaded from {pretrained_point}')
+            utils.logging_rank_0(f'{model_type} created and succesfully loaded from {pretrained_point} with '
+                                 f'hyper parameters: {hyper_params}',
+                                 dist.get_rank())
         else:
             if model_type.lower() == 'unetr' or model_type.lower() == 'swinunetr':
                 if model_type.lower() == 'unetr':
@@ -294,34 +292,39 @@ def training(img_path_list: Sequence,
             #     logging.info(f'Dropout rate used: {dropout}')
 
             model, _ = net.create_model(device, hyper_params, model_class_name=model_type)
-            print(f'[Rank {dist.get_rank()}]model created')
+            utils.logging_rank_0(f'{model_type} created and succesfully with '
+                                 f'hyper parameters: {hyper_params}',
+                                 dist.get_rank())
+            # print(f'[Rank {dist.get_rank()}]model created')
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
-            print(f'[Rank {dist.get_rank()}]Optimizer created')
             # use amp to accelerate training
-        print(f'[Rank {dist.get_rank()}] Count param')
-        total_param_count = count_unique_parameters(model.named_parameters())
-        print(f'Total number of parameters in the model: {str(total_param_count)}')
+        if dist.get_rank() == 0:
+            total_param_count = count_unique_parameters(model.named_parameters())
+            utils.logging_rank_0(f'Total number of parameters in the model: {str(total_param_count)}',
+                                 dist.get_rank())
         params = list(model.parameters())
         # TODO the segmentation might require to add 'module' after model. to access the state_dict and all
         if torch.cuda.is_available():
-            model.to(rank)
-            model = DistributedDataParallel(model, device_ids=[rank], output_device=rank, find_unused_parameters=False)
-            utils.print_rank_0('Model sent to the different ranks', rank)
-            if dist.get_rank() != 0:
-                print('Non-0 ranks model distributed')
+            model.to(dist.get_rank())
+            model = DistributedDataParallel(model, device_ids=[rank], output_device=dist.get_rank(),
+                                            find_unused_parameters=False)
+            utils.print_rank_0('Model sent to the different ranks', dist.get_rank())
         if folds_number == 1:
             output_fold_dir = output_dir
         else:
             output_fold_dir = Path(output_dir, f'fold_{fold}')
         # Tensorboard writer
-        writer = SummaryWriter(log_dir=str(output_fold_dir))
-        utils.print_rank_0('Tensorboard SummaryWriter created', rank)
+        if dist.get_rank() == 0:
+            writer = SummaryWriter(log_dir=str(output_fold_dir))
+        else:
+            writer = None
+        utils.print_rank_0('Tensorboard SummaryWriter created', dist.get_rank())
         # Creates both the training and validation loaders based on the fold number
         # (e.g. fold 0 means the first sublist of split_lists will be the validation set for this fold)
         train_loader, val_loader = data_loading.create_fold_dataloaders(
             split_lists, fold, train_img_transforms,
             val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
-            world_size, rank, shuffle_training=shuffle_training, cache_num=cache_num, debug=debug
+            world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num, debug=debug
         )
 
         """EPOCHS LOOP VARIABLES"""
@@ -344,8 +347,8 @@ def training(img_path_list: Sequence,
             os.makedirs(img_dir, exist_ok=True)
         stop_epoch = False
         for epoch in range(epoch_num):
-            print('-' * 10)
-            print(f'epoch {epoch + 1}/{epoch_num}')
+            utils.print_rank_0('-' * 10, dist.get_rank())
+            utils.print_rank_0(f'epoch {epoch + 1}/{epoch_num}', dist.get_rank())
             # This is required with multi-gpu
             train_loader.sampler.set_epoch(epoch)
 
@@ -358,7 +361,10 @@ def training(img_path_list: Sequence,
             """
             TRAINING INITIALISATION
             """
-            train_iter = tqdm(train_loader, desc=f'Training[{epoch + 1}] loss/mean_loss:[N/A]')
+            if dist.get_rank() == 0:
+                train_iter = tqdm(train_loader, desc=f'Training[{epoch + 1}] loss/mean_loss:[N/A]')
+            else:
+                train_iter = train_loader
             no_progressbar_training = False
             if 'no_progressbar_training' in kwargs:
                 v = kwargs['no_progressbar_training']
@@ -372,9 +378,11 @@ def training(img_path_list: Sequence,
                 if loading_time:
                     end_time = time.time()
                     load_time = end_time - start_time
-                    print(f'Loading loop Time: {load_time}')
+                    utils.logging_rank_0(f'Loading loop Time: {load_time}', dist.get_rank())
                     time_list.append(load_time)
-                    print(f'First load time: {time_list[0]} and average loading time {np.mean(time_list)}')
+                    utils.logging_rank_0(
+                        f'First load time: {time_list[0]} and average loading time {np.mean(time_list)}',
+                        dist.get_rank())
                     loading_time = False
                 step += 1
                 optimizer.zero_grad()
@@ -414,23 +422,13 @@ def training(img_path_list: Sequence,
                     scaler.step(optimizer)
                     scaler.update()
                 epoch_loss += loss
-                # TODO: if dist.get_rank() == 0:
-                if no_progressbar_training:
-                    print(f'[{fold}]{step}/{batches_per_epoch}, train loss: {loss.item():.4f}')
-                else:
-                    train_iter.set_description(
-                        # f'Training[{epoch + 1}] batch_loss:[{loss.item():.4f}]')
-                        f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss.item() / step:.4f}]')
-
-                # loss = 0
-                # epoch_loss = 0
-                # with torch.no_grad():
-                #     epoch_loss += loss
-                #     if no_progressbar_training:
-                #         print(f'[{fold}]{step}/{batches_per_epoch}, train loss: {loss.item():.4f}')
-                #     else:
-                #         train_iter.set_description(
-                #             f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss / step:.4f}]')
+                if dist.get_rank() == 0:
+                    if no_progressbar_training or dist.get_rank() != 0:
+                        utils.print_rank_0(f'[{fold}]{step}/{batches_per_epoch}, train loss: {loss.item():.4f}',
+                                           dist.get_rank())
+                    else:
+                        train_iter.set_description(
+                            f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss.item()/step:.4f}]')
             """
             GLOBAL TRAINING MEASURES HANDLING
             """
@@ -439,8 +437,8 @@ def training(img_path_list: Sequence,
                 epoch_loss /= world_size
             mean_epoch_loss = epoch_loss.item() / step
             if dist.get_rank() == 0:
-                print(f"[{dist.get_rank()}] " + f"epoch {epoch + 1}, average loss: {mean_epoch_loss:.4f}")
-                writer.add_scalar('epoch_train_loss', mean_epoch_loss, epoch + 1)
+                utils.logging_rank_0(f"Epoch {epoch + 1}, average loss: {mean_epoch_loss:.4f}", dist.get_rank())
+                utils.tensorboard_write_rank_0(writer, 'epoch_train_loss', mean_epoch_loss, epoch + 1, dist.get_rank())
             if one_loop:
                 return
             """
@@ -493,7 +491,7 @@ def training(img_path_list: Sequence,
                             # val_batch_dist_list.append(distance.item())
                             val_epoch_dist += distance
                         # val_batch_dice_list.append(dice.item())
-                        pbar.set_description(f'Val[{epoch + 1}] mean_loss:[{val_epoch_loss/step}]')
+                        pbar.set_description(f'Val[{epoch + 1}] mean_loss:[{val_epoch_loss.item()/step}]')
 
                     """
                     GLOBAL VALIDATION MEASURES HANDLING
@@ -514,8 +512,10 @@ def training(img_path_list: Sequence,
                     dice_metric.reset()
                     mean_dice_val = val_epoch_dice
                     # mean_dice_val = np.mean(val_batch_dice_list)
-                    writer.add_scalar('val_mean_dice', val_epoch_dice.item(), epoch + 1)
-                    writer.add_scalar('val_mean_loss', val_epoch_loss.item(), epoch + 1)
+                    utils.tensorboard_write_rank_0(writer, 'val_mean_dice', val_epoch_dice.item(), epoch + 1,
+                                                   dist.get_rank())
+                    utils.tensorboard_write_rank_0(writer, 'val_mean_dice', val_epoch_dice.item(), epoch + 1,
+                                                   dist.get_rank())
 
                     mean_dist_val = None
                     mean_dist_str = ''
@@ -525,7 +525,8 @@ def training(img_path_list: Sequence,
                         mean_dist_val = val_epoch_dist
                         hausdorff_metric.reset()
                         mean_dist_str = f'/ Current mean distance {val_epoch_dist.item()}'
-                        writer.add_scalar('val_distance', val_epoch_dist, epoch + 1)
+                        utils.tensorboard_write_rank_0(writer, 'val_distance', val_epoch_dist.item(), epoch + 1,
+                                                       dist.get_rank())
                     """
                     BEST EPOCH CONDITION AND SAVE CHECKPOINT
                     """
@@ -534,8 +535,10 @@ def training(img_path_list: Sequence,
                         best_metric_epoch = epoch + 1
                         best_dice = mean_dice_val
                         best_avg_loss = mean_loss_val
-                        writer.add_scalar('val_best_mean_dice', best_dice, epoch + 1)
-                        writer.add_scalar('val_best_mean_loss', best_avg_loss, epoch + 1)
+                        utils.tensorboard_write_rank_0(writer, 'val_best_mean_dice', best_dice.item(),
+                                                       epoch + 1, dist.get_rank())
+                        utils.tensorboard_write_rank_0(writer, 'val_best_mean_loss', best_avg_loss.item(), epoch + 1,
+                                                       dist.get_rank())
                         if save_every_decent_best_epoch:
                             if best_dice > 0.75:
                                 epoch_suffix = '_' + str(epoch + 1)
@@ -547,11 +550,14 @@ def training(img_path_list: Sequence,
                             best_epoch_pref_str = 'Best dice and best distance epoch'
                             best_dist = mean_dist_val
                             best_dist_str = f'/ Best Distance {best_dist.item()}'
-                            writer.add_scalar('val_best_mean_distance', best_dist.item(), epoch + 1)
+
+                            utils.tensorboard_write_rank_0(writer, 'val_best_mean_distance', best_dist.item(),
+                                                           epoch + 1, dist.get_rank())
                             checkpoint_path = utils.save_checkpoint(
                                 model, epoch + 1, optimizer, scaler, hyper_params, output_fold_dir,
                                 f'best_dice_and_dist_model_segmentation3d_epo{epoch_suffix}.pth')
-                            print(f'New best (dice and dist) model saved in {checkpoint_path}')
+                            utils.logging_rank_0(f'New best (dice and dist) model saved in {checkpoint_path}',
+                                               dist.get_rank())
                             str_best_dist_epoch = (
                                     f'\n{best_epoch_pref_str} {best_metric_dist_epoch} '
                                     # f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
@@ -563,7 +569,7 @@ def training(img_path_list: Sequence,
                             checkpoint_path = utils.save_checkpoint(
                                 model, epoch + 1, optimizer, scaler, hyper_params, output_fold_dir,
                                 f'best_dice_model_segmentation3d_epo{epoch_suffix}.pth')
-                            print(f'New best model saved in {checkpoint_path}')
+                            utils.logging_rank_0(f'New best model saved in {checkpoint_path}', dist.get_rank())
                             str_best_epoch = (
                                 f'\n{best_epoch_pref_str} {best_metric_epoch} '
                                 # f'metric {best_metric:.4f}/distance {best_distance}/avgloss {best_avg_loss}\n'
@@ -594,7 +600,7 @@ def training(img_path_list: Sequence,
                                 stop_epoch = True
                                 print(f'More than {stop_best_epoch} without improvement')
                                 # df.to_csv(Path(output_fold_dir, 'perf_measures.csv'), columns=perf_measure_names)
-                                print(f'Training completed\n')
+                                # print(f'Training completed\n')
                                 # logging.info(str_best_epoch)
                                 # writer.close()
                                 # break
@@ -604,19 +610,15 @@ def training(img_path_list: Sequence,
                 flag_to_share = [None]
             torch.distributed.broadcast_object_list(flag_to_share, src=0)
             stop_epoch = flag_to_share[0]
-            print(f'[Rank {dist.get_rank()}] stop_epoch = {stop_epoch}')
             dist.barrier()
             if stop_epoch:
-                # TODO handle end of epoch correctly
                 break
                 # utils.save_checkpoint(model, epoch + 1, optimizer, output_dir)
         # df.to_csv(Path(output_fold_dir, f'perf_measures_{fold}.csv'), columns=perf_measure_names)
         # with open(Path(output_fold_dir, f'trash_img_count_dict_{fold}.json'), 'w+') as j:
         #     json.dump(trash_seg_path_count_dict, j, indent=4)
-        print(f'Training completed\n')
+        print(f'[Rank {dist.get_rank()}] Training completed\n')
         logging.info(str_best_epoch)
         writer.close()
-        # Not sure this is necessary
-        # dist.barrier()
-        utils.print_rank_0(f'Fold {fold} finished', rank)
+        utils.logging_rank_0(f'Fold {fold} finished', rank)
     dist.destroy_process_group()

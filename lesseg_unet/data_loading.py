@@ -166,7 +166,7 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
             val_data_list = chunk
         else:
             train_data_list = np.concatenate([train_data_list, chunk])
-    print(f'Create training monai dataset for fold {fold}')
+    utils.print_rank_0(f'Creating training monai dataset for fold {fold}', rank)
     if cache_dir is not None:
         train_ds = PersistentDataset(train_data_list, transform=train_img_transforms, cache_dir=cache_dir)
     else:
@@ -181,7 +181,7 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
     # train_ds = Dataset(train_data_list, transform=train_img_transforms)
     # data_loader_checker_first(train_ds, 'training')
     # define dataset, data loader
-    print(f'Create validation monai dataset')
+    utils.print_rank_0(f'Creating validation monai dataset', rank)
     if cache_dir is not None:
         val_ds = PersistentDataset(val_data_list, transform=val_img_transforms, cache_dir=cache_dir)
     else:

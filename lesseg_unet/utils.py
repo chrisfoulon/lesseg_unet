@@ -6,7 +6,7 @@ import json
 import math
 import random
 import importlib.resources as rsc
-from tqdm import tqdm
+import logging
 from operator import lt, gt
 from multiprocessing.dummy import Pool
 import multiprocessing
@@ -44,6 +44,14 @@ def save_list(path, li):
 def print_rank_0(string, rank):
     if rank == 0:
         print(string)
+
+
+def logging_rank_0(string, rank, level='info'):
+    if rank == 0:
+        if level == 'info':
+            logging.info(string)
+        if level == 'debug':
+            logging.debug(string)
 
 
 def tensorboard_write_rank_0(writer, key, value, epoch, rank):

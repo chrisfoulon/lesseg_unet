@@ -6,6 +6,7 @@ import time
 from enum import Enum
 
 import numpy as np
+from lesseg_unet.utils import logging_rank_0
 from monai.utils import Method, fall_back_tuple
 from monai.transforms.compose import Randomizable
 from monai.transforms.inverse import InvertibleTransform
@@ -981,7 +982,7 @@ def check_imports(hyper_param_dict):
                     raise ImportError('{} not imported'.format(name))
 
 
-def check_hyper_param_dict_shape(hyper_param_dict, print_list=True):
+def check_hyper_param_dict_shape(hyper_param_dict, writing_rank, print_list=True):
     full_str = ''
     if print_list:
         full_str = '######\nList of transformations used:\n'
@@ -1004,7 +1005,7 @@ def check_hyper_param_dict_shape(hyper_param_dict, print_list=True):
                     raise ValueError('Transformation dict parameters must be dict (e.g. {keys: ["image", "label"]')
                 if print_list:
                     full_str += f'\t{name}\n'
-    logging.info(full_str)
+    logging_rank_0(full_str, writing_rank)
 
 
 """
@@ -1094,12 +1095,12 @@ def setup_coord_conv(hyper_param_dict):
                         d[name]['gradients'] = gradients
 
 
-def train_transformd(hyper_param_dict=None, clamping=None, device=None):
+def train_transformd(hyper_param_dict=None, clamping=None, device=None, writing_rank=-1):
     if hyper_param_dict is None:
         raise ValueError('Hyper dict is None')
     setup_coord_conv(hyper_param_dict)
     check_imports(hyper_param_dict)
-    check_hyper_param_dict_shape(hyper_param_dict)
+    check_hyper_param_dict_shape(hyper_param_dict, writing_rank=writing_rank)
     seg_tr_dict = deepcopy(hyper_param_dict)
     normalize_count = 0
     for li in seg_tr_dict:
@@ -1124,11 +1125,11 @@ def train_transformd(hyper_param_dict=None, clamping=None, device=None):
     return train_transd
 
 
-def val_transformd(hyper_param_dict=None, clamping=None, device=None):
+def val_transformd(hyper_param_dict=None, clamping=None, device=None, writing_rank=-1):
     if hyper_param_dict is None:
         raise ValueError('Hyper dict is None')
     setup_coord_conv(hyper_param_dict)
-    seg_tr_dict = deepcopy(hyper_param_dict)
+    seg_tr_dict = deepcopy(hyper_param_dict, writing_rank=writing_rank)
     if clamping is not None:
         for li in seg_tr_dict:
             for di in seg_tr_dict[li]:

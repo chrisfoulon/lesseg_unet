@@ -152,55 +152,13 @@ def main():
         if 'CUDA_VISIBLE_DEVICES' not in os.environ:
             os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(['0', '1'])
         # os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(['0'])
-        print('A')
+        print('Using local_rank directly')
     else:
         # Starting the model using torchrun
         # os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(['0', '1'])
         # os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(['0'])
-        print('B')
+        print('Using torchrun handler')
         local_rank = int(os.environ["LOCAL_RANK"])
-
-    # if args.distributed:
-    #     args.ngpus_per_node = torch.cuda.device_count()
-    #     print("Found total gpus", args.ngpus_per_node)
-    #     args.world_size = args.ngpus_per_node * args.world_size
-    #     try:
-    #         mp.spawn(main_worker, nprocs=args.ngpus_per_node, args=(args, kwargs))
-    #     except KeyboardInterrupt:
-    #         print('Interrupted')
-    #         try:
-    #             dist.destroy_process_group()
-    #         except KeyboardInterrupt:
-    #             os.system("kill $(ps aux | grep multiprocessing.spawn | grep -v grep | awk '{print $2}') ")
-    #
-    # else:
-    #     main_worker(local_rank=args.local_rank, args=args, kwargs=kwargs)
-    # main_worker(local_rank=args.local_rank, args=args, kwargs=kwargs)
-    if 'GLOBAL_WORLD_SIZE' in os.environ:
-        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-        print(local_rank)
-        print(os.environ['WORLD_SIZE'])
-        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-
-    if 'GLOBAL_WORLD_SIZE' in os.environ:
-        print('?????????????????????????????????')
-        print('?????????????????????????????????')
-        print('?????????????????????????????????')
-        print('?????????????????????????????????')
-        print('?????????????????????????????????')
-        print('?????????????????????????????????')
-
-    if 'GLOBAL_RANK' in os.environ:
-        print('££££££££££££££££££££££££££££££££££££')
-        print('££££££££££££££££££££££££££££££££££££')
-        print('££££££££££££££££££££££££££££££££££££')
-        print('££££££££££££££££££££££££££££££££££££')
-        print('££££££££££££££££££££££££££££££££££££')
-        print('££££££££££££££££££££££££££££££££££££')
 
     if 'WORLD_SIZE' not in os.environ:
         os.environ['WORLD_SIZE'] = str(torch.cuda.device_count())
@@ -248,24 +206,26 @@ def main_worker(local_rank, args, kwargs):
         logging_level = logging.DEBUG
     else:
         logging_level = logging.INFO
-    logging.basicConfig(filename=log_file_path, filemode='w+', level=logging_level)
+    logging.basicConfig(filename=log_file_path, level=logging_level)
     file_handler = logging.StreamHandler(sys.stdout)
     logging.getLogger().addHandler(file_handler)
+    if not Path(log_file_path).is_file():
+        raise ValueError(f'{log_file_path} was not created!')
     if not output_root.is_dir():
         raise ValueError('{} is not an existing directory and could not be created'.format(output_root))
     cache_dir = None
     if args.cache:
         cache_dir = Path(output_root, 'cache')
-    print('loading input dwi path list')
+    utils.print_rank_0('loading input dwi path list', dist.get_rank())
     seg_input_dict = {}
     if args.input_path is not None:
-        logging.info(f'Input image directory : {args.input_path}')
+        utils.logging_rank_0(f'Input image directory : {args.input_path}', dist.get_rank())
         img_list = utils.create_input_path_list_from_root(args.input_path)
         if args.input_path == args.output:
             raise ValueError("The output directory CANNOT be the input directory")
     # So args.input_list is not None
     elif args.input_list is not None:
-        logging.info(f'Input image list : {args.input_list}')
+        utils.logging_rank_0(f'Input image list : {args.input_list}', dist.get_rank())
         img_list = file_to_list(args.input_list)
     else:
         with open(args.seg_input_dict, 'r') as f:
@@ -275,7 +235,7 @@ def main_worker(local_rank, args, kwargs):
         raise ValueError("The output directory CANNOT be one of the input directories")
     if args.debug_img_num is not None:
         img_list = img_list[:args.debug_img_num]
-    print('loading input lesion label path list')
+    utils.print_rank_0('loading input lesion label path list', dist.get_rank())
     if args.lesion_input_path is not None:
         logging.info(f'Input lesion directory : {args.lesion_input_path}')
         les_list = utils.create_input_path_list_from_root(args.lesion_input_path)
@@ -283,7 +243,7 @@ def main_worker(local_rank, args, kwargs):
             raise ValueError("The output directory CANNOT be the input directory")
     # So args.lesion_input_list is not None
     elif args.lesion_input_list is not None:
-        logging.info(f'Input lesion list : {args.lesion_input_list}')
+        utils.print_rank_0(f'Input lesion list : {args.lesion_input_list}', dist.get_rank())
         les_list = file_to_list(args.lesion_input_list)
     else:
         les_list = None
@@ -298,14 +258,10 @@ def main_worker(local_rank, args, kwargs):
         ctr_list = file_to_list(args.controls_list)
     else:
         ctr_list = None
-
-    # match the lesion labels with the images
-    print('Matching the dwi and lesions')
     if args.image_prefix is not None:
         b1000_pref = args.image_prefix
     else:
         b1000_pref = None
-        # b1000_pref = 'wodctH25_b1000'
 
     if args.transform_dict is not None:
         td = args.transform_dict
@@ -318,6 +274,7 @@ def main_worker(local_rank, args, kwargs):
                 raise ValueError('{} is not an existing dict file or is not '
                                  'in lesseg_unet/data/transform_dicts.py'.format(args.transform_dict))
     else:
+        # TODO refactor
         print('Using default transformation dictionary')
         transform_dict = tr_dicts.minimal_hyper_dict
     # Clamping or not clamping
@@ -340,9 +297,9 @@ def main_worker(local_rank, args, kwargs):
         else:
             clamp_lesion_set = clamp_tuple
     if clamp_lesion_set is not None:
-        logging.info(f'Clamping of training set : {clamp_lesion_set}')
+        utils.logging_rank_0(f'Clamping of training set : {clamp_lesion_set}', dist.get_rank())
     if clamp_tuple is not None:
-        logging.info(f'Clamping of control set: {clamp_tuple}')
+        utils.logging_rank_0(f'Clamping of control set: {clamp_tuple}', dist.get_rank())
     train_val_percentage = None
     if args.train_val is not None:
         train_val_percentage = args.train_val
@@ -351,14 +308,14 @@ def main_worker(local_rank, args, kwargs):
             train_val_percentage = 75
         # if les_list is None and args.default_label is None:
         #     parser.error(message='For the training, there must be a list of labels')
-        logging.info(f'Output training folder : {output_root}')
+        utils.logging_rank_0(f'Output training folder : {output_root}', dist.get_rank())
         if args.pretrained_point is not None:
             if Path(args.pretrained_point).is_dir():
                 pretrained_point = utils.get_best_epoch_from_folder(args.pretrained_point)
                 if pretrained_point == '':
                     raise ValueError(f'Checkpoint could not be found in {args.pretrained_point}')
                 else:
-                    print(f'Latest checkpoint found is: {pretrained_point}')
+                    utils.logging_rank_0(f'Latest checkpoint found is: {pretrained_point}', dist.get_rank())
             else:
                 # So it quickly breaks if the checkpoint does not exist
                 pretrained_point = str(Path(args.pretrained_point))
@@ -402,12 +359,10 @@ def main_worker(local_rank, args, kwargs):
                 if checkpoint == '':
                     raise ValueError(f'Checkpoint could not be found in {args.checkpoint}')
                 else:
-                    print(f'Latest checkpoint found is: {checkpoint}')
+                    utils.logging_rank_0(f'Latest checkpoint found is: {checkpoint}', dist.get_rank())
             else:
                 # So it quickly breaks if the checkpoint does not exist
                 checkpoint = str(Path(args.checkpoint))
-        if train_val_percentage is None:
-            train_val_percentage = 0
         if args.seg_input_dict is not None:
             if les_list is not None:
                 raise ValueError('seg_input_dict cannot be used for the Validation')
