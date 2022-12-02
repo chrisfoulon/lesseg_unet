@@ -167,23 +167,13 @@ def main():
 
 
 def main_worker(local_rank, args, kwargs):
-    # disable logging for processes except 0 on every node
-    # if local_rank != 0:
-    #     f = open(os.devnull, "w")
-    #     sys.stdout = sys.stderr = f
-    # initialize the distributed training process, every GPU runs in a process
-    # if args.distributed:
-    #     dist.init_process_group(backend="nccl", init_method="env://")
-    # device = torch.device(f"cuda:{local_rank}")
-    # torch.cuda.set_device(device)
-
     output_root = Path(args.output)
     log_file_path = str(Path(output_root, '__logging_training.txt'))
     if args.debug:
         logging_level = logging.DEBUG
     else:
         logging_level = logging.INFO
-    logging.basicConfig(filename=log_file_path, level=logging_level, force=True)
+    logging.basicConfig(filename=log_file_path, level=logging_level, encoding='utf-8', filemode='w', force=True)
     file_handler = logging.StreamHandler(sys.stdout)
     logging.getLogger().addHandler(file_handler)
     # TODO use amp to accelerate training
