@@ -174,8 +174,8 @@ def main_worker(local_rank, args, kwargs):
     else:
         logging_level = logging.INFO
     logging.basicConfig(filename=log_file_path, level=logging_level, encoding='utf-8', filemode='w', force=True)
-    file_handler = logging.StreamHandler(sys.stdout)
-    logging.getLogger().addHandler(file_handler)
+    # file_handler = logging.StreamHandler(sys.stdout)
+    # logging.getLogger().addHandler(file_handler)
     # TODO use amp to accelerate training
     # scaler = torch.cuda.amp.GradScaler()
     if 'MASTER_ADDR' not in os.environ:
