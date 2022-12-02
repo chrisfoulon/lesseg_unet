@@ -63,7 +63,7 @@ def create_unetr_model(device: torch.device,
         unetr_hyper_params = default_unetr_hyper_params
     # create UNet
     logging.info('Creating monai UNETR with params: {}'.format(unetr_hyper_params))
-    model = UNETR(**unetr_hyper_params).to(device)
+    model = UNETR(**unetr_hyper_params)  # .to(device)
     return model, unetr_hyper_params
 
 

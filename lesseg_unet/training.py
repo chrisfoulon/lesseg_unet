@@ -595,9 +595,17 @@ def training(img_path_list: Sequence,
                                 print(f'More than {stop_best_epoch} without improvement')
                                 # df.to_csv(Path(output_fold_dir, 'perf_measures.csv'), columns=perf_measure_names)
                                 print(f'Training completed\n')
-                                logging.info(str_best_epoch)
-                                writer.close()
-                                break
+                                # logging.info(str_best_epoch)
+                                # writer.close()
+                                # break
+            if dist.get_rank() == 0:
+                flag_to_share = [stop_epoch]
+            else:
+                flag_to_share = [None]
+            torch.distributed.broadcast_object_list(flag_to_share, src=0)
+            stop_epoch = flag_to_share[0]
+            print(f'[Rank {dist.get_rank()}] stop_epoch = {stop_epoch}')
+            dist.barrier()
             if stop_epoch:
                 # TODO handle end of epoch correctly
                 break
