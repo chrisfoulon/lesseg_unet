@@ -265,7 +265,6 @@ def training(img_path_list: Sequence,
                 checkpoint_to_share = [None]
             torch.distributed.broadcast_object_list(checkpoint_to_share, src=0)
             checkpoint = checkpoint_to_share[0]
-            print(list(checkpoint.keys()))
             hyper_params = checkpoint['hyper_params']
             model = utils.load_model_from_checkpoint(checkpoint, device, hyper_params, model_name=model_type)
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
@@ -542,7 +541,6 @@ def training(img_path_list: Sequence,
                             best_dist = mean_dist_val
                             best_dist_str = f'/ Best Distance {best_dist.item()}'
                             writer.add_scalar('val_best_mean_distance', best_dist.item(), epoch + 1)
-                            # TODO add dist_barrier
                             checkpoint_path = utils.save_checkpoint(
                                 model, epoch + 1, optimizer, scaler, hyper_params, output_fold_dir,
                                 f'best_dice_and_dist_model_segmentation3d_epo{epoch_suffix}.pth')
