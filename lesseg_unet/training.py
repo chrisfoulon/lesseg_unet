@@ -593,7 +593,6 @@ def training(img_path_list: Sequence,
                                 break
             if stop_epoch:
                 # TODO handle end of epoch correctly
-                logging.info(str_best_epoch)
                 break
                 # utils.save_checkpoint(model, epoch + 1, optimizer, output_dir)
         # df.to_csv(Path(output_fold_dir, f'perf_measures_{fold}.csv'), columns=perf_measure_names)
@@ -603,6 +602,6 @@ def training(img_path_list: Sequence,
         logging.info(str_best_epoch)
         # writer.close()
         # Not sure this is necessary
-        dist.barrier()
+        # dist.barrier()
         utils.print_rank_0(f'Fold {fold} finished', rank)
     dist.destroy_process_group()
