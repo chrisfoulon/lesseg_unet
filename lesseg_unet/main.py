@@ -120,16 +120,18 @@ def main():
     output_root = Path(args.output)
 
     os.makedirs(output_root, exist_ok=True)
+    # TODO FIND A SOLUTION TO WRITE IN A FILE
+    if args.debug:
+        logging_level = logging.DEBUG
+    else:
+        logging_level = logging.INFO
     log_file_path = str(Path(output_root, '__logging_training.txt'))
     logging.basicConfig(filename=log_file_path, level=logging.INFO)
-
-    log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
     file_handler = logging.StreamHandler(sys.stdout)
-    file_handler.setFormatter(log_formatter)
     logging.getLogger().addHandler(file_handler)
     logging.info('log file stored in {}'.format(log_file_path))
     if not Path(log_file_path).is_file():
-        raise ValueError(f'{log_file_path} was not created!')
+        print(f'{log_file_path} was not created! Thanks ddp ....')
     if unknown:
         kwargs = utils.kwargs_argparse(unknown)
         print(f'Unlisted arguments : {kwargs}')
@@ -178,10 +180,6 @@ def main():
 
 
 def main_worker(local_rank, args, kwargs):
-    # if args.debug:
-    #     logging_level = logging.DEBUG
-    # else:
-    #     logging_level = logging.INFO
     # logging.basicConfig(filename=log_file_path, level=logging_level, encoding='utf-8', filemode='w', force=True)
     # file_handler = logging.StreamHandler(sys.stdout)
     # logging.getLogger().addHandler(file_handler)
