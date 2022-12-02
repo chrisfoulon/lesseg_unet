@@ -118,6 +118,14 @@ def main():
 
     # Gather input data and setup based on script arguments
     output_root = Path(args.output)
+    log_file_path = str(Path(output_root, '__logging_training.txt'))
+    logging.basicConfig(filename=log_file_path, level=logging.INFO)
+
+    log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+    file_handler = logging.StreamHandler(sys.stdout)
+    file_handler.setFormatter(log_formatter)
+    logging.getLogger().addHandler(file_handler)
+    logging.info('log file stored in {}'.format(log_file_path))
     os.makedirs(output_root, exist_ok=True)
     if unknown:
         kwargs = utils.kwargs_argparse(unknown)
@@ -167,15 +175,6 @@ def main():
 
 
 def main_worker(local_rank, args, kwargs):
-    output_root = Path(args.output)
-    log_file_path = str(Path(output_root, '__logging_training.txt'))
-    logging.basicConfig(filename=log_file_path, level=logging.INFO)
-
-    log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
-    file_handler = logging.StreamHandler(sys.stdout)
-    file_handler.setFormatter(log_formatter)
-    logging.getLogger().addHandler(file_handler)
-    logging.info('log file stored in {}'.format(log_file_path))
     # if args.debug:
     #     logging_level = logging.DEBUG
     # else:
