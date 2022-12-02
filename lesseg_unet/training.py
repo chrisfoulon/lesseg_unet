@@ -294,11 +294,11 @@ def training(img_path_list: Sequence,
             #     logging.info(f'Dropout rate used: {dropout}')
 
             model, _ = net.create_model(device, hyper_params, model_class_name=model_type)
-            print('model created')
+            print(f'[Rank {dist.get_rank()}]model created')
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
-            print('Optimizer created')
+            print(f'[Rank {dist.get_rank()}]Optimizer created')
             # use amp to accelerate training
-        print('Count param')
+        print(f'[Rank {dist.get_rank()}] Count param')
         total_param_count = count_unique_parameters(model.named_parameters())
         print(f'Total number of parameters in the model: {str(total_param_count)}')
         params = list(model.parameters())
