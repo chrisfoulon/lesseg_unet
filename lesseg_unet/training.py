@@ -206,8 +206,7 @@ def training(img_path_list: Sequence,
                                                             writing_rank=dist.get_rank())
     # Extract only the 'first' and 'last' transformations from transform_dict ignoring the augmentations
     val_img_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp,
-                                                        device=transformations_device,
-                                                        writing_rank=dist.get_rank())
+                                                        device=transformations_device)
 
     """
     POST TRANSFORMATIONS

@@ -1125,11 +1125,11 @@ def train_transformd(hyper_param_dict=None, clamping=None, device=None, writing_
     return train_transd
 
 
-def val_transformd(hyper_param_dict=None, clamping=None, device=None, writing_rank=-1):
+def val_transformd(hyper_param_dict=None, clamping=None, device=None):
     if hyper_param_dict is None:
         raise ValueError('Hyper dict is None')
     setup_coord_conv(hyper_param_dict)
-    seg_tr_dict = deepcopy(hyper_param_dict, writing_rank=writing_rank)
+    seg_tr_dict = deepcopy(hyper_param_dict)
     if clamping is not None:
         for li in seg_tr_dict:
             for di in seg_tr_dict[li]:
