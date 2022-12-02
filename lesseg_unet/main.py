@@ -169,11 +169,25 @@ def main():
 def main_worker(local_rank, args, kwargs):
     output_root = Path(args.output)
     log_file_path = str(Path(output_root, '__logging_training.txt'))
-    if args.debug:
-        logging_level = logging.DEBUG
+    if args.verbose == 'debug':
+        logging.basicConfig(filename=log_file_path, level=logging.DEBUG)
+    elif args.verbose == 'none':
+        # As there is no critical message, it will actually prevent all other message to appear.
+        logging.basicConfig(filename=log_file_path, level=logging.CRITICAL)
     else:
-        logging_level = logging.INFO
-    logging.basicConfig(filename=log_file_path, level=logging_level, encoding='utf-8', filemode='w', force=True)
+        logging.basicConfig(filename=log_file_path, level=logging.INFO)
+
+    log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+    file_handler = logging.StreamHandler(sys.stdout)
+    file_handler.setFormatter(log_formatter)
+    logging.getLogger().addHandler(file_handler)
+    logging.info(f'Input command {args}')
+    logging.info('log file stored in {}'.format(log_file_path))
+    # if args.debug:
+    #     logging_level = logging.DEBUG
+    # else:
+    #     logging_level = logging.INFO
+    # logging.basicConfig(filename=log_file_path, level=logging_level, encoding='utf-8', filemode='w', force=True)
     # file_handler = logging.StreamHandler(sys.stdout)
     # logging.getLogger().addHandler(file_handler)
     # TODO use amp to accelerate training
