@@ -118,6 +118,8 @@ def main():
 
     # Gather input data and setup based on script arguments
     output_root = Path(args.output)
+
+    os.makedirs(output_root, exist_ok=True)
     log_file_path = str(Path(output_root, '__logging_training.txt'))
     logging.basicConfig(filename=log_file_path, level=logging.INFO)
 
@@ -126,7 +128,8 @@ def main():
     file_handler.setFormatter(log_formatter)
     logging.getLogger().addHandler(file_handler)
     logging.info('log file stored in {}'.format(log_file_path))
-    os.makedirs(output_root, exist_ok=True)
+    if not Path(log_file_path).is_file():
+        raise ValueError(f'{log_file_path} was not created!')
     if unknown:
         kwargs = utils.kwargs_argparse(unknown)
         print(f'Unlisted arguments : {kwargs}')
@@ -206,8 +209,7 @@ def main_worker(local_rank, args, kwargs):
     if args.debug:
         print(torch.__config__.parallel_info())
 
-    if not Path(log_file_path).is_file():
-        raise ValueError(f'{log_file_path} was not created!')
+    output_root = Path(args.output)
     if not output_root.is_dir():
         raise ValueError('{} is not an existing directory and could not be created'.format(output_root))
     cache_dir = None
