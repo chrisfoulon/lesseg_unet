@@ -206,11 +206,12 @@ def main_worker(local_rank, args, kwargs):
         logging_level = logging.DEBUG
     else:
         logging_level = logging.INFO
-    logging.basicConfig(filename=log_file_path, level=logging_level)
-    file_handler = logging.StreamHandler(sys.stdout)
-    logging.getLogger().addHandler(file_handler)
-    if not Path(log_file_path).is_file():
-        raise ValueError(f'{log_file_path} was not created!')
+    if dist.get_rank() == 0:
+        logging.basicConfig(filename=log_file_path, level=logging_level)
+        file_handler = logging.StreamHandler(sys.stdout)
+        logging.getLogger().addHandler(file_handler)
+        if not Path(log_file_path).is_file():
+            raise ValueError(f'{log_file_path} was not created!')
     if not output_root.is_dir():
         raise ValueError('{} is not an existing directory and could not be created'.format(output_root))
     cache_dir = None
