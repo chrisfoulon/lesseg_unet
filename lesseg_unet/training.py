@@ -601,7 +601,7 @@ def training(img_path_list: Sequence,
         #     json.dump(trash_seg_path_count_dict, j, indent=4)
         print(f'Training completed\n')
         logging.info(str_best_epoch)
-        writer.close()
+        # writer.close()
         # Not sure this is necessary
         dist.barrier()
         utils.print_rank_0(f'Fold {fold} finished', rank)
