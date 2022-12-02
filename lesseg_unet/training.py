@@ -617,7 +617,8 @@ def training(img_path_list: Sequence,
         # with open(Path(output_fold_dir, f'trash_img_count_dict_{fold}.json'), 'w+') as j:
         #     json.dump(trash_seg_path_count_dict, j, indent=4)
         print(f'[Rank {dist.get_rank()}] Training completed\n')
-        logging.info(str_best_epoch)
-        writer.close()
+        utils.logging_rank_0(str_best_epoch, dist.get_rank())
+        if writer is not None:
+            writer.close()
         utils.logging_rank_0(f'Fold {fold} finished', rank)
     dist.destroy_process_group()
