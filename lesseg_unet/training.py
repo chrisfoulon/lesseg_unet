@@ -294,8 +294,11 @@ def training(img_path_list: Sequence,
             #     logging.info(f'Dropout rate used: {dropout}')
 
             model, _ = net.create_model(device, hyper_params, model_class_name=model_type)
+            print('model created')
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
+            print('Optimizer created')
             # use amp to accelerate training
+        print('Count param')
         total_param_count = count_unique_parameters(model.named_parameters())
         print(f'Total number of parameters in the model: {str(total_param_count)}')
         params = list(model.parameters())
@@ -303,12 +306,16 @@ def training(img_path_list: Sequence,
         if torch.cuda.is_available():
             model.to(rank)
             model = DistributedDataParallel(model, device_ids=[rank], output_device=rank, find_unused_parameters=False)
+            utils.print_rank_0('Model sent to the different ranks', rank)
+            if dist.get_rank() != 0:
+                print('Non-0 ranks model distributed')
         if folds_number == 1:
             output_fold_dir = output_dir
         else:
             output_fold_dir = Path(output_dir, f'fold_{fold}')
         # Tensorboard writer
         writer = SummaryWriter(log_dir=str(output_fold_dir))
+        utils.print_rank_0('Tensorboard SummaryWriter created', rank)
         # Creates both the training and validation loaders based on the fold number
         # (e.g. fold 0 means the first sublist of split_lists will be the validation set for this fold)
         train_loader, val_loader = data_loading.create_fold_dataloaders(
