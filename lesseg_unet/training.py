@@ -562,7 +562,6 @@ def training(img_path_list: Sequence,
                                 # f'metric {best_metric:.4f}/distance {best_distance}/avgloss {best_avg_loss}\n'
                                 f'Dice metric {best_dice.item():.4f} / mean loss {best_avg_loss.item()}'
                             )
-                    dist.barrier()
                     if rank == 0:
                         if keep_dice_and_dist:
                             best_epoch_count = epoch + 1 - best_metric_dist_epoch
@@ -595,7 +594,6 @@ def training(img_path_list: Sequence,
             if stop_epoch:
                 # TODO handle end of epoch correctly
                 logging.info(str_best_epoch)
-                writer.close()
                 break
                 # utils.save_checkpoint(model, epoch + 1, optimizer, output_dir)
         # df.to_csv(Path(output_fold_dir, f'perf_measures_{fold}.csv'), columns=perf_measure_names)
