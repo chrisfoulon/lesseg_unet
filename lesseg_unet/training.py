@@ -604,4 +604,4 @@ def training(img_path_list: Sequence,
         print(f'Training completed\n')
         logging.info(str_best_epoch)
         writer.close()
-        dist.destroy_process_group()
+    dist.destroy_process_group()
