@@ -207,7 +207,7 @@ def main_worker(local_rank, args, kwargs):
     else:
         logging_level = logging.INFO
     if dist.get_rank() == 0:
-        logging.basicConfig(filename=log_file_path, level=logging_level)
+        logging.basicConfig(filename=log_file_path, level=logging_level, force=True)
         file_handler = logging.StreamHandler(sys.stdout)
         logging.getLogger().addHandler(file_handler)
         if not Path(log_file_path).is_file():
