@@ -502,6 +502,12 @@ def training(img_path_list: Sequence,
                         dist.all_reduce(val_epoch_dice, op=dist.ReduceOp.SUM)
                         val_epoch_dice /= world_size
                         if 'dist' in val_loss_fct.lower():
+                            print('################DEBUG')
+                            print(type(hausdorff_metric))
+                            print(hausdorff_metric)
+                            print(type(val_epoch_dist))
+                            print(val_epoch_dist)
+                            print('GUBED#################')
                             # TODO apparently, this causes an error
                             dist.all_reduce(val_epoch_dist, op=dist.ReduceOp.SUM)
                             val_epoch_dist /= world_size
