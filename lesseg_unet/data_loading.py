@@ -208,11 +208,4 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
                                                sampler=train_sampler, shuffle=shuffle_training)
     val_loader = create_validation_data_loader(val_ds, val_batch_size, dataloader_workers, sampler=val_sampler)
 
-    import gc
-    import time
-    print('trying to free memory')
-    del val_ds
-    gc.collect()
-    print('Has it been freed?')
-    time.sleep(600)
     return train_loader, val_loader
