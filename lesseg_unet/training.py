@@ -503,8 +503,14 @@ def training(img_path_list: Sequence,
                         val_epoch_dice /= world_size
                         if 'dist' in val_loss_fct.lower():
                             print('################DEBUG')
+                            print('val_epoch_dice')
+                            print(type(val_epoch_dice))
+                            print(val_epoch_dice)
+
+                            print('hausdorff_metric')
                             print(type(hausdorff_metric))
                             print(hausdorff_metric)
+                            print('val_epoch_dist')
                             print(type(val_epoch_dist))
                             print(val_epoch_dist)
                             print('GUBED#################')
