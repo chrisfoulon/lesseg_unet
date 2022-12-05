@@ -326,6 +326,9 @@ def training(img_path_list: Sequence,
             world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num, debug=debug
         )
 
+        del train_loader
+        exit()
+
         """EPOCHS LOOP VARIABLES"""
         batches_per_epoch = len(train_loader)
         time_list = []
@@ -622,5 +625,4 @@ def training(img_path_list: Sequence,
         if writer is not None:
             writer.close()
         utils.logging_rank_0(f'Fold {fold} finished', rank)
-        del train_loader
     dist.destroy_process_group()
