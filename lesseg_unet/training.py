@@ -486,6 +486,7 @@ def training(img_path_list: Sequence,
                         val_epoch_dice += dice
                         if 'dist' in val_loss_fct.lower():
                             hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
+                            # For whatever reason, this metric is going back to cpu unlike the dice_metric ...
                             distance = hausdorff_metric.aggregate().to(device)
                             # val_batch_dist_list.append(distance.item())
                             val_epoch_dist += distance
