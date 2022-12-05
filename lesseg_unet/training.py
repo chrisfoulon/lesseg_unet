@@ -325,10 +325,6 @@ def training(img_path_list: Sequence,
             val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
             world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num, debug=debug
         )
-        import gc
-        del val_loader
-        gc.collect()
-        time.sleep(600)
 
         """EPOCHS LOOP VARIABLES"""
         batches_per_epoch = len(train_loader)
