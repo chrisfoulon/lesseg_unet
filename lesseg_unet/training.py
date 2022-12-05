@@ -485,8 +485,8 @@ def training(img_path_list: Sequence,
                         dice = dice_metric.aggregate()
                         val_epoch_dice += dice
                         if 'dist' in val_loss_fct.lower():
-                            hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels).to(device)
-                            distance = hausdorff_metric.aggregate()
+                            hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
+                            distance = hausdorff_metric.aggregate().to(device)
                             # val_batch_dist_list.append(distance.item())
                             val_epoch_dist += distance
                         # val_batch_dice_list.append(dice.item())
@@ -509,8 +509,8 @@ def training(img_path_list: Sequence,
                                 print(val_epoch_dice)
 
                                 print('hausdorff_metric')
-                                print(type(hausdorff_metric))
-                                print(hausdorff_metric)
+                                print(type(distance))
+                                print(distance)
                                 print('val_epoch_dist')
                                 print(type(val_epoch_dist))
                                 print(val_epoch_dist)
