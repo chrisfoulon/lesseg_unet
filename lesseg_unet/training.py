@@ -327,7 +327,7 @@ def training(img_path_list: Sequence,
         )
 
         del train_loader
-        exit()
+        time.sleep(600)
 
         """EPOCHS LOOP VARIABLES"""
         batches_per_epoch = len(train_loader)
