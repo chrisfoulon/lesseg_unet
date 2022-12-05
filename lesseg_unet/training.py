@@ -485,7 +485,7 @@ def training(img_path_list: Sequence,
                         dice = dice_metric.aggregate()
                         val_epoch_dice += dice
                         if 'dist' in val_loss_fct.lower():
-                            hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
+                            hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels).to(device)
                             distance = hausdorff_metric.aggregate()
                             # val_batch_dist_list.append(distance.item())
                             val_epoch_dist += distance
