@@ -502,6 +502,7 @@ def training(img_path_list: Sequence,
                         dist.all_reduce(val_epoch_dice, op=dist.ReduceOp.SUM)
                         val_epoch_dice /= world_size
                         if 'dist' in val_loss_fct.lower():
+                            # TODO apparently, this causes an error
                             dist.all_reduce(val_epoch_dist, op=dist.ReduceOp.SUM)
                             val_epoch_dist /= world_size
 
@@ -621,4 +622,5 @@ def training(img_path_list: Sequence,
         if writer is not None:
             writer.close()
         utils.logging_rank_0(f'Fold {fold} finished', rank)
+        del train_loader
     dist.destroy_process_group()
