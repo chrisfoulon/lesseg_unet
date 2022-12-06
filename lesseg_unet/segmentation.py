@@ -99,13 +99,17 @@ def segmentation(img_path_list: Sequence,
                         hyper_params['in_channels'] = 4
     # Could be used to send the models on different gpus
     # devices_repeated = utils.repeat_array_to_dim(devices, np.array(checkpoint_list).shape)
+
     models = [
-        utils.load_model_from_checkpoint(checkpoint_path, device, hyper_params, model_name=model_name)
+        utils.load_model_from_checkpoint(torch.load(checkpoint_path, map_location="cpu"),
+                                         device, None, model_name=model_name)
         for checkpoint_path in checkpoint_list
     ]
-    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
+    for model in models:
+        model.to(device)
+    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
     activation_fct = Activations(sigmoid=True)
-    threshold_fct = AsDiscrete(threshold_values=True)
+    threshold_fct = AsDiscrete(threshold=0.5)
     try:
         ensemble_operation = getattr(torch, ensemble_operation)
     except AttributeError as e:
@@ -293,8 +297,11 @@ def segmentation_loop(img_path_list: Sequence,
                 for t in d:
                     if t == 'CoordConvd' or t == 'CoordConvAltd':
                         hyper_params['in_channels'] = 4
-    model = utils.load_model_from_checkpoint(checkpoint_path, device, hyper_params, model_name=model_name)
-    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
+
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    model = utils.load_model_from_checkpoint(checkpoint, device, None, model_name=model_name)
+    model.to(device)
+    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
     model.eval()
     les_area_finder = None
     if segmentation_area:
@@ -410,16 +417,18 @@ def validation_loop(img_path_list: Sequence,
         hyper_params = net.default_unetr_hyper_params
         hyper_params['img_size'] = training_img_size
         model_name = 'unetr'
-    if transform_dict is not None:
-        for li in transform_dict:
-            for d in transform_dict[li]:
-                for t in d:
-                    if t == 'CoordConvd' or t == 'CoordConvAltd':
-                        hyper_params['in_channels'] = 4
-    model = utils.load_model_from_checkpoint(checkpoint_path, device, hyper_params, model_name=model_name)
+    # if transform_dict is not None:
+    #     for li in transform_dict:
+    #         for d in transform_dict[li]:
+    #             for t in d:
+    #                 if t == 'CoordConvd' or t == 'CoordConvAltd':
+    #                     hyper_params['in_channels'] = 4
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    model = utils.load_model_from_checkpoint(checkpoint, device, None, model_name=model_name)
+    model.to(device)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean", percentile=95)
-    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold_values=True)])
+    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
 
     les_area_finder = None
     if segmentation_area:
@@ -490,10 +499,10 @@ def validation_loop(img_path_list: Sequence,
             # value = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
             val_score_list.append(dice)
             val_dist_list.append(dist)
-            val_data['image'] = val_data['image'].to(device)[0]
-            val_data['label'] = val_data['label'].to(device)[0]
-            output_dict_data['image'] = val_data['image']
-            output_dict_data['label'] = val_output_convert[0]
+            # val_data['image'] = val_data['image'].to(device)[0]
+            # val_data['label'] = val_data['label'].to(device)[0]
+            # output_dict_data['image'] = val_data['image']
+            # output_dict_data['label'] = val_output_convert[0]
             # Loop dataframe filling
             loop_df = loop_df.append({'core_filename': input_filename.split('input_')[-1],
                                       'dice_metric': dice,
@@ -504,18 +513,21 @@ def validation_loop(img_path_list: Sequence,
             dice_metric.reset()
             hausdorff_metric.reset()
 
-            inverted_dict = val_ds.transform.inverse(val_data)
-            inv_inputs, inv_labels = inverted_dict['image'], inverted_dict['label']
-            inv_outputs = val_ds.transform.inverse(output_dict_data)['label']
-            inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_inputs, torch.Tensor) \
-                else inv_inputs[0, :, :, :]
-            labels_np = inv_labels[0, :, :, :].cpu().detach().numpy() if isinstance(inv_labels, torch.Tensor) \
-                else inv_labels[0, :, :, :]
-            outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_outputs, torch.Tensor) \
-                else inv_outputs[0, :, :, :]
-            # inputs_np = inv_inputs[0, :, :, :].detach().numpy()
-            # labels_np = inv_labels[0, :, :, :].detach().numpy()
-            # outputs_np = inv_outputs[0, :, :, :].detach().numpy()
+            # inverted_dict = val_ds.transform.inverse(val_data)
+            # inv_inputs, inv_labels = inverted_dict['image'], inverted_dict['label']
+            # inv_outputs = val_ds.transform.inverse(output_dict_data)['label']
+            # inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_inputs, torch.Tensor) \
+            #     else inv_inputs[0, :, :, :]
+            # labels_np = inv_labels[0, :, :, :].cpu().detach().numpy() if isinstance(inv_labels, torch.Tensor) \
+            #     else inv_labels[0, :, :, :]
+            # outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_outputs, torch.Tensor) \
+            #     else inv_outputs[0, :, :, :]
+            # inputs_np = val_data['image'][0, :, :, :].cpu().detach().numpy()
+            # labels_np = val_data['label'][0, :, :, :].cpu().detach().numpy()
+            # outputs_np = val_output_convert[0][0, :, :, :].cpu().detach().numpy()
+            inputs_np = val_data['image']
+            labels_np = labels
+            outputs_np = val_output_convert[0][0, :, :, :].cpu().detach().numpy()
             if dice < bad_dice_treshold:
                 trash_count += 1
                 # print('Saving trash image #{}'.format(trash_count))

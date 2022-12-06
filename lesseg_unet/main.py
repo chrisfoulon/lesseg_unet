@@ -126,7 +126,7 @@ def main():
     else:
         logging_level = logging.INFO
     log_file_path = str(Path(output_root, '__logging_training.txt'))
-    logging.basicConfig(filename=log_file_path, level=logging.INFO)
+    logging.basicConfig(filename=log_file_path, level=logging_level)
     file_handler = logging.StreamHandler(sys.stdout)
     logging.getLogger().addHandler(file_handler)
     logging.info('log file stored in {}'.format(log_file_path))
@@ -144,10 +144,8 @@ def main():
     with open(Path(args.output, 'run_command.txt'), 'w+') as f:
         f.write(' '.join(sys.argv))
 
-    # if args.local_rank is None:
-    #     args.local_rank = int(os.environ["LOCAL_RANK"])
-    # else:
-    #     print(args.local_rank)
+    if args.checkpoint is not None:
+        args.local_rank = 0
     """
     Set enrivonment variables to overwrite torchrun default config and allow 
     1) more open files allowed
@@ -163,8 +161,10 @@ def main():
         # Starting the model manually
         local_rank = args.local_rank
         if 'CUDA_VISIBLE_DEVICES' not in os.environ:
-            os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(['0', '1'])
-        # os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(['0'])
+            if args.checkpoint is not None:
+                os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(['0'])
+            else:
+                os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(['0', '1'])
         print('Using local_rank directly')
     else:
         # Starting the model using torchrun

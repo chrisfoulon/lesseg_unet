@@ -374,6 +374,9 @@ def training(img_path_list: Sequence,
             INNER TRAINING LOOP
             """
             for batch_data in train_iter:
+                # TODO print image names both in training and validation loop
+                # TODO Try to resume the model but mess up with the label (zero_like / one_like)
+                # TODO turn off the augmentations
                 if loading_time:
                     end_time = time.time()
                     load_time = end_time - start_time
@@ -503,20 +506,6 @@ def training(img_path_list: Sequence,
                         dist.all_reduce(val_epoch_dice, op=dist.ReduceOp.SUM)
                         val_epoch_dice /= world_size
                         if 'dist' in val_loss_fct.lower():
-                            if dist.get_rank() == 0:
-                                print('################DEBUG')
-                                print('val_epoch_dice')
-                                print(type(val_epoch_dice))
-                                print(val_epoch_dice)
-
-                                print('hausdorff_metric')
-                                print(type(distance))
-                                print(distance)
-                                print('val_epoch_dist')
-                                print(type(val_epoch_dist))
-                                print(val_epoch_dist)
-                                print('GUBED#################')
-                            # TODO apparently, this causes an error
                             dist.all_reduce(val_epoch_dist, op=dist.ReduceOp.SUM)
                             val_epoch_dist /= world_size
 
@@ -568,10 +557,11 @@ def training(img_path_list: Sequence,
                             utils.tensorboard_write_rank_0(writer, 'val_best_mean_distance', best_dist.item(),
                                                            epoch + 1, dist.get_rank())
                             checkpoint_path = utils.save_checkpoint(
-                                model, epoch + 1, optimizer, scaler, hyper_params, output_fold_dir,
+                                model, epoch + 1, optimizer, scaler, hyper_params,
+                                output_fold_dir, model_type, transform_dict,
                                 f'best_dice_and_dist_model_segmentation3d_epo{epoch_suffix}.pth')
                             utils.logging_rank_0(f'New best (dice and dist) model saved in {checkpoint_path}',
-                                               dist.get_rank())
+                                                 dist.get_rank())
                             str_best_dist_epoch = (
                                     f'\n{best_epoch_pref_str} {best_metric_dist_epoch} '
                                     # f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
@@ -581,7 +571,8 @@ def training(img_path_list: Sequence,
                         # Here, only dice improved
                         else:
                             checkpoint_path = utils.save_checkpoint(
-                                model, epoch + 1, optimizer, scaler, hyper_params, output_fold_dir,
+                                model, epoch + 1, optimizer, scaler, hyper_params,
+                                output_fold_dir, model_type, transform_dict,
                                 f'best_dice_model_segmentation3d_epo{epoch_suffix}.pth')
                             utils.logging_rank_0(f'New best model saved in {checkpoint_path}', dist.get_rank())
                             str_best_epoch = (

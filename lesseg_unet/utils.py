@@ -101,12 +101,15 @@ def nifti_affine_from_dataset(nifti_path: Union[str, bytes, os.PathLike]):
     return nib.load(nifti_path).affine
 
 
-def save_checkpoint(model, epoch, optimizer, scaler, hyper_params, output_folder, filename=None):
+def save_checkpoint(model, epoch, optimizer, scaler, hyper_params, output_folder, model_name,
+                    transform_dict, filename=None):
     state_dict = {'epoch': epoch,
                   'state_dict': model.module.state_dict(),
                   'optim_dict': optimizer.state_dict(),
                   'hyper_params': hyper_params,
                   'scaler_dict': scaler.state_dict(),
+                  'model_name': model_name,
+                  'transform_dict': transform_dict
                   }
     if filename is None:
         out_path = Path(output_folder, 'checkpoint_dictionary_{}.pt'.format(epoch))
