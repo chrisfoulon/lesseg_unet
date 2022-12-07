@@ -402,6 +402,7 @@ def training(img_path_list: Sequence,
                 DEBUG AND IMAGE DISPLAY BLOCK
                 """
                 if display_training:
+                    print(train_img_transforms)
                     img_name = Path(batch_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
                     lbl_name = Path(batch_data['label_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
                     # print(batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy())
