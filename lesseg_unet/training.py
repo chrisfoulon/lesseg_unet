@@ -311,7 +311,6 @@ def training(img_path_list: Sequence,
             utils.logging_rank_0(f'Total number of parameters in the model: {str(total_param_count)}',
                                  dist.get_rank())
         params = list(model.parameters())
-        # TODO the segmentation might require to add 'module' after model. to access the state_dict and all
         if torch.cuda.is_available():
             model.to(dist.get_rank())
             model = DistributedDataParallel(model, device_ids=[rank], output_device=dist.get_rank(),
@@ -404,6 +403,7 @@ def training(img_path_list: Sequence,
                 """
                 if display_training:
                     img_name = Path(batch_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
+                    lbl_name = Path(batch_data['label_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
                     # print(batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy())
                     nii = nib.Nifti1Image(inputs[0, 0, ...].cpu().detach().numpy(),
                                           batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy())
@@ -413,9 +413,14 @@ def training(img_path_list: Sequence,
                               cut_coords=(50, 54, 45)
                               )
                     data = inputs[0, 0, ...].cpu().detach().numpy()
-                    print(img_name)
+                    print(f'Image name: {img_name}')
                     print(np.mean(data))
+                    print(f'Label name: {lbl_name}')
                     nib.save(nii, Path(img_dir, f'{img_name}.nii.gz'))
+                    nib.save(nib.Nifti1Image(labels[0, 0, ...].cpu().detach().numpy(),
+                                             batch_data['label_meta_dict']['affine'][0].cpu().detach().numpy()),
+                             Path(img_dir, f'{lbl_name}.nii.gz'))
+
                 with torch.cuda.amp.autocast():
                     logit_outputs = model(inputs)
                     # In case we use CoordConv, we only take the mask of the labels without the coordinates

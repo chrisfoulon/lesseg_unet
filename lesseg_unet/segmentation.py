@@ -411,12 +411,12 @@ def validation_loop(img_path_list: Sequence,
         transform_dict, 'spatial_size', find_last=True)
     if training_img_size is None:
         training_img_size = utils.get_img_size(img_path_list[0])
-    model_name = 'unet'
-    hyper_params = net.default_unet_hyper_params
-    if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
-        hyper_params = net.default_unetr_hyper_params
-        hyper_params['img_size'] = training_img_size
-        model_name = 'unetr'
+    # model_name = 'unet'
+    # hyper_params = net.default_unet_hyper_params
+    # if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
+    #     hyper_params = net.default_unetr_hyper_params
+    #     hyper_params['img_size'] = training_img_size
+    #     model_name = 'unetr'
     # if transform_dict is not None:
     #     for li in transform_dict:
     #         for d in transform_dict[li]:
@@ -424,7 +424,8 @@ def validation_loop(img_path_list: Sequence,
     #                 if t == 'CoordConvd' or t == 'CoordConvAltd':
     #                     hyper_params['in_channels'] = 4
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
-    model = utils.load_model_from_checkpoint(checkpoint, device, None, model_name=model_name)
+    model = utils.load_model_from_checkpoint(checkpoint, device, checkpoint['hyper_params'],
+                                             model_name=checkpoint['model_name'])
     model.to(device)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean", percentile=95)
@@ -512,7 +513,7 @@ def validation_loop(img_path_list: Sequence,
             # Maybe not necessary but I prefer it there
             dice_metric.reset()
             hausdorff_metric.reset()
-
+            # TODO FIX ORIGINAL SIZE INVERSE TRANSFORMATIONS
             # inverted_dict = val_ds.transform.inverse(val_data)
             # inv_inputs, inv_labels = inverted_dict['image'], inverted_dict['label']
             # inv_outputs = val_ds.transform.inverse(output_dict_data)['label']
