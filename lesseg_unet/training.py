@@ -218,11 +218,20 @@ def training(img_path_list: Sequence,
     """
     if img_pref is not None and img_pref != '':
         utils.logging_rank_0(f'Abnormal images prefix: {img_pref}', dist.get_rank())
+    """
+    IMPORTANT!!!! THIS MUST BE DONE ONLY ONCE WHEN THE IMAGES ARE SHUFFLED!!!!
+    With multi-gpu the shuffle is called multiple times and thus, the datasets are different and the fold
+    splits are not respected!!!
+    """
+    if dist.get_rank() == 0:
+        # Get the images from the image and label list and tries to match them
+        img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, seg_path_list, img_pref)
 
-    # Get the images from the image and label list and tries to match them
-    img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, seg_path_list, img_pref)
-
-    split_lists = utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage, shuffle=True)
+        split_lists_to_share = [utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage, shuffle=True)]
+    else:
+        split_lists_to_share = [None]
+    torch.distributed.broadcast_object_list(split_lists_to_share, src=0)
+    split_lists = split_lists_to_share[0]
     # Save the split_lists to easily get the content of the folds and all
     with open(Path(output_dir, 'split_lists.json'), 'w+') as f:
         json.dump(split_lists, f, indent=4)
