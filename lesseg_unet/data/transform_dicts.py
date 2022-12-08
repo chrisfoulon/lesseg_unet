@@ -1181,14 +1181,20 @@ unetr_cc_std_norm['last_transform'][1]['MyNormalizeIntensityd']['no_std'] = Fals
 
 unetr_cc_patches = deepcopy(unetr_cc)
 del unetr_cc_patches['first_transform'][2]
-unetr_cc_patches.update({'crop': [
-    {'RandCropByPosNegLabeld': {
+unetr_cc_patches.update({'patches': [
+    {'RandSpatialCropSamplesd': {
         'keys': ['image', 'label'],
-        'label_key': 'label',
-        'spatial_size': [80, 80, 80],
-        'pos': 1,
-        'neg': 1,
-        'num_samples': 4}},
+        'roi_size': [4, 80, 80, 80],
+        'num_samples': 4,
+        'random_center': True,
+        'random_size': False}},
+    # {'RandCropByPosNegLabeld': {
+    #     'keys': ['image', 'label'],
+    #     'label_key': 'label',
+    #     'spatial_size': [80, 80, 80],
+    #     'pos': 1,
+    #     'neg': 1,
+    #     'num_samples': 4}},
     # {'RandFlipd': {
     #     'keys': ["image", "label"],
     #     'spatial_axis': [1],

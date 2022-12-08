@@ -187,31 +187,6 @@ def training(img_path_list: Sequence,
             keep_dice_and_dist = False
         if v == 'True' or v == 1:
             keep_dice_and_dist = True
-    """
-    TRANSFORMATIONS AND AUGMENTATIONS
-    """
-    # Attempt to send the transformations / augmentations on the GPU when possible (disabled by default)
-    transformations_device = None
-    if 'tr_device' in kwargs:
-        v = kwargs['tr_device']
-        if v == 'False' or v == 0:
-            transformations_device = None
-        if v == 'True' or v == 1:
-            print(f'ToTensord transformation will be called on {device}')
-            transformations_device = device
-    utils.print_rank_0('Initialisation of the training transformations', dist.get_rank())
-    # Extract all the transformations from transform_dict
-    train_img_transforms = transformations.train_transformd(transform_dict, lesion_set_clamp,
-                                                            device=transformations_device,
-                                                            writing_rank=dist.get_rank())
-    # Extract only the 'first' and 'last' transformations from transform_dict ignoring the augmentations
-    val_img_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp,
-                                                        device=transformations_device)
-
-    """
-    POST TRANSFORMATIONS
-    """
-    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
 
     """
     DATA LOADING
@@ -237,9 +212,41 @@ def training(img_path_list: Sequence,
         json.dump(split_lists, f, indent=4)
     # We need the training image size for the unetr as we need to know the size of the model to create it
     training_img_size = transformations.find_param_from_hyper_dict(
-        transform_dict, 'spatial_size', find_last=True)
+            transform_dict, 'spatial_size', find_last=True)
     if training_img_size is None:
         training_img_size = utils.get_img_size(split_lists[0][0]['image'])
+
+    """
+    TRANSFORMATIONS AND AUGMENTATIONS
+    """
+    # Attempt to send the transformations / augmentations on the GPU when possible (disabled by default)
+    transformations_device = None
+    if 'tr_device' in kwargs:
+        v = kwargs['tr_device']
+        if v == 'False' or v == 0:
+            transformations_device = None
+        if v == 'True' or v == 1:
+            print(f'ToTensord transformation will be called on {device}')
+            transformations_device = device
+    utils.print_rank_0('Initialisation of the training transformations', dist.get_rank())
+    """
+    If CoordConv is used, we need to set the gradient before (to speed up the process a bit)
+    """
+    native_shape = nib.load(img_path_list[0]).get_fdata().shape
+    if list(transform_dict.keys())[-1] == 'patches':
+        transformations.setup_coord_conv(transform_dict, native_shape)
+    # Extract all the transformations from transform_dict
+    train_img_transforms = transformations.train_transformd(transform_dict, lesion_set_clamp,
+                                                            device=transformations_device,
+                                                            writing_rank=dist.get_rank())
+    # Extract only the 'first' and 'last' transformations from transform_dict ignoring the augmentations
+    val_img_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp,
+                                                        device=transformations_device)
+
+    """
+    POST TRANSFORMATIONS
+    """
+    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
 
     """
     FOLDS LOOP VARIABLES

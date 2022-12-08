@@ -50,6 +50,7 @@ from monai.transforms import (
     ResizeWithPadOrCropd,
     RandomizableTransform,
     RandShiftIntensityd,
+    RandSpatialCropSamplesd
 )
 import torchio
 from torchio import Subject, ScalarImage
@@ -91,7 +92,7 @@ def get_data_and_pkg(data, detach=True):
                     f'It should either be a numpy array or a torch Tensor')
 
 
-def create_gradient(img_spatial_size, low=-1, high=1):
+def create_gradient(img_spatial_size, low=0, high=1):
     x = np.linspace(low, high, img_spatial_size[0])
     y = np.linspace(low, high, img_spatial_size[1])
     z = np.linspace(low, high, img_spatial_size[2])
@@ -1074,31 +1075,31 @@ Transformation compositions for the image segmentation
 """
 
 
-def setup_coord_conv(hyper_param_dict):
-    create_gradient_before = list(hyper_param_dict.keys())[-1] == 'last_transform'
-    if create_gradient_before:
-        spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size', 'last_transform',
-                                                  find_last=True)
-        if spatial_size is None:
-            spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size', find_last=True)
-        logging.info(f'Spatial resize to {spatial_size}')
+def setup_coord_conv(hyper_param_dict, gradient_shape=None):
+    # create_gradient_before = list(hyper_param_dict.keys())[-1] == 'last_transform'
+    # if create_gradient_before:
+    spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size', 'last_transform',
+                                              find_last=True)
+    if spatial_size is None:
+        spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size', find_last=True)
+    logging.info(f'Spatial resize to {spatial_size}')
 
-        gradients = None
-        for k in hyper_param_dict:
-            # Each dict in the sublist
-            for d in hyper_param_dict[k]:
-                # Each Transformation name in the sublist
-                for name in d:
-                    if name == 'CoordConvd' or name == 'CoordConv':
-                        if gradients is None:
-                            gradients = create_gradient(spatial_size)
-                        d[name]['gradients'] = gradients
+    gradients = None
+    for k in hyper_param_dict:
+        # Each dict in the sublist
+        for d in hyper_param_dict[k]:
+            # Each Transformation name in the sublist
+            for name in d:
+                if name == 'CoordConvd' or name == 'CoordConv':
+                    if gradients is None:
+                        gradients = create_gradient(spatial_size)
+                    d[name]['gradients'] = gradients
 
 
 def train_transformd(hyper_param_dict=None, clamping=None, device=None, writing_rank=-1):
     if hyper_param_dict is None:
         raise ValueError('Hyper dict is None')
-    setup_coord_conv(hyper_param_dict)
+    # setup_coord_conv(hyper_param_dict)
     check_imports(hyper_param_dict)
     check_hyper_param_dict_shape(hyper_param_dict, writing_rank=writing_rank)
     seg_tr_dict = deepcopy(hyper_param_dict)
@@ -1128,7 +1129,7 @@ def train_transformd(hyper_param_dict=None, clamping=None, device=None, writing_
 def val_transformd(hyper_param_dict=None, clamping=None, device=None):
     if hyper_param_dict is None:
         raise ValueError('Hyper dict is None')
-    setup_coord_conv(hyper_param_dict)
+    # setup_coord_conv(hyper_param_dict)
     seg_tr_dict = deepcopy(hyper_param_dict)
     if clamping is not None:
         for li in seg_tr_dict:
@@ -1151,7 +1152,7 @@ def val_transformd(hyper_param_dict=None, clamping=None, device=None):
 def image_only_transformd(hyper_param_dict=None, training=True, clamping=None, device=None):
     if hyper_param_dict is None:
         raise ValueError('Hyper dict is None')
-    setup_coord_conv(hyper_param_dict)
+    # setup_coord_conv(hyper_param_dict)
     check_imports(hyper_param_dict)
     check_hyper_param_dict_shape(hyper_param_dict)
     seg_tr_dict = {}
