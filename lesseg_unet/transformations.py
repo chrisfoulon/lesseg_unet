@@ -1078,11 +1078,11 @@ Transformation compositions for the image segmentation
 def setup_coord_conv(hyper_param_dict, gradient_shape=None):
     # create_gradient_before = list(hyper_param_dict.keys())[-1] == 'last_transform'
     # if create_gradient_before:
-    spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size', 'last_transform',
-                                              find_last=True)
-    if spatial_size is None:
-        spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size', find_last=True)
-    logging.info(f'Spatial resize to {spatial_size}')
+    # spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size', 'last_transform',
+    #                                           find_last=True)
+    # if spatial_size is None:
+    #     spatial_size = find_param_from_hyper_dict(hyper_param_dict, 'spatial_size', find_last=True)
+    logging.info(f'CoordConv gradient size to {gradient_shape}')
 
     gradients = None
     for k in hyper_param_dict:
@@ -1092,7 +1092,7 @@ def setup_coord_conv(hyper_param_dict, gradient_shape=None):
             for name in d:
                 if name == 'CoordConvd' or name == 'CoordConv':
                     if gradients is None:
-                        gradients = create_gradient(spatial_size)
+                        gradients = create_gradient(gradient_shape)
                     d[name]['gradients'] = gradients
 
 
