@@ -1029,7 +1029,7 @@ unetr_dict_lastflip = {
             'keys': ["image"],
             'offsets': 0.10,
             'prob': high_prob}
-        },
+         },
     ],
     'last_transform': [
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'end of augmentations'}},
@@ -1136,7 +1136,7 @@ unetr_cc = {
     ],
     'torchio_transform': [
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'PrintDim before ToTensord'}},
-        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'ToTensord': {'keys': ['image', 'label']}},
         {'RandomBiasField': {
             'include': ['image'],
             'p': low_prob,
@@ -1170,7 +1170,7 @@ unetr_cc = {
             'keys': ['image'],
             'out_min_max': (0, 1)}
          },
-        {'ToTensord': {'keys': ['image', 'label']}},
+        # {'ToTensord': {'keys': ['image', 'label']}},
         {'CoordConvd': {'keys': ['image']}}
     ],
 }
@@ -1184,8 +1184,8 @@ del unetr_cc_patches['first_transform'][2]
 unetr_cc_patches.update({'patches': [
     {'RandSpatialCropSamplesd': {
         'keys': ['image', 'label'],
-        'roi_size': [4, 80, 80, 80],
-        'num_samples': 4,
+        'roi_size': [80, 80, 80],
+        'num_samples': 5,
         'random_center': True,
         'random_size': False}},
     # {'RandCropByPosNegLabeld': {

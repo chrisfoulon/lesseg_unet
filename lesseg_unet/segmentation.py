@@ -17,6 +17,7 @@ from monai.transforms import (
     Activations,
     AsDiscrete,
     Compose,
+    CenterSpatialCropd
 )
 
 
@@ -276,6 +277,10 @@ def segmentation_loop(img_path_list: Sequence,
     else:
         device = torch.device(device)
 
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+
+    if transform_dict is None:
+        transform_dict = checkpoint['transform_dict']
     logging.info(f'Torch device used for this segmentation: {str(device)}')
     val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
     val_ds = data_loading.init_segmentation(img_path_list, img_pref, transform_dict, clamping=clamping)
@@ -297,8 +302,6 @@ def segmentation_loop(img_path_list: Sequence,
                 for t in d:
                     if t == 'CoordConvd' or t == 'CoordConvAltd':
                         hyper_params['in_channels'] = 4
-
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
     model = utils.load_model_from_checkpoint(checkpoint, device, None, model_name=model_name)
     model.to(device)
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
@@ -399,8 +402,12 @@ def validation_loop(img_path_list: Sequence,
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
-    val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
 
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+
+    val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
+    if transform_dict is None:
+        transform_dict = checkpoint['transform_dict']
     _, val_ds = data_loading.init_training_data(img_path_list, seg_path_list, img_pref,
                                                 transform_dict=transform_dict,
                                                 train_val_percentage=0, clamping=clamping)
@@ -411,6 +418,8 @@ def validation_loop(img_path_list: Sequence,
         transform_dict, 'spatial_size', find_last=True)
     if training_img_size is None:
         training_img_size = utils.get_img_size(img_path_list[0])
+    original_size = utils.get_img_size(img_path_list[0])
+    temp_inverse_transform = Compose([CenterSpatialCropd(['image', 'label'], original_size)])
     # model_name = 'unet'
     # hyper_params = net.default_unet_hyper_params
     # if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
@@ -423,7 +432,6 @@ def validation_loop(img_path_list: Sequence,
     #             for t in d:
     #                 if t == 'CoordConvd' or t == 'CoordConvAltd':
     #                     hyper_params['in_channels'] = 4
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
     model = utils.load_model_from_checkpoint(checkpoint, device, checkpoint['hyper_params'],
                                              model_name=checkpoint['model_name'])
     model.to(device)
@@ -478,19 +486,20 @@ def validation_loop(img_path_list: Sequence,
             input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
             # outputs = model(inputs)
             # outputs = post_trans(outputs)
-
-            masks_only_val_labels = labels[:, :1, :, :, :]
-            # TODO
-            val_outputs = sliding_window_inference(inputs, training_img_size,
-                                                   1, model, overlap=0.8)
-            val_outputs_list = decollate_batch(val_outputs)
-            val_output_convert = [
-                post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
-            ]
-            dice_metric(y_pred=val_output_convert, y=masks_only_val_labels)
-            dice = dice_metric.aggregate().item()
-            hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
-            dist = hausdorff_metric.aggregate().item()
+            with torch.cuda.amp.autocast():
+                masks_only_val_labels = labels[:, :1, :, :, :]
+                # TODO
+                # print(type(model.module.weight))
+                val_outputs = sliding_window_inference(inputs, training_img_size,
+                                                       1, model, overlap=0.8)
+                val_outputs_list = decollate_batch(val_outputs)
+                val_output_convert = [
+                    post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
+                ]
+                dice_metric(y_pred=val_output_convert, y=masks_only_val_labels)
+                dice = dice_metric.aggregate().item()
+                hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
+                dist = hausdorff_metric.aggregate().item()
 
             vol_output = utils.volume_metric(val_output_convert[0], False, False)
             input_filename += f'_v{vol_output}v'
@@ -500,10 +509,10 @@ def validation_loop(img_path_list: Sequence,
             # value = dice_metric(y_pred=outputs, y=labels[:, :1, :, :, :])
             val_score_list.append(dice)
             val_dist_list.append(dist)
-            # val_data['image'] = val_data['image'].to(device)[0]
-            # val_data['label'] = val_data['label'].to(device)[0]
-            # output_dict_data['image'] = val_data['image']
-            # output_dict_data['label'] = val_output_convert[0]
+            val_data['image'] = val_data['image'].to(device)[0]
+            val_data['label'] = val_data['label'].to(device)[0]
+            output_dict_data['image'] = val_data['image']
+            output_dict_data['label'] = val_output_convert[0]
             # Loop dataframe filling
             loop_df = loop_df.append({'core_filename': input_filename.split('input_')[-1],
                                       'dice_metric': dice,
@@ -514,21 +523,21 @@ def validation_loop(img_path_list: Sequence,
             dice_metric.reset()
             hausdorff_metric.reset()
             # TODO FIX ORIGINAL SIZE INVERSE TRANSFORMATIONS
+            # TODO Check if the inverse transformation is available from the metaTensor and use it
+            inverted_dict = temp_inverse_transform(val_data)
             # inverted_dict = val_ds.transform.inverse(val_data)
-            # inv_inputs, inv_labels = inverted_dict['image'], inverted_dict['label']
+            inv_inputs, inv_labels = inverted_dict['image'], inverted_dict['label']
             # inv_outputs = val_ds.transform.inverse(output_dict_data)['label']
-            # inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_inputs, torch.Tensor) \
-            #     else inv_inputs[0, :, :, :]
-            # labels_np = inv_labels[0, :, :, :].cpu().detach().numpy() if isinstance(inv_labels, torch.Tensor) \
-            #     else inv_labels[0, :, :, :]
-            # outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_outputs, torch.Tensor) \
-            #     else inv_outputs[0, :, :, :]
-            # inputs_np = val_data['image'][0, :, :, :].cpu().detach().numpy()
-            # labels_np = val_data['label'][0, :, :, :].cpu().detach().numpy()
+            inv_outputs = temp_inverse_transform(output_dict_data)['label']
+            inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_inputs, torch.Tensor) \
+                else inv_inputs[0, :, :, :]
+            labels_np = inv_labels[0, :, :, :].cpu().detach().numpy() if isinstance(inv_labels, torch.Tensor) \
+                else inv_labels[0, :, :, :]
+            outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_outputs, torch.Tensor) \
+                else inv_outputs[0, :, :, :]
+            # inputs_np = val_data['image'][0].cpu().detach().numpy()
+            # labels_np = labels
             # outputs_np = val_output_convert[0][0, :, :, :].cpu().detach().numpy()
-            inputs_np = val_data['image']
-            labels_np = labels
-            outputs_np = val_output_convert[0][0, :, :, :].cpu().detach().numpy()
             if dice < bad_dice_treshold:
                 trash_count += 1
                 # print('Saving trash image #{}'.format(trash_count))

@@ -269,7 +269,7 @@ class CoordConvd(MapTransform, InvertibleTransform):
             self,
             data: Mapping[Hashable, Union[np.ndarray, torch.Tensor]]
     ) -> Dict[Hashable, Union[np.ndarray, torch.Tensor]]:
-        from monai.utils.enums import InverseKeys
+        # from monai.utils.enums import InverseKeys
         d = deepcopy(dict(data))
         for key in self.key_iterator(d):
             # transform = self.get_most_recent_transform(d, key)
@@ -1154,7 +1154,7 @@ def image_only_transformd(hyper_param_dict=None, training=True, clamping=None, d
         raise ValueError('Hyper dict is None')
     # setup_coord_conv(hyper_param_dict)
     check_imports(hyper_param_dict)
-    check_hyper_param_dict_shape(hyper_param_dict)
+    check_hyper_param_dict_shape(hyper_param_dict, 0)
     seg_tr_dict = {}
     # Here we want to get rid of the 'label' operations (because controls datasets don't use labels)
     for li in hyper_param_dict:

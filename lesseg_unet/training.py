@@ -210,11 +210,6 @@ def training(img_path_list: Sequence,
     # Save the split_lists to easily get the content of the folds and all
     with open(Path(output_dir, 'split_lists.json'), 'w+') as f:
         json.dump(split_lists, f, indent=4)
-    # We need the training image size for the unetr as we need to know the size of the model to create it
-    training_img_size = transformations.find_param_from_hyper_dict(
-            transform_dict, 'spatial_size', find_last=True)
-    if training_img_size is None:
-        training_img_size = utils.get_img_size(split_lists[0][0]['image'])
 
     """
     TRANSFORMATIONS AND AUGMENTATIONS
@@ -229,12 +224,20 @@ def training(img_path_list: Sequence,
             print(f'ToTensord transformation will be called on {device}')
             transformations_device = device
     utils.print_rank_0('Initialisation of the training transformations', dist.get_rank())
-    """
-    If CoordConv is used, we need to set the gradient before (to speed up the process a bit)
-    """
-    native_shape = nib.load(img_path_list[0]).get_fdata().shape
+
+    original_image_shape = utils.get_img_size(split_lists[0][0]['image'])
+    utils.print_rank_0(f'Original image shape: {original_image_shape}', dist.get_rank())
+    # We need the training image size for the unetr as we need to know the size of the model to create it
     if list(transform_dict.keys())[-1] == 'patches':
-        transformations.setup_coord_conv(transform_dict, native_shape)
+        # TODO this might change depending on the cropping transformation
+        model_img_size = transformations.find_param_from_hyper_dict(
+            transform_dict, 'roi_size', find_last=True)
+        model_img_size = model_img_size[-3:]
+        transformations.setup_coord_conv(transform_dict, original_image_shape)
+    else:
+        model_img_size = transformations.find_param_from_hyper_dict(
+            transform_dict, 'spatial_size', find_last=True)
+        transformations.setup_coord_conv(transform_dict, model_img_size)
     # Extract all the transformations from transform_dict
     train_img_transforms = transformations.train_transformd(transform_dict, lesion_set_clamp,
                                                             device=transformations_device,
@@ -290,7 +293,7 @@ def training(img_path_list: Sequence,
                     hyper_params = net.default_unetr_hyper_params
                 else:
                     hyper_params = net.default_swinunetr_hyper_params
-                hyper_params['img_size'] = training_img_size
+                hyper_params['img_size'] = model_img_size
                 if 'feature_size' in kwargs:
                     hyper_params['feature_size'] = int(kwargs['feature_size'])
             else:
@@ -492,29 +495,30 @@ def training(img_path_list: Sequence,
                             device, non_blocking=non_blocking), val_data['label'].to(
                             device, non_blocking=non_blocking)
                         # In case CoordConv is used
-                        masks_only_val_labels = val_labels[:, :1, :, :, :]
-                        val_outputs = sliding_window_inference(val_inputs, training_img_size,
-                                                               val_batch_size, model)
-                        val_loss = val_loss_function(val_outputs, masks_only_val_labels)
-                        # loss_list.append(val_loss.item())
-                        val_epoch_loss += val_loss
-                        val_outputs_list = decollate_batch(val_outputs)
-                        """
-                        Apply post transformations on prediction tensor
-                        It can then be used with other metrics
-                        """
-                        val_output_convert = [
-                            post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
-                        ]
-                        dice_metric(y_pred=val_output_convert, y=masks_only_val_labels)
-                        dice = dice_metric.aggregate()
-                        val_epoch_dice += dice
-                        if 'dist' in val_loss_fct.lower():
-                            hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
-                            # For whatever reason, this metric is going back to cpu unlike the dice_metric ...
-                            distance = hausdorff_metric.aggregate().to(device)
-                            # val_batch_dist_list.append(distance.item())
-                            val_epoch_dist += distance
+                        with torch.cuda.amp.autocast():
+                            masks_only_val_labels = val_labels[:, :1, :, :, :]
+                            val_outputs = sliding_window_inference(val_inputs, model_img_size,
+                                                                   val_batch_size, model)
+                            val_loss = val_loss_function(val_outputs, masks_only_val_labels)
+                            # loss_list.append(val_loss.item())
+                            val_epoch_loss += val_loss
+                            val_outputs_list = decollate_batch(val_outputs)
+                            """
+                            Apply post transformations on prediction tensor
+                            It can then be used with other metrics
+                            """
+                            val_output_convert = [
+                                post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
+                            ]
+                            dice_metric(y_pred=val_output_convert, y=masks_only_val_labels)
+                            dice = dice_metric.aggregate()
+                            val_epoch_dice += dice
+                            if 'dist' in val_loss_fct.lower():
+                                hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
+                                # For whatever reason, this metric is going back to cpu unlike the dice_metric ...
+                                distance = hausdorff_metric.aggregate().to(device)
+                                # val_batch_dist_list.append(distance.item())
+                                val_epoch_dist += distance
                         # val_batch_dice_list.append(dice.item())
                         pbar.set_description(f'Val[{epoch + 1}] mean_loss:[{val_epoch_loss.item()/step}]')
 

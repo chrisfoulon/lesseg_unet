@@ -271,9 +271,8 @@ def main_worker(local_rank, args, kwargs):
                 raise ValueError('{} is not an existing dict file or is not '
                                  'in lesseg_unet/data/transform_dicts.py'.format(args.transform_dict))
     else:
-        # TODO refactor
         print('Using default transformation dictionary')
-        transform_dict = tr_dicts.minimal_hyper_dict
+        transform_dict = None
     # Clamping or not clamping
     if args.clamp_low is not None:
         if args.clamp_high is not None:
