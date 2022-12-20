@@ -245,7 +245,6 @@ def training(img_path_list: Sequence,
     # Extract only the 'first' and 'last' transformations from transform_dict ignoring the augmentations
     val_img_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp,
                                                         device=transformations_device)
-
     """
     POST TRANSFORMATIONS
     """
@@ -308,7 +307,6 @@ def training(img_path_list: Sequence,
             # if dropout is not None and dropout == 0:
             #     hyper_params['dropout'] = dropout
             #     logging.info(f'Dropout rate used: {dropout}')
-
             model, _ = net.create_model(device, hyper_params, model_class_name=model_type)
             utils.logging_rank_0(f'{model_type} created and succesfully with '
                                  f'hyper parameters: {hyper_params}',

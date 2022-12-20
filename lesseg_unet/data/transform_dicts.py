@@ -1208,6 +1208,10 @@ unetr_cc_patches.update({'patches': [
 ],
 })
 
+swinunetr_cc_patches = deepcopy(unetr_cc_patches)
+# SwinUNETR requires an images size divisible by 12 and divisible by 2 five times ... So, multiples of 32 essentially
+swinunetr_cc_patches['patches'][0]['RandSpatialCropSamplesd']['roi_size'] = [64, 64, 64]
+
 low_prob = high_prob = tiny_prob = 1
 unetr_aug_test = {
     'first_transform': [
