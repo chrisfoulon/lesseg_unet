@@ -1132,7 +1132,12 @@ unetr_cc = {
                                    'prob': high_prob,
                                    'intensity_range': (8, 10),
                                    },
-        }
+         },
+        # {'RandomBiasField': {
+        #     'include': ['image'],
+        #     'p': low_prob,
+        #     'coeff_range': 0.05}
+        #  },
     ],
     'torchio_transform': [
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'PrintDim before ToTensord'}},
@@ -1328,7 +1333,7 @@ unetr_no_aug = {
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
-        },
+         },
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (0, 1),
@@ -1344,12 +1349,11 @@ unetr_no_aug = {
         {'Binarized': {
             'keys': ['label'],
             'lower_threshold': 0.25}
-        },
+         },
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (0, 1)}
-        },
-        {'ToTensord': {'keys': ['image', 'label']}},
+         },
         {'CoordConvd': {'keys': ['image']}}
     ],
 }
@@ -1389,10 +1393,10 @@ unetr_hist['mid_transform'].append(
 
 unetr_bias = deepcopy(unetr_no_aug)
 unetr_bias['mid_transform'].append(
-    {'RandomBiasField': {
-            'include': ['image'],
-            'p': low_prob,
-            'coefficients': 0.1}
+    {'RandBiasFieldd': {
+            'keys': ['image'],
+            'prob': low_prob,
+            'coeff_range': (0.1, 0.1)}
      },
 )
 

@@ -389,6 +389,8 @@ def training(img_path_list: Sequence,
             """
             INNER TRAINING LOOP
             """
+            if display_training:
+                print(train_img_transforms.transforms)
             for batch_data in train_iter:
                 # TODO print image names both in training and validation loop
                 # TODO Try to resume the model but mess up with the label (zero_like / one_like)
@@ -410,25 +412,27 @@ def training(img_path_list: Sequence,
                 DEBUG AND IMAGE DISPLAY BLOCK
                 """
                 if display_training:
-                    print(train_img_transforms)
-                    img_name = Path(batch_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
-                    lbl_name = Path(batch_data['label_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
-                    # print(batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy())
-                    nii = nib.Nifti1Image(inputs[0, 0, ...].cpu().detach().numpy(),
-                                          batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy())
-                    plot_anat(nii,
-                              output_file=Path(img_dir, f'{img_name}.png'),
-                              display_mode='tiled', title=img_name, draw_cross=False,
-                              cut_coords=(50, 54, 45)
-                              )
-                    data = inputs[0, 0, ...].cpu().detach().numpy()
-                    print(f'Image name: {img_name}')
-                    print(np.mean(data))
-                    print(f'Label name: {lbl_name}')
-                    nib.save(nii, Path(img_dir, f'{img_name}.nii.gz'))
-                    nib.save(nib.Nifti1Image(labels[0, 0, ...].cpu().detach().numpy(),
-                                             batch_data['label_meta_dict']['affine'][0].cpu().detach().numpy()),
-                             Path(img_dir, f'{lbl_name}.nii.gz'))
+                    with torch.no_grad():
+                        # print(train_img_transforms)
+                        img_name = Path(batch_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
+                        lbl_name = Path(batch_data['label_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
+                        # print(batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy())
+                        nii = nib.Nifti1Image(inputs[0, 0, ...].cpu().detach().numpy(),
+                                              batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy())
+                        plot_anat(nii,
+                                  output_file=Path(img_dir, f'{img_name}.png'),
+                                  display_mode='tiled', title=img_name, draw_cross=False,
+                                  cut_coords=(50, 54, 45)
+                                  )
+                        data = inputs[0, 0, ...].cpu().detach().numpy()
+                        print(f'Image name: {img_name}')
+                        print(np.mean(data))
+                        print(f'Label name: {lbl_name}')
+                        nib.save(nii, Path(img_dir, f'{img_name}.nii.gz'))
+                        nib.save(nib.Nifti1Image(labels[0, 0, ...].cpu().detach().numpy(),
+                                                 batch_data['label_meta_dict']['affine'][0].cpu().detach().numpy()),
+                                 Path(img_dir, f'{lbl_name}.nii.gz'))
+                        continue
 
                 with torch.cuda.amp.autocast():
                     logit_outputs = model(inputs)
@@ -454,6 +458,9 @@ def training(img_path_list: Sequence,
                     else:
                         train_iter.set_description(
                             f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss.item()/step:.4f}]')
+
+            if one_loop:
+                return
             """
             GLOBAL TRAINING MEASURES HANDLING
             """
@@ -464,8 +471,6 @@ def training(img_path_list: Sequence,
             if dist.get_rank() == 0:
                 utils.logging_rank_0(f"Epoch {epoch + 1}, average loss: {mean_epoch_loss:.4f}", dist.get_rank())
                 utils.tensorboard_write_rank_0(writer, 'epoch_train_loss', mean_epoch_loss, epoch + 1, dist.get_rank())
-            if one_loop:
-                return
             """
             VALIDATION LOOP
             """
