@@ -1123,37 +1123,37 @@ unetr_cc = {
                              },
          },
         {'RandRicianNoised': {'keys': ['image'],
-                              'prob': 1,
-                              'mean': 0.5,
+                              'prob': low_prob,
+                              'mean': 0.1,
                               'std': 0.025
                               },
          },
         {'RandKSpaceSpikeNoised': {'keys': ['image'],
-                                   'prob': high_prob,
+                                   'prob': low_prob,
                                    'intensity_range': (8, 10),
                                    },
          },
-        # {'RandomBiasField': {
-        #     'include': ['image'],
-        #     'p': low_prob,
-        #     'coeff_range': 0.05}
-        #  },
-    ],
-    'torchio_transform': [
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'PrintDim before ToTensord'}},
-        # {'ToTensord': {'keys': ['image', 'label']}},
-        {'RandomBiasField': {
-            'include': ['image'],
-            'p': low_prob,
-            'coefficients': 0.05}
+        {'RandBiasFieldd': {
+            'keys': ['image'],
+            'prob': high_prob,
+            'coeff_range': (0.0, 0.1)}
          },
-        # {'RandomNoise': {
-        #     'include': ['image'],
-        #     'p': low_prob,
-        #     'mean': 0.5,
-        #     'std': (0, 0.025)}
-        # },
     ],
+    # 'torchio_transform': [
+    #     # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'PrintDim before ToTensord'}},
+    #     # {'ToTensord': {'keys': ['image', 'label']}},
+    #     {'RandomBiasField': {
+    #         'include': ['image'],
+    #         'p': low_prob,
+    #         'coefficients': 0.05}
+    #      },
+    #     # {'RandomNoise': {
+    #     #     'include': ['image'],
+    #     #     'p': low_prob,
+    #     #     'mean': 0.5,
+    #     #     'std': (0, 0.025)}
+    #     # },
+    # ],
     'unetr_transform': [
         {'RandFlipd': {
             'keys': ["image", "label"],
@@ -1274,7 +1274,7 @@ unetr_aug_test = {
          },
         {'RandRicianNoised': {'keys': ['image'],
                               'prob': 1,
-                              'mean': 0.5,
+                              'mean': 0.1,
                               'std': 0.025
                               },
          },
@@ -1282,32 +1282,37 @@ unetr_aug_test = {
                                    'prob': high_prob,
                                    'intensity_range': (8, 10),
                                    },
-        }
-    ],
-    'torchio_transform': [
-        # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'PrintDim before ToTensord'}},
-        {'ToTensord': {'keys': ['image', 'label']}},
-        {'RandomBiasField': {
-            'include': ['image'],
-            'p': low_prob,
-            'coefficients': 0.05}
          },
-        # {'RandomNoise': {
-        #     'include': ['image'],
-        #     'p': low_prob,
-        #     'mean': 0.5,
-        #     'std': (0, 0.025)}
-        # },
+         {'RandBiasFieldd': {
+            'keys': ['image'],
+            'prob': low_prob,
+            'coeff_range': (0.1, 0.1)}
+         },
     ],
+    # 'torchio_transform': [
+    #     # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'PrintDim before ToTensord'}},
+    #     {'ToTensord': {'keys': ['image', 'label']}},
+    #     {'RandomBiasField': {
+    #         'include': ['image'],
+    #         'p': low_prob,
+    #         'coefficients': 0.05}
+    #      },
+    #     # {'RandomNoise': {
+    #     #     'include': ['image'],
+    #     #     'p': low_prob,
+    #     #     'mean': 0.5,
+    #     #     'std': (0, 0.025)}
+    #     # },
+    # ],
     'unetr_transform': [
-        {'RandFlipd': {
-            'keys': ["image", "label"],
-            'spatial_axis': [0],
-            'prob': low_prob}
-         },
+        # {'RandFlipd': {
+        #     'keys': ["image", "label"],
+        #     'spatial_axis': [0],
+        #     'prob': low_prob}
+        #  },
         {'RandShiftIntensityd': {
             'keys': ["image"],
-            'offsets': 0.10,
+            'offsets': [0.10, 0.10],
             'prob': high_prob}
          },
     ],
@@ -1398,6 +1403,11 @@ unetr_bias['mid_transform'].append(
             'prob': low_prob,
             'coeff_range': (0.1, 0.1)}
      },
+    # {'RandomBiasField': {
+    #         'include': ['image'],
+    #         'p': low_prob,
+    #         'coefficients': (0.1, 0.1)}
+    # },
 )
 
 unetr_shift = deepcopy(unetr_no_aug)

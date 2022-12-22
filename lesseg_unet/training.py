@@ -10,6 +10,7 @@ import sys
 
 from tqdm import tqdm
 import numpy as np
+import matplotlib.pyplot as plt
 from nilearn.plotting import plot_anat
 import nibabel as nib
 from monai.data import decollate_batch
@@ -357,9 +358,11 @@ def training(img_path_list: Sequence,
         best_metric_dist_epoch = -1
         img_dir = Path(output_dir, 'image_dir')
         if display_training:
-            if img_dir.is_dir():
-                shutil.rmtree(img_dir)
-            os.makedirs(img_dir, exist_ok=True)
+            if dist.get_rank() == 0:
+                if img_dir.is_dir():
+                    shutil.rmtree(img_dir)
+                os.makedirs(img_dir, exist_ok=True)
+            dist.barrier()
         stop_epoch = False
         for epoch in range(epoch_num):
             utils.print_rank_0('-' * 10, dist.get_rank())
@@ -413,17 +416,27 @@ def training(img_path_list: Sequence,
                 """
                 if display_training:
                     with torch.no_grad():
-                        # print(train_img_transforms)
+                        # print(list(batch_data.keys()))
+                        # print(batch_data['image_meta_dict']['filename_or_obj'])
+                        # exit()
+
                         img_name = Path(batch_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
                         lbl_name = Path(batch_data['label_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
                         # print(batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy())
                         nii = nib.Nifti1Image(inputs[0, 0, ...].cpu().detach().numpy(),
                                               batch_data['image_meta_dict']['affine'][0].cpu().detach().numpy())
-                        plot_anat(nii,
-                                  output_file=Path(img_dir, f'{img_name}.png'),
-                                  display_mode='tiled', title=img_name, draw_cross=False,
-                                  cut_coords=(50, 54, 45)
+                        fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(15, 10))
+                        plot_anat(batch_data['image_meta_dict']['filename_or_obj'][0],
+                                  # output_file=Path(img_dir, f'{img_name}.png'),
+                                  display_mode='x', title='Original', draw_cross=False,
+                                  cut_coords=(50, 54, 45), axes=axes[0]
                                   )
+                        plot_anat(nii,
+                                  # output_file=Path(img_dir, f'{img_name}.png'),
+                                  display_mode='x', title='Augmented', draw_cross=False,
+                                  cut_coords=(50, 54, 45), axes=axes[1]
+                                  )
+                        fig.savefig(Path(img_dir, f'{img_name}.png'))
                         data = inputs[0, 0, ...].cpu().detach().numpy()
                         print(f'Image name: {img_name}')
                         print(np.mean(data))
@@ -460,7 +473,7 @@ def training(img_path_list: Sequence,
                             f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss.item()/step:.4f}]')
 
             if one_loop:
-                return
+                exit()
             """
             GLOBAL TRAINING MEASURES HANDLING
             """
