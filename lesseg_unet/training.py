@@ -612,6 +612,12 @@ def training(img_path_list: Sequence,
                             )
                         # Here, only dice improved
                         else:
+                            best_dist_str = ''
+                            if mean_dist_val is not None:
+                                best_dist = mean_dist_val
+                                best_dist_str = f'/ Best Distance {best_dist.item()}'
+                                utils.tensorboard_write_rank_0(writer, 'val_best_mean_distance', best_dist.item(),
+                                                               epoch + 1, dist.get_rank())
                             checkpoint_path = utils.save_checkpoint(
                                 model, epoch + 1, optimizer, scaler, hyper_params,
                                 output_fold_dir, model_type, transform_dict,
@@ -621,6 +627,7 @@ def training(img_path_list: Sequence,
                                 f'\n{best_epoch_pref_str} {best_metric_epoch} '
                                 # f'metric {best_metric:.4f}/distance {best_distance}/avgloss {best_avg_loss}\n'
                                 f'Dice metric {best_dice.item():.4f} / mean loss {best_avg_loss.item()}'
+                                + best_dist_str
                             )
                     if rank == 0:
                         if keep_dice_and_dist:
