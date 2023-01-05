@@ -13,7 +13,7 @@ from lesseg_unet import transformations, utils
 
 
 def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
-                           img_pref: str = None, img_cut_suffix: str = None, check_inputs=True) -> (dict, dict):
+                           img_pref: str = None, image_cut_suffix: str = None, check_inputs=True) -> (dict, dict):
     # create_default_label = False
     # if default_label is not None:
     #     if Path(default_label).is_dir():
@@ -30,13 +30,13 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
         if seg_path_list is None:
             matching_les_list = []
         else:
-            if img_cut_suffix is None:
+            if image_cut_suffix is None:
                 matching_les_list = [str(les) for les in seg_path_list
                                      if Path(img).name.split('.nii')[0] in Path(les).name.split('.nii')[0]]
             else:
                 matching_les_list = [str(les) for les in seg_path_list
                                      if Path(img).name.split('.nii')[0] in Path(les).name.split('.nii')[0]
-                                     or Path(img).name.split(img_cut_suffix)[0] in Path(les).name.split('.nii')[0]]
+                                     or Path(img).name.split(image_cut_suffix)[0] in Path(les).name.split('.nii')[0]]
         if len(matching_les_list) == 0:
             controls.append(img)
         elif len(matching_les_list) > 1:
@@ -59,8 +59,10 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
 
 
 def create_file_dict_lists(raw_img_path_list: Sequence, raw_seg_path_list: Sequence,
-                           img_pref: str = None, train_val_percentage: float = 75) -> Tuple[list, list]:
-    img_dict, _ = match_img_seg_by_names(raw_img_path_list, raw_seg_path_list, img_pref)
+                           img_pref: str = None, image_cut_suffix: str = None,
+                           train_val_percentage: float = 75) -> Tuple[list, list]:
+    img_dict, _ = match_img_seg_by_names(raw_img_path_list, raw_seg_path_list, img_pref,
+                                         image_cut_suffix=image_cut_suffix)
     training_end_index = math.ceil(train_val_percentage / 100 * len(img_dict))
     full_file_list = [{'image': str(img), 'label': str(img_dict[img])} for img in img_dict]
     train_files = full_file_list[:training_end_index]
@@ -121,11 +123,13 @@ def init_training_data(
         img_path_list: Sequence,
         seg_path_list: Sequence,
         img_pref: str = None,
+        image_cut_suffix: str = None,
         transform_dict: dict = None,
         train_val_percentage: float = 75,
         clamping=None) -> Tuple[monai.data.Dataset, monai.data.Dataset]:
     print('Listing input files to be loaded')
     train_files, val_files = create_file_dict_lists(img_path_list, seg_path_list, img_pref,
+                                                    image_cut_suffix,
                                                     train_val_percentage)
     print('Create transformations')
     train_img_transforms = transformations.train_transformd(transform_dict, clamping)

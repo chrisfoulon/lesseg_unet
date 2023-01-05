@@ -16,7 +16,7 @@ import nibabel as nib
 from monai.data import decollate_batch
 import torch
 from monai.metrics import DiceMetric, HausdorffDistanceMetric
-from monai.losses import DiceLoss, DiceCELoss, FocalLoss
+from monai.losses import DiceLoss, DiceCELoss, FocalLoss, DiceFocalLoss
 from monai.inferers import sliding_window_inference
 from monai.transforms import (
     Activations,
@@ -103,7 +103,7 @@ def training(img_path_list: Sequence,
              lbl_path_list: Sequence,
              output_dir: Union[str, bytes, os.PathLike],
              img_pref: str = None,
-             img_cut_suffix: str = None,
+             image_cut_suffix: str = None,
              transform_dict=None,
              pretrained_point=None,
              model_type='UNETR',
@@ -168,6 +168,8 @@ def training(img_path_list: Sequence,
         loss_function = DiceCELoss(sigmoid=True)
     elif training_loss_fct.lower() in ['focal', 'focalloss', 'focal_loss']:
         loss_function = FocalLoss(gamma=2.0)
+    elif training_loss_fct.lower() in ['dicefocal', 'dicefocalloss', 'dice_focal_loss']:
+        loss_function = DiceFocalLoss(sigmoid=True, gamma=2.0)
     else:
         loss_function = DiceLoss(sigmoid=True)
     utils.logging_rank_0(f'Training loss fct: {loss_function}', dist.get_rank())
@@ -208,7 +210,7 @@ def training(img_path_list: Sequence,
         else:
             # Get the images from the image and label list and tries to match them
             img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, lbl_path_list, img_pref,
-                                                                     img_cut_suffix=img_cut_suffix)
+                                                                     image_cut_suffix=image_cut_suffix)
 
         split_lists_to_share = [utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage, shuffle=True)]
     else:

@@ -50,6 +50,7 @@ def segmentation(img_path_list: Sequence,
                  output_dir: Union[str, bytes, os.PathLike],
                  checkpoint_list: List[Union[str, bytes, os.PathLike]],
                  img_pref: str = None,
+                 image_cut_suffix=None,
                  transform_dict: dict = None,
                  device: Union[str, List[str]] = None,
                  batch_size: int = 1,
@@ -264,6 +265,7 @@ def segmentation_loop(img_path_list: Sequence,
                       output_dir: Union[str, bytes, os.PathLike],
                       checkpoint_path: Union[str, bytes, os.PathLike],
                       img_pref: str = None,
+                      image_cut_suffix=None,
                       transform_dict: dict = None,
                       device: str = None,
                       batch_size: int = 1,
@@ -305,6 +307,7 @@ def segmentation_loop(img_path_list: Sequence,
     model = utils.load_model_from_checkpoint(checkpoint, device, None, model_name=model_name)
     model.to(device)
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
+    # TODO maybe have 2 sets of post transformations. The first sigmoid and the second binarises a **copy** of the first
     model.eval()
     les_area_finder = None
     if segmentation_area:
@@ -389,6 +392,7 @@ def validation_loop(img_path_list: Sequence,
                     output_dir: Union[str, bytes, os.PathLike],
                     checkpoint_path: Union[str, bytes, os.PathLike],
                     img_pref: str = None,
+                    image_cut_suffix=None,
                     transform_dict: dict = None,
                     device: str = None,
                     batch_size: int = 1,
@@ -409,6 +413,7 @@ def validation_loop(img_path_list: Sequence,
     if transform_dict is None:
         transform_dict = checkpoint['transform_dict']
     _, val_ds = data_loading.init_training_data(img_path_list, seg_path_list, img_pref,
+                                                image_cut_suffix=image_cut_suffix,
                                                 transform_dict=transform_dict,
                                                 train_val_percentage=0, clamping=clamping)
     val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
