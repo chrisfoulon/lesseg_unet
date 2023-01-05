@@ -30,11 +30,15 @@ def main():
                                    help='[Segmentation only] The path to a json dict containing the keys of the '
                                         'different populations (subfolder names) with the list of images paths'
                                         '[Cannot be used for Validation]')
+    nifti_paths_group.add_argument('-psl', '--pretrained_split_list', type=str,
+                                   help='File containing split paths lists of the k-fold')
+
     lesion_paths_group = parser.add_mutually_exclusive_group(required=False)
     lesion_paths_group.add_argument('-lp', '--lesion_input_path', type=str,
                                     help='Root folder of the b1000 dataset')
     lesion_paths_group.add_argument('-lli', '--lesion_input_list', type=str,
                                     help='Text file containing the list of b1000')
+
     control_paths_group = parser.add_mutually_exclusive_group(required=False)
     control_paths_group.add_argument('-ctr', '--controls_path', type=str,
                                      help='folder containing the control images (image_prefix not applied)')
@@ -91,6 +95,9 @@ def main():
     # Files split and matching options
     parser.add_argument('-tv', '--train_val', type=int, help='Training / validation percentage cut')
     parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
+    parser.add_argument('-ics', '--image_cut_suffix', type=str,
+                        help='Suffix to cut the lesion file name (keep left part) in case the filename without the '
+                             '.nii extension cannot be found')
     parser.add_argument('-nf', '--folds_number', default=1, type=int, help='Set a dropout value for the model')
     # Datasets and Loaders parameters
     parser.add_argument('-nw', '--num_workers', default=4, type=int, help='Number of dataloader workers')
@@ -224,10 +231,13 @@ def main_worker(local_rank, args, kwargs):
     elif args.input_list is not None:
         utils.logging_rank_0(f'Input image list : {args.input_list}', dist.get_rank())
         img_list = file_to_list(args.input_list)
-    else:
+    elif args.seg_input_dict is not None:
         with open(args.seg_input_dict, 'r') as f:
             seg_input_dict = json.load(f)
         img_list = [img_path for sublist in seg_input_dict for img_path in sublist]
+    else:
+        img_list = args.pretrained_split_list
+    # TODO not very pretty in the case of pretrained_split_list ...
     if args.output in img_list:
         raise ValueError("The output directory CANNOT be one of the input directories")
     if args.debug_img_num is not None:
@@ -318,10 +328,11 @@ def main_worker(local_rank, args, kwargs):
         else:
             pretrained_point = None
         training.training(img_path_list=img_list,
-                          seg_path_list=les_list,
+                          lbl_path_list=les_list,
                           output_dir=output_root,
                           # ctr_path_list=ctr_list,
                           img_pref=b1000_pref,
+                          image_cut_suffix=args.image_cut_suffix,
                           transform_dict=transform_dict,
                           pretrained_point=pretrained_point,
                           model_type=args.model_type,

@@ -100,9 +100,10 @@ def testing(train_loader, output_dir):
 
 
 def training(img_path_list: Sequence,
-             seg_path_list: Sequence,
+             lbl_path_list: Sequence,
              output_dir: Union[str, bytes, os.PathLike],
              img_pref: str = None,
+             img_cut_suffix: str = None,
              transform_dict=None,
              pretrained_point=None,
              model_type='UNETR',
@@ -202,8 +203,12 @@ def training(img_path_list: Sequence,
     splits are not respected!!!
     """
     if dist.get_rank() == 0:
-        # Get the images from the image and label list and tries to match them
-        img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, seg_path_list, img_pref)
+        if lbl_path_list is None:
+            img_dict = img_path_list
+        else:
+            # Get the images from the image and label list and tries to match them
+            img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, lbl_path_list, img_pref,
+                                                                     img_cut_suffix=img_cut_suffix)
 
         split_lists_to_share = [utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage, shuffle=True)]
     else:

@@ -13,7 +13,7 @@ from lesseg_unet import transformations, utils
 
 
 def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
-                           img_pref: str = None, check_inputs=True) -> (dict, dict):
+                           img_pref: str = None, img_cut_suffix: str = None, check_inputs=True) -> (dict, dict):
     # create_default_label = False
     # if default_label is not None:
     #     if Path(default_label).is_dir():
@@ -30,8 +30,13 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
         if seg_path_list is None:
             matching_les_list = []
         else:
-            matching_les_list = [str(les) for les in seg_path_list
-                                 if Path(img).name.split('.nii')[0] in Path(les).name.split('.nii')[0]]
+            if img_cut_suffix is None:
+                matching_les_list = [str(les) for les in seg_path_list
+                                     if Path(img).name.split('.nii')[0] in Path(les).name.split('.nii')[0]]
+            else:
+                matching_les_list = [str(les) for les in seg_path_list
+                                     if Path(img).name.split('.nii')[0] in Path(les).name.split('.nii')[0]
+                                     or Path(img).name.split(img_cut_suffix)[0] in Path(les).name.split('.nii')[0]]
         if len(matching_les_list) == 0:
             controls.append(img)
         elif len(matching_les_list) > 1:
