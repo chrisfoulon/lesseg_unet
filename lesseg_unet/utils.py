@@ -577,3 +577,21 @@ def get_img_size(img):
 def repeat_array_to_dim(arr, dim):
     # credit to @scieronomic on https://stackoverflow.com/questions/64061832/numpy-tile-up-to-specific-size
     return np.tile(arr, np.array(dim) // np.array(np.shape(arr)) + 1)[tuple(map(slice, dim))]
+
+
+def get_fold_splits(split_list_file_path, output_dir, replace_root='', by_this_root='', pref=''):
+    if Path(split_list_file_path).is_dir():
+        split_data_list = open_json(Path(split_list_file_path, 'split_lists.json'))
+    else:
+        split_data_list = open_json(split_list_file_path)
+    image_list = []
+    label_list = []
+    for i in range(5):
+        first_val_set = split_data_list[i]
+        image_list = [img_dict['image'].replace(replace_root, by_this_root) for img_dict in
+                      first_val_set]
+        label_list = [img_dict['label'].replace(replace_root, by_this_root) for img_dict in
+                      first_val_set]
+        save_list(Path(output_dir, f'{pref}fold_{i}_img_list.csv'), image_list)
+        save_list(Path(output_dir, f'{pref}fold_{i}_lbl_list.csv'), label_list)
+    return image_list, label_list

@@ -16,7 +16,7 @@ import nibabel as nib
 from monai.data import decollate_batch
 import torch
 from monai.metrics import DiceMetric, HausdorffDistanceMetric
-from monai.losses import DiceLoss, DiceCELoss
+from monai.losses import DiceLoss, DiceCELoss, FocalLoss
 from monai.inferers import sliding_window_inference
 from monai.transforms import (
     Activations,
@@ -165,6 +165,8 @@ def training(img_path_list: Sequence,
     # Training
     if training_loss_fct.lower() in ['dice_ce', 'dicece', 'dice_ce_loss', 'diceceloss', 'dice_cross_entropy']:
         loss_function = DiceCELoss(sigmoid=True)
+    elif training_loss_fct.lower() in ['focal', 'focalloss', 'focal_loss']:
+        loss_function = FocalLoss(gamma=2.0)
     else:
         loss_function = DiceLoss(sigmoid=True)
     utils.logging_rank_0(f'Training loss fct: {loss_function}', dist.get_rank())
