@@ -262,6 +262,14 @@ def sort_seg_following_folder_tree(root_dir, output_dir, img_pref='input_', labe
                                                        output_subfolder_list)
 
 
+def seg_dict_to_cluster_dict(seg_dict, seg_key='segmentation'):
+    cluster_lists_dict = defaultdict(list)
+    for k in seg_dict:
+        cluster_name = Path(seg_dict[k][seg_key]).parent.name
+        cluster_lists_dict[cluster_name].append(seg_dict[k])
+    return cluster_lists_dict
+
+
 def perf_per_cluster(perf_df, seg_folder, cluster_by_labels=False, save_path=None):
     """
 
@@ -363,30 +371,32 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
 
         fig, axes = plt.subplots((len(cluster_dicts) + img_plot_num)//4 + 1, len(cluster_dicts) + img_plot_num,
                                  figsize=(15, 5), sharey='none')
+
+        flat_axes = axes.flatten()
         if not isinstance(axes, np.ndarray):
-            axes = np.ndarray([axes])
+            flat_axes = np.ndarray([axes])
         fig.suptitle(cluster)
         if archetypes is not None:
-            img_plot_num = 2
             if cluster == 'outside_clusters' or len(seg_path_list) == 0:
-                axes[0].axis('off')
+                flat_axes[0].axis('off')
             else:
-                plot_stat_map(nib.load(cluster_archetype[0]), display_mode='yz', axes=axes[0], draw_cross=False,)
-            axes[0].set_title('Archetype')
+                plot_stat_map(nib.load(cluster_archetype[0]), display_mode='yz', axes=flat_axes[0], draw_cross=False)
+            flat_axes[0].set_title('Archetype')
             if len(seg_path_list) != 0:
-                plot_stat_map(overlap_image, display_mode='yz', axes=axes[1], draw_cross=False)
-                axes[1].set_title('Prediction overlap')
+                plot_stat_map(overlap_image, display_mode='yz', axes=flat_axes[1], draw_cross=False)
+                flat_axes[1].set_title('Prediction overlap')
             else:
-                axes[1].axis('off')
+                flat_axes[1].axis('off')
         for ind, cluster_dict in enumerate(cluster_dicts):
             perf_list = [d[perf_measure] for d in cluster_dict[cluster]]
             if len(perf_list) == 0:
-                axes[ind + img_plot_num].axis('off')
+                flat_axes[ind + img_plot_num].axis('off')
                 continue
-            sns.violinplot(ax=axes[ind + img_plot_num], data=perf_list)
-            axes[ind + img_plot_num].set_title(set_names[ind])
-            axes[ind + img_plot_num].set_xlabel(f'{len(cluster_dict[cluster])} images | mean: {np.mean(perf_list)}')
-            axes[ind + img_plot_num].set_ylabel(perf_measure)
+            sns.violinplot(ax=flat_axes[ind + img_plot_num], data=perf_list)
+            flat_axes[ind + img_plot_num].set_title(set_names[ind])
+            flat_axes[ind + img_plot_num].set_xlabel(
+                f'{len(cluster_dict[cluster])} images | mean: {np.mean(perf_list)}')
+            flat_axes[ind + img_plot_num].set_ylabel(perf_measure)
 
         # plt.show()
         pp.savefig(fig)
