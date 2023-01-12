@@ -16,7 +16,8 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import seaborn as sns
 from scipy.ndimage import center_of_mass
-from bcblib.tools.nifti_utils import is_nifti
+from bcblib.tools.nifti_utils import is_nifti, file_to_list
+from bcblib.tools.spreadsheet_io_utils import import_spreadsheet
 from lesseg_unet.utils import LesionAreaFinder, open_json
 from bcblib.tools.nifti_utils import nifti_overlap_images
 
@@ -436,3 +437,49 @@ def plot_archetype_and_cluster_seg(cluster_dict, output_path, key='segmentation'
         pp.savefig(fig)
     pp.close()
 
+
+def perf_dataset_overlap(input_images, spreadsheet, filename_col='core_filename', perf_col='dice_metric',
+                         operation='mean', filter_pref='', recursive=False, header=0):
+    if not isinstance(input_images, list):
+        if Path(input_images).is_file():
+            input_images = [str(p) for p in file_to_list(input_images) if is_nifti(p)]
+        elif Path(input_images).is_dir():
+            if recursive:
+                input_images = [str(p) for p in Path(input_images).rglob('*') if is_nifti(p)]
+            else:
+                input_images = [str(p) for p in Path(input_images).iterdir() if is_nifti(p)]
+        else:
+            raise ValueError('Wrong input (must be a file/directory path of a list of paths)')
+    if filter_pref:
+        input_images = [p for p in input_images if Path(p).name.startswith(filter_pref)]
+    if not input_images:
+        print(' The image list is empty')
+        return None
+    df = import_spreadsheet(spreadsheet, header)
+    temp_overlap = None
+    temp_overlap_data = None
+    for img in tqdm(input_images):
+        # find the row in the dataframe
+        perf_val = None
+        for row in df.iloc:
+            if row[filename_col] in Path(img).name:
+                perf_val = row[perf_col]
+                break
+        if perf_val is None:
+            ValueError(f'{img} not found in spreadsheet in {filename_col} column')
+        nii = nib.load(img)
+        nii_data = nii.get_fdata() * perf_val
+        if temp_overlap is None:
+            temp_overlap_data = nii_data
+        else:
+            if operation == 'mean':
+                temp_overlap_data = (temp_overlap_data + nii.get_fdata()) / 2
+            elif operation == 'std':
+                temp_overlap_data = np.stack([temp_overlap_data, nii])
+                # temp_overlap_data = np.std(stack, axis=0)
+            else:
+                raise ValueError(f'{operation} not implemented yet')
+    if operation == 'std':
+        temp_overlap_data = np.std(temp_overlap_data, axis=0)
+    temp_overlap = nib.Nifti1Image(temp_overlap_data, temp_overlap.affine)
+    return temp_overlap
