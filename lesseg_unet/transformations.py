@@ -226,7 +226,7 @@ class CoordConvAltd(MapTransform):
 
 
 class CoordConv(Transform):
-    def __init__(self, gradients: np.ndarray = None) -> None:
+    def __init__(self, gradients: np.ndarray = None, ) -> None:
         self.gradients = gradients
 
     def __call__(self, img: Union[np.ndarray, torch.Tensor]) -> Union[np.ndarray, torch.Tensor]:

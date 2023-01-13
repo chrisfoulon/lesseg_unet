@@ -439,7 +439,7 @@ def plot_archetype_and_cluster_seg(cluster_dict, output_path, key='segmentation'
 
 
 def perf_dataset_overlap(input_images, spreadsheet, filename_col='core_filename', perf_col='dice_metric',
-                         operation='mean', filter_pref='', recursive=False, header=0):
+                         operation='mean', filter_pref='', recursive=False, non_zero_only=False, header=0):
     if not isinstance(input_images, list):
         if Path(input_images).is_file():
             input_images = [str(p) for p in file_to_list(input_images) if is_nifti(p)]
@@ -469,18 +469,21 @@ def perf_dataset_overlap(input_images, spreadsheet, filename_col='core_filename'
             ValueError(f'{img} not found in spreadsheet in {filename_col} column')
         nii = nib.load(img)
         nii_data = nii.get_fdata() * perf_val
+        if non_zero_only:
+            nii_data[nii_data == 0] = np.nan
         if temp_overlap_data is None:
-            temp_overlap_data = nii_data
+            temp_overlap_data = [nii_data]
             temp_overlap = nii
         else:
-            if operation == 'mean':
-                temp_overlap_data = (temp_overlap_data + nii.get_fdata()) / 2
-            elif operation == 'std':
-                temp_overlap_data = np.stack([temp_overlap_data, nii])
+            if operation in ['mean', 'std']:
+                temp_overlap_data.append(nii)
                 # temp_overlap_data = np.std(stack, axis=0)
             else:
                 raise ValueError(f'{operation} not implemented yet')
+    temp_overlap_data = np.stack(temp_overlap_data)
+    if operation == 'mean':
+        temp_overlap_data = np.nanmean(temp_overlap_data, axis=0)
     if operation == 'std':
-        temp_overlap_data = np.std(temp_overlap_data, axis=0)
+        temp_overlap_data = np.nanstd(temp_overlap_data, axis=0)
     temp_overlap = nib.Nifti1Image(temp_overlap_data, temp_overlap.affine)
     return temp_overlap

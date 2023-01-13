@@ -529,11 +529,12 @@ def validation_loop(img_path_list: Sequence,
             hausdorff_metric.reset()
             # TODO FIX ORIGINAL SIZE INVERSE TRANSFORMATIONS
             # TODO Check if the inverse transformation is available from the metaTensor and use it
-            inverted_dict = temp_inverse_transform(val_data)
-            # inverted_dict = val_ds.transform.inverse(val_data)
+            # TODO TEST THE FIX
+            # inverted_dict = temp_inverse_transform(val_data)
+            inverted_dict = val_ds.transform.inverse(val_data)
             inv_inputs, inv_labels = inverted_dict['image'], inverted_dict['label']
-            # inv_outputs = val_ds.transform.inverse(output_dict_data)['label']
-            inv_outputs = temp_inverse_transform(output_dict_data)['label']
+            inv_outputs = val_ds.transform.inverse(output_dict_data)['label']
+            # inv_outputs = temp_inverse_transform(output_dict_data)['label']
             inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_inputs, torch.Tensor) \
                 else inv_inputs[0, :, :, :]
             labels_np = inv_labels[0, :, :, :].cpu().detach().numpy() if isinstance(inv_labels, torch.Tensor) \
