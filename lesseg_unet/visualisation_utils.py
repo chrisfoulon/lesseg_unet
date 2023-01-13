@@ -469,8 +469,9 @@ def perf_dataset_overlap(input_images, spreadsheet, filename_col='core_filename'
             ValueError(f'{img} not found in spreadsheet in {filename_col} column')
         nii = nib.load(img)
         nii_data = nii.get_fdata() * perf_val
-        if temp_overlap is None:
+        if temp_overlap_data is None:
             temp_overlap_data = nii_data
+            temp_overlap = nii
         else:
             if operation == 'mean':
                 temp_overlap_data = (temp_overlap_data + nii.get_fdata()) / 2

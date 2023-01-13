@@ -235,17 +235,17 @@ class CoordConv(Transform):
         # else:
         #     img = np.asarray(img[0, :, :, :])
         if self.gradients is None:
-            img = create_gradient(img.shape[1:])
+            self.gradients = create_gradient(img.shape[1:])
+        if isinstance(img, np.ndarray):
+            img = np.concatenate((img, self.gradients), 0).astype(np.float32)
         else:
-            if isinstance(img, np.ndarray):
-                img = np.concatenate((img, self.gradients), 0).astype(np.float32)
-            else:
-                img = torch.cat([img, torch.tensor(self.gradients).to(img.device)], dim=0).type(torch.float32)
+            img = torch.cat([img, torch.tensor(self.gradients).to(img.device)], dim=0).type(torch.float32)
         return img
 
 
 class CoordConvd(MapTransform, InvertibleTransform):
     """
+    The input data must be channel first
     """
 
     def __init__(self, keys: KeysCollection, gradients: Union[np.ndarray, torch.Tensor] = None) -> None:
