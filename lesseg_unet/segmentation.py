@@ -4,12 +4,14 @@ from pathlib import Path
 from typing import Sequence, Union, List
 from copy import deepcopy
 import logging
+import shutil
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import torch
 from lesseg_unet import data_loading, utils, net, transformations
+from monai.transforms.utils import allow_missing_keys_mode
 from monai.metrics import DiceMetric, HausdorffDistanceMetric
 from monai.inferers import sliding_window_inference
 from monai.data import decollate_batch, list_data_collate
@@ -318,14 +320,15 @@ def segmentation_loop(img_path_list: Sequence,
         for val_data in tqdm(val_loader, desc=f'Segmentation '):
             img_count += 1
             inputs = val_data['image'].to(device)
-            # TODO if training_img_size < inputs size we need several patches to cover the inputs
-            # TODO if training_img_size > inputs sliding_window_inference pads for the inference and then crops back
-            val_outputs = sliding_window_inference(inputs, training_img_size,
-                                                   1, model, overlap=0.8)
-            val_outputs_list = decollate_batch(val_outputs)
-            val_output_convert = [
-                post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
-            ]
+            with torch.cuda.amp.autocast():
+                # TODO if training_img_size < inputs size we need several patches to cover the inputs
+                # TODO if training_img_size > inputs sliding_window_inference pads for the inference and then crops back
+                val_outputs = sliding_window_inference(inputs, training_img_size,
+                                                       1, model, overlap=0.8)
+                val_outputs_list = decollate_batch(val_outputs)
+                val_output_convert = [
+                    post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
+                ]
 
             vol_output = utils.volume_metric(val_output_convert[0], False, False)
 
@@ -337,12 +340,20 @@ def segmentation_loop(img_path_list: Sequence,
             #     exit()
             #     input_filename += f'_e{utils.entropy_metric(val_outputs_list[0], sigmoid=True)}e'
             if original_size:
+                # Safe copy of val_data and copy of the transformations
                 output_dict_data = deepcopy(val_data)
+                second_tr = deepcopy(val_ds.transform)
+                second_tr.transforms = deepcopy(val_ds.transform.transforms)
+                # Invert input image
                 output_dict_data['image'] = val_data['image'].to(device)[0]
                 inverted_output_dict = val_ds.transform.inverse(output_dict_data)
+
                 inv_inputs = inverted_output_dict['image']
+
+                # Reinit the applied operations for the second inversion
                 output_dict_data['image'] = val_output_convert[0]
-                inverted_output_dict = val_ds.transform.inverse(output_dict_data)
+                output_dict_data['image'].applied_operations = deepcopy(val_data['image'].applied_operations)
+                inverted_output_dict = second_tr.inverse(output_dict_data)
                 inv_outputs = inverted_output_dict['image']
                 inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_inputs, torch.Tensor) \
                     else inv_inputs[0, :, :, :]
@@ -462,7 +473,7 @@ def validation_loop(img_path_list: Sequence,
     if not val_images_dir.is_dir():
         val_images_dir.mkdir(exist_ok=True)
     for f in val_images_dir.iterdir():
-        os.remove(f)
+        shutil.rmtree(f)
     if not trash_val_images_dir.is_dir():
         trash_val_images_dir.mkdir(exist_ok=True)
     for f in trash_val_images_dir.iterdir():
@@ -516,8 +527,9 @@ def validation_loop(img_path_list: Sequence,
             val_dist_list.append(dist)
             val_data['image'] = val_data['image'].to(device)[0]
             val_data['label'] = val_data['label'].to(device)[0]
-            output_dict_data['image'] = val_data['image']
-            output_dict_data['label'] = val_output_convert[0]
+            output_dict_data['image'] = deepcopy(val_data['image'])
+            # del output_dict_data['image']
+            output_dict_data['label'] = deepcopy(val_output_convert[0])
             # Loop dataframe filling
             loop_df = loop_df.append({'core_filename': input_filename.split('input_')[-1],
                                       'dice_metric': dice,
@@ -527,13 +539,15 @@ def validation_loop(img_path_list: Sequence,
             # Maybe not necessary but I prefer it there
             dice_metric.reset()
             hausdorff_metric.reset()
-            # TODO FIX ORIGINAL SIZE INVERSE TRANSFORMATIONS
-            # TODO Check if the inverse transformation is available from the metaTensor and use it
-            # TODO TEST THE FIX
             # inverted_dict = temp_inverse_transform(val_data)
+            second_tr = deepcopy(val_ds.transform)
+            output_dict_data['label'].applied_operations = deepcopy(val_data['label'].applied_operations)
+            output_dict_data['image'].applied_operations = deepcopy(val_data['image'].applied_operations)
+            second_tr.transforms = val_ds.transform.transforms
             inverted_dict = val_ds.transform.inverse(val_data)
             inv_inputs, inv_labels = inverted_dict['image'], inverted_dict['label']
-            inv_outputs = val_ds.transform.inverse(output_dict_data)['label']
+            with allow_missing_keys_mode(second_tr):
+                inv_outputs = second_tr.inverse(output_dict_data)['label']
             # inv_outputs = temp_inverse_transform(output_dict_data)['label']
             inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_inputs, torch.Tensor) \
                 else inv_inputs[0, :, :, :]

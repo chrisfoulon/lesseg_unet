@@ -301,7 +301,7 @@ def volume_metric(img, sigmoid=True, discrete=True):
     if sigmoid:
         img = torch.sigmoid(img)
     if discrete:
-        img = monai.transforms.AsDiscrete(threshold_values=True)(img)
+        img = monai.transforms.AsDiscrete(threshold=0.5)(img)
     return len(img[torch.where(img)])
 
 

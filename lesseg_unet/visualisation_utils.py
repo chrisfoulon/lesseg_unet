@@ -394,6 +394,8 @@ def plot_perf_per_cluster(cluster_dicts, set_names, output_path, display_cluster
                 flat_axes[ind + img_plot_num].axis('off')
                 continue
             sns.violinplot(ax=flat_axes[ind + img_plot_num], data=perf_list)
+            # Fix the value range to have the same for every cluster
+            flat_axes[ind + img_plot_num].set(ylim=(-0.2, 1.2))
             flat_axes[ind + img_plot_num].set_title(set_names[ind])
             flat_axes[ind + img_plot_num].set_xlabel(
                 f'{len(cluster_dict[cluster])} images | mean: {np.mean(perf_list)}')
@@ -437,9 +439,10 @@ def plot_archetype_and_cluster_seg(cluster_dict, output_path, key='segmentation'
         pp.savefig(fig)
     pp.close()
 
-
+import dask.array as da
 def perf_dataset_overlap(input_images, spreadsheet, filename_col='core_filename', perf_col='dice_metric',
-                         operation='mean', filter_pref='', recursive=False, non_zero_only=False, header=0):
+                         operation='mean', filter_pref='', recursive=False, non_zero_only=False, header=0,
+                         window_size=-1):
     if not isinstance(input_images, list):
         if Path(input_images).is_file():
             input_images = [str(p) for p in file_to_list(input_images) if is_nifti(p)]
@@ -458,6 +461,7 @@ def perf_dataset_overlap(input_images, spreadsheet, filename_col='core_filename'
     df = import_spreadsheet(spreadsheet, header)
     temp_overlap = None
     temp_overlap_data = None
+    chunk_length = 0
     for img in tqdm(input_images):
         # find the row in the dataframe
         perf_val = None
@@ -472,18 +476,27 @@ def perf_dataset_overlap(input_images, spreadsheet, filename_col='core_filename'
         if non_zero_only:
             nii_data[nii_data == 0] = np.nan
         if temp_overlap_data is None:
-            temp_overlap_data = [nii_data]
+            temp_overlap_data = da.from_array(nii_data)
             temp_overlap = nii
+            temp_overlap_data = da.stack([temp_overlap_data], axis=0)
         else:
-            if operation in ['mean', 'std']:
-                temp_overlap_data.append(nii)
-                # temp_overlap_data = np.std(stack, axis=0)
-            else:
-                raise ValueError(f'{operation} not implemented yet')
-    temp_overlap_data = np.stack(temp_overlap_data)
+            temp_overlap_data = da.concatenate([temp_overlap_data, [da.from_array(nii_data)]])
+    #     else:
+    #         if operation in ['mean', 'std']:
+    #             temp_overlap_data.append(nii)
+    #             # temp_overlap_data = np.std(stack, axis=0)
+    #         else:
+    #             raise ValueError(f'{operation} not implemented yet')
+    #     chunk_length += 1
+    #     # if chunk_length == window_size:
+    # temp_overlap_data_stack = np.stack(temp_overlap_data)
+    #         # if operation == 'mean':
+    #         #     temp_overlap_data = np.nanmean(temp_overlap_data, axis=0)
     if operation == 'mean':
-        temp_overlap_data = np.nanmean(temp_overlap_data, axis=0)
+        # temp_overlap_data = np.nanmean(temp_overlap_data, axis=0)
+        temp_overlap_data = da.nanmean(temp_overlap_data, axis=0).compute()
     if operation == 'std':
-        temp_overlap_data = np.nanstd(temp_overlap_data, axis=0)
+        # temp_overlap_data = np.nanstd(temp_overlap_data, axis=0)
+        temp_overlap_data = da.nanstd(temp_overlap_data, axis=0).compute()
     temp_overlap = nib.Nifti1Image(temp_overlap_data, temp_overlap.affine)
     return temp_overlap
