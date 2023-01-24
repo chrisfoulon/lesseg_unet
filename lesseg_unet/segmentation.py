@@ -355,34 +355,7 @@ def segmentation_loop(img_path_list: Sequence,
             #     exit()
             #     input_filename += f'_e{utils.entropy_metric(val_outputs_list[0], sigmoid=True)}e'
             if original_size:
-                # Safe copy of val_data and copy of the transformations
-                # output_dict_data = deepcopy(val_data)
-                # second_tr = deepcopy(val_ds.transform)
-                # second_tr.transforms = deepcopy(val_ds.transform.transforms)
-                # Invert input image
-                # output_dict_data['image'] = output_dict_data['image'].to(device)[0]
-                # output_dict_data['label'] = val_output_convert[0]
-                # # print(output_dict_data['label'].applied_operations)
-                # # output_dict_data['label'].applied_operations = deepcopy(val_data['image'].applied_operations)[0]
-                #
-                # print(output_dict_data['image'].applied_operations)
-                # print(output_dict_data['label'].applied_operations)
-                # print(val_ds.transform.transforms)
-
-                # inverted_output_dict = val_ds.transform.inverse(output_dict_data)
-
-                # inv_inputs = inverted_output_dict['image']
-                # inv_outputs = inverted_output_dict['label']
-                # inv_inputs = val_data['image']
                 inv_outputs = val_output_convert[0]['pred']
-                #
-                # # Reinit the applied operations for the second inversion
-                # output_dict_data['image'] = val_output_convert[0]
-                # output_dict_data['image'].applied_operations = deepcopy(val_data['image'].applied_operations)
-                # inverted_output_dict = second_tr.inverse(output_dict_data)
-                # inv_outputs = inverted_output_dict['image']
-                # inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_inputs, torch.Tensor) \
-                #     else inv_inputs[0, :, :, :]
                 inputs_np = nib.load(Path(val_data['image_meta_dict']['filename_or_obj'][0])).get_fdata()
                 outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_outputs, torch.Tensor) \
                     else inv_outputs[0, :, :, :]
