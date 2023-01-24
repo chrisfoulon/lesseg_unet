@@ -7,6 +7,7 @@ import logging
 import shutil
 
 import numpy as np
+import nibabel as nib
 import pandas as pd
 from tqdm import tqdm
 import torch
@@ -17,9 +18,12 @@ from monai.inferers import sliding_window_inference
 from monai.data import decollate_batch, list_data_collate
 from monai.transforms import (
     Activations,
+    Activationsd,
     AsDiscrete,
+    AsDiscreted,
     Compose,
-    CenterSpatialCropd
+    Invertd,
+    SaveImaged
 )
 
 
@@ -294,21 +298,31 @@ def segmentation_loop(img_path_list: Sequence,
         transform_dict, 'spatial_size', find_last=True)
     if training_img_size is None:
         training_img_size = utils.get_img_size(img_path_list[0])
-    model_name = 'unet'
+
     hyper_params = net.default_unet_hyper_params
     if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
         hyper_params = net.default_unetr_hyper_params
         hyper_params['img_size'] = training_img_size
-        model_name = 'unetr'
+
     if transform_dict is not None:
         for li in transform_dict:
             for d in transform_dict[li]:
                 for t in d:
                     if t == 'CoordConvd' or t == 'CoordConvAltd':
                         hyper_params['in_channels'] = 4
-    model = utils.load_model_from_checkpoint(checkpoint, device, None, model_name=model_name)
+    model = utils.load_model_from_checkpoint(checkpoint, device, checkpoint['hyper_params'],
+                                             model_name=checkpoint['model_name'])
     model.to(device)
-    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
+    post_trans = Compose([Activationsd(keys=['pred'], sigmoid=True), AsDiscreted(keys=['pred'], threshold=0.5),
+                          Invertd(
+                              keys=['pred'],  # invert the `pred` data field, also support multiple fields
+                              transform=val_ds.transform,
+                              orig_keys='image',
+                          ),
+                          # SaveImaged(keys="image", output_dir=output_subdir, output_postfix="seg", resample=False),
+                          # SaveImaged(keys="pred", output_dir=output_subdir, output_postfix="seg", resample=False)
+                          ])
+
     # TODO maybe have 2 sets of post transformations. The first sigmoid and the second binarises a **copy** of the first
     model.eval()
     les_area_finder = None
@@ -323,14 +337,15 @@ def segmentation_loop(img_path_list: Sequence,
             with torch.cuda.amp.autocast():
                 # TODO if training_img_size < inputs size we need several patches to cover the inputs
                 # TODO if training_img_size > inputs sliding_window_inference pads for the inference and then crops back
-                val_outputs = sliding_window_inference(inputs, training_img_size,
-                                                       1, model, overlap=0.8)
-                val_outputs_list = decollate_batch(val_outputs)
+                val_data['pred'] = sliding_window_inference(inputs, training_img_size,
+                                                            1, model, overlap=0.8)
+                val_data['pred'].applied_operations = deepcopy(val_data['image'].applied_operations)
+                val_outputs_list = decollate_batch(val_data)
                 val_output_convert = [
                     post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
                 ]
 
-            vol_output = utils.volume_metric(val_output_convert[0], False, False)
+            vol_output = utils.volume_metric(val_output_convert[0]['pred'], False, False)
 
             input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
             input_filename += f'_v{vol_output}v'
@@ -341,22 +356,34 @@ def segmentation_loop(img_path_list: Sequence,
             #     input_filename += f'_e{utils.entropy_metric(val_outputs_list[0], sigmoid=True)}e'
             if original_size:
                 # Safe copy of val_data and copy of the transformations
-                output_dict_data = deepcopy(val_data)
-                second_tr = deepcopy(val_ds.transform)
-                second_tr.transforms = deepcopy(val_ds.transform.transforms)
+                # output_dict_data = deepcopy(val_data)
+                # second_tr = deepcopy(val_ds.transform)
+                # second_tr.transforms = deepcopy(val_ds.transform.transforms)
                 # Invert input image
-                output_dict_data['image'] = val_data['image'].to(device)[0]
-                inverted_output_dict = val_ds.transform.inverse(output_dict_data)
+                # output_dict_data['image'] = output_dict_data['image'].to(device)[0]
+                # output_dict_data['label'] = val_output_convert[0]
+                # # print(output_dict_data['label'].applied_operations)
+                # # output_dict_data['label'].applied_operations = deepcopy(val_data['image'].applied_operations)[0]
+                #
+                # print(output_dict_data['image'].applied_operations)
+                # print(output_dict_data['label'].applied_operations)
+                # print(val_ds.transform.transforms)
 
-                inv_inputs = inverted_output_dict['image']
+                # inverted_output_dict = val_ds.transform.inverse(output_dict_data)
 
-                # Reinit the applied operations for the second inversion
-                output_dict_data['image'] = val_output_convert[0]
-                output_dict_data['image'].applied_operations = deepcopy(val_data['image'].applied_operations)
-                inverted_output_dict = second_tr.inverse(output_dict_data)
-                inv_outputs = inverted_output_dict['image']
-                inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_inputs, torch.Tensor) \
-                    else inv_inputs[0, :, :, :]
+                # inv_inputs = inverted_output_dict['image']
+                # inv_outputs = inverted_output_dict['label']
+                # inv_inputs = val_data['image']
+                inv_outputs = val_output_convert[0]['pred']
+                #
+                # # Reinit the applied operations for the second inversion
+                # output_dict_data['image'] = val_output_convert[0]
+                # output_dict_data['image'].applied_operations = deepcopy(val_data['image'].applied_operations)
+                # inverted_output_dict = second_tr.inverse(output_dict_data)
+                # inv_outputs = inverted_output_dict['image']
+                # inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_inputs, torch.Tensor) \
+                #     else inv_inputs[0, :, :, :]
+                inputs_np = nib.load(Path(val_data['image_meta_dict']['filename_or_obj'][0])).get_fdata()
                 outputs_np = inv_outputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_outputs, torch.Tensor) \
                     else inv_outputs[0, :, :, :]
                 # TODO This is slow AF because of the imshow, maybe resetting the plot would work
@@ -434,8 +461,7 @@ def validation_loop(img_path_list: Sequence,
         transform_dict, 'spatial_size', find_last=True)
     if training_img_size is None:
         training_img_size = utils.get_img_size(img_path_list[0])
-    original_size = utils.get_img_size(img_path_list[0])
-    temp_inverse_transform = Compose([CenterSpatialCropd(['image', 'label'], original_size)])
+    # original_size = utils.get_img_size(img_path_list[0])
     # model_name = 'unet'
     # hyper_params = net.default_unet_hyper_params
     # if 'unetr' in kwargs and (kwargs['unetr'] == 'True' or kwargs['unetr'] == 1):
@@ -539,7 +565,7 @@ def validation_loop(img_path_list: Sequence,
             # Maybe not necessary but I prefer it there
             dice_metric.reset()
             hausdorff_metric.reset()
-            # inverted_dict = temp_inverse_transform(val_data)
+
             second_tr = deepcopy(val_ds.transform)
             output_dict_data['label'].applied_operations = deepcopy(val_data['label'].applied_operations)
             output_dict_data['image'].applied_operations = deepcopy(val_data['image'].applied_operations)
@@ -548,7 +574,6 @@ def validation_loop(img_path_list: Sequence,
             inv_inputs, inv_labels = inverted_dict['image'], inverted_dict['label']
             with allow_missing_keys_mode(second_tr):
                 inv_outputs = second_tr.inverse(output_dict_data)['label']
-            # inv_outputs = temp_inverse_transform(output_dict_data)['label']
             inputs_np = inv_inputs[0, :, :, :].cpu().detach().numpy() if isinstance(inv_inputs, torch.Tensor) \
                 else inv_inputs[0, :, :, :]
             labels_np = inv_labels[0, :, :, :].cpu().detach().numpy() if isinstance(inv_labels, torch.Tensor) \

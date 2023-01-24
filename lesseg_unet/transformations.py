@@ -151,8 +151,9 @@ class Binarized(MapTransform):
 
     """
 
-    def __init__(self, keys: KeysCollection, lower_threshold: float = 0) -> None:
-        super().__init__(keys)
+    def __init__(self, keys: KeysCollection, lower_threshold: float = 0,
+                 allow_missing_keys: bool = False) -> None:
+        super().__init__(keys, allow_missing_keys)
         self.lower_threshold = lower_threshold
         self.binarize = Binarize(lower_threshold)
 
@@ -560,8 +561,9 @@ class TorchIOWrapper(Randomizable, MapTransform):
     p: probability that this trans will be applied (to all the keys listed in 'keys')
     """
 
-    def __init__(self, keys: KeysCollection, trans: Callable, p: float = 1) -> None:
-        super().__init__(keys)
+    def __init__(self, keys: KeysCollection, trans: Callable, p: float = 1,
+                 allow_missing_keys: bool = False) -> None:
+        super().__init__(keys, allow_missing_keys)
         self.keys = keys
         self.trans = trans
         self.prob = p
@@ -855,16 +857,18 @@ def image_only_transformd(hyper_param_dict=None, training=True, clamping=None, d
                 if tr == 'MyNormalizeIntensityd':
                     if clamping is not None and 'clamp_quantile' not in di[tr]:
                         new_di[tr]['clamp_quantile'] = clamping
+                new_di[tr]['allow_missing_keys'] = True
                 keys_key = 'keys'
                 if 'keys' not in new_di[tr]:
                     keys_key = 'include'
                 if 'image' not in new_di[tr][keys_key]:
                     continue
-                if 'label' in new_di[tr][keys_key]:
-                    new_di[tr][keys_key] = ['image']
-                    seg_tr_dict[li].append(new_di)
-                else:
-                    seg_tr_dict[li].append(new_di)
+                # if 'label' in new_di[tr][keys_key]:
+                #     new_di[tr][keys_key] = ['image']
+                #     seg_tr_dict[li].append(new_di)
+                # else:
+                #     seg_tr_dict[li].append(new_di)
+                seg_tr_dict[li].append(new_di)
     if training:
         compose_list = []
         for d_list_name in seg_tr_dict:
