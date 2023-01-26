@@ -146,16 +146,16 @@ def save_img_lbl_seg_to_nifti(image: Union[np.ndarray, torch.Tensor],
                               seg: Union[np.ndarray, torch.Tensor],
                               output_dir: Union[str, bytes, os.PathLike],
                               val_output_affine: np.ndarray,
-                              suffix: str) -> List[str]:
-    out_input_path = Path(output_dir, 'input_{}.nii'.format(suffix))
+                              suffix: str) -> List:
+    out_input_path = Path(output_dir, 'input_{}.nii.gz'.format(suffix))
     save_tensor_to_nifti(image, out_input_path, val_output_affine)
     out_paths_list = [str(out_input_path)]
     if len(label) > 0:
-        out_label_path = Path(output_dir, 'label_{}.nii'.format(suffix))
+        out_label_path = Path(output_dir, 'label_{}.nii.gz'.format(suffix))
         save_tensor_to_nifti(label, out_label_path, val_output_affine)
         out_paths_list.append(str(out_label_path))
     if len(seg) > 0:
-        out_output_path = Path(output_dir, 'output_{}.nii'.format(suffix))
+        out_output_path = Path(output_dir, 'output_{}.nii.gz'.format(suffix))
         save_tensor_to_nifti(seg, out_output_path, val_output_affine)
         out_paths_list.append(str(out_output_path))
     return out_paths_list

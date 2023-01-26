@@ -78,7 +78,9 @@ def main():
     parser.add_argument('-kmos', '--keep_model_output_size', action='store_true', help='Keep the output of the '
                                                                                        'segmentation in the '
                                                                                        'spatial_size of the model')
-
+    parser.add_argument('-kifs', '--keep_input_folder_structure',
+                        type=str, help='Segmentation output will reflect the folder structure from'
+                                       ' the given root_folder')
     # Model parameters
     parser.add_argument('-pp', '--pretrained_point', type=str, help='[Training opt]file path to a torch checkpoint file'
                                                                     ' or directory (in that case, the most recent '
@@ -373,6 +375,7 @@ def main_worker(local_rank, args, kwargs):
         if args.seg_input_dict is not None:
             if les_list is not None:
                 raise ValueError('seg_input_dict cannot be used for the Validation')
+
         if les_list is None:
             if seg_input_dict:
                 for sub_folder in seg_input_dict:
@@ -389,6 +392,7 @@ def main_worker(local_rank, args, kwargs):
                                                    dataloader_workers=args.num_workers,
                                                    clamping=clamp_tuple,
                                                    segmentation_area=args.segmentation_area,
+                                                   keep_input_folder_structure=args.keep_input_folder_structure,
                                                    **kwargs)
                 if args.overlap:
                     overlaps_subfolders(output_root, 'output_')
@@ -404,6 +408,7 @@ def main_worker(local_rank, args, kwargs):
                                                dataloader_workers=args.num_workers,
                                                clamping=clamp_tuple,
                                                segmentation_area=args.segmentation_area,
+                                               keep_input_folder_structure=args.keep_input_folder_structure,
                                                **kwargs)
                 if args.overlap:
                     nib.save(nifti_overlap_images(output_root, 'output_', recursive=True),
@@ -429,6 +434,7 @@ def main_worker(local_rank, args, kwargs):
                                          # default_label=args.default_label
                                          clamping=clamp_tuple,
                                          segmentation_area=args.segmentation_area,
+                                         keep_input_folder_structure=args.keep_input_folder_structure,
                                          **kwargs)
             if args.overlap:
                 nib.save(nifti_overlap_images(output_root, 'output_', recursive=True),
