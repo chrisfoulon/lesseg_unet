@@ -206,13 +206,13 @@ def training(img_path_list: Sequence,
     """
     if dist.get_rank() == 0:
         if lbl_path_list is None:
-            img_dict = img_path_list
+            split_lists_to_share = [img_path_list]
         else:
             # Get the images from the image and label list and tries to match them
             img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, lbl_path_list, img_pref,
                                                                      image_cut_suffix=image_cut_suffix)
 
-        split_lists_to_share = [utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage, shuffle=True)]
+            split_lists_to_share = [utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage, shuffle=True)]
     else:
         split_lists_to_share = [None]
     torch.distributed.broadcast_object_list(split_lists_to_share, src=0)

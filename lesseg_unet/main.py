@@ -238,7 +238,7 @@ def main_worker(local_rank, args, kwargs):
             seg_input_dict = json.load(f)
         img_list = [img_path for sublist in seg_input_dict for img_path in sublist]
     else:
-        img_list = args.pretrained_split_list
+        img_list = utils.open_json(args.pretrained_split_list)
     # TODO not very pretty in the case of pretrained_split_list ...
     if args.output in img_list:
         raise ValueError("The output directory CANNOT be one of the input directories")
