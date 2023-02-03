@@ -11,6 +11,7 @@ import importlib.resources as rsc
 import numpy as np
 import pandas as pd
 import nibabel as nib
+import dask.array as da
 from nilearn.plotting import plot_stat_map
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -439,7 +440,8 @@ def plot_archetype_and_cluster_seg(cluster_dict, output_path, key='segmentation'
         pp.savefig(fig)
     pp.close()
 
-import dask.array as da
+
+
 def perf_dataset_overlap(input_images, spreadsheet, filename_col='core_filename', perf_col='dice_metric',
                          operation='mean', filter_pref='', recursive=False, non_zero_only=False, header=0,
                          window_size=-1):

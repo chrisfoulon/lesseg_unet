@@ -10,11 +10,15 @@ import logging
 from operator import lt, gt
 from multiprocessing.dummy import Pool
 import multiprocessing
+
+from nilearn.regions import connected_regions
 from scipy.stats import entropy
 
 import monai.transforms
 from monai.metrics import HausdorffDistanceMetric, DiceMetric
 from bcblib.tools.nifti_utils import is_nifti, centre_of_mass_difference
+from tqdm import tqdm
+
 from lesseg_unet.net import create_model
 import nibabel as nib
 import torch
@@ -595,3 +599,16 @@ def get_fold_splits(split_list_file_path, output_dir, replace_root='', by_this_r
         save_list(Path(output_dir, f'{pref}fold_{i}_img_list.csv'), image_list)
         save_list(Path(output_dir, f'{pref}fold_{i}_lbl_list.csv'), label_list)
     return image_list, label_list
+
+
+def filter_seg_by_cluster_size(root_folder, seg_dict, min_cluster_size=4):
+    too_small_lesion_dict = {}
+    for k in tqdm(seg_dict):
+        label_path = Path(root_folder, seg_dict[k]['segmentation'])
+        hdr = nib.load(label_path)
+        data, _ = connected_regions(hdr, min_region_size=1, extract_type='connected_components', smoothing_fwhm=0)
+        data = data.get_fdata()
+        max_cluster_size = np.max([np.count_nonzero(data[..., i]) for i in range(data.shape[-1])])
+        if max_cluster_size < min_cluster_size:
+            too_small_lesion_dict[k] = seg_dict[k]
+    return too_small_lesion_dict

@@ -15,7 +15,7 @@ setup(
     # einops is only for the UNETR
     install_requires=['nibabel>=3.2.2', 'numpy>=1.18.5', 'nilearn>=0.9.0', 'monai>=1.0', 'bcblib', 'torch>=1.10.2',
                       'torchio>=0.18.73', 'torchvision>=0.11.3', 'matplotlib>=3.5.1', 'pandas>=1.3.5',
-                      'scipy', 'tqdm', 'einops', 'python-dateutil', 'seaborn'],
+                      'scipy', 'tqdm', 'einops', 'python-dateutil', 'seaborn', 'dask'],
     # install_requires=['nibabel==3.2.2', 'numpy==1.18.5', 'nilearn==0.9.0', 'monai==0.7.0', 'bcblib', 'torch==1.10.2',
     #                   'torchio==0.18.73', 'torchvision==0.11.3', 'matplotlib==3.5.1', 'pandas==1.3.5',
     #                   'scipy', 'tqdm', 'einops', 'python-dateutil', 'seaborn'],
