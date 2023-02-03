@@ -612,3 +612,66 @@ def filter_seg_by_cluster_size(root_folder, seg_dict, min_cluster_size=4):
         if max_cluster_size < min_cluster_size:
             too_small_lesion_dict[k] = seg_dict[k]
     return too_small_lesion_dict
+
+
+def get_seg_dict(seg_folder, keys_struct=None, key_to_match='b1000', relative_paths=True, recursive=True):
+    """
+    If we only have a seg_folder, we just want to list the input [label] and output with the core_name as the dict key.
+    If we have keys_struct, we try to match each tuple of images with a key in keys_struct using key_to_match
+    If some images could not be matched, print a warning
+    Parameters
+    ----------
+    seg_folder
+    keys_struct: dict or list with keys to use as output keys
+    key_to_match
+    relative_paths
+    recursive
+
+    Returns
+    -------
+
+    """
+    # List all the files
+    if recursive:
+        file_list = [p for p in Path(seg_folder).rglob('*') if is_nifti(p)]
+    else:
+        file_list = [p for p in Path(seg_folder).iterdir() if is_nifti(p)]
+    input_list = [p for p in file_list if p.name.startswith('input_')]
+    label_list = [p for p in file_list if p.name.startswith('label_')]
+    output_list = [p for p in file_list if p.name.startswith('output_')]
+    no_labels = True if len(label_list) == 0 else False
+    img_dict_list = []
+    for img in input_list:
+        fname = img.name.split('input_')[-1]
+        img_dict = {'b1000': str(img if not relative_paths else img.relative_to(seg_folder))}
+        if not no_labels:
+            for lbl in label_list:
+                if fname in lbl.name:
+                    img_dict['label'] = str(lbl if not relative_paths else lbl.relative_to(seg_folder))
+        for out in output_list:
+            if fname in out.name:
+                img_dict['segmentation'] = str(out if not relative_paths else out.relative_to(seg_folder))
+        img_dict_list.append(img_dict)
+    labels_not_matched = 0
+    outputs_not_matched = 0
+    for img_dict in img_dict_list:
+        if not no_labels:
+            if 'label' not in img_dict:
+                labels_not_matched += 1
+        if 'segmentation' not in img_dict:
+            outputs_not_matched += 1
+    if outputs_not_matched > 0:
+        raise ValueError(f'Could not match {outputs_not_matched} segmentations')
+    if not no_labels and labels_not_matched > 0:
+        raise ValueError(f'Could not match {labels_not_matched} labels')
+    seg_dict = {}
+    if keys_struct is None:
+        for img_dict in img_dict_list:
+            # Just in case the original filename contains _v
+            core_name = '_v'.join(Path(img_dict['b1000']).name.split('_v')[:-1]).split('input_')
+            seg_dict[core_name] = img_dict
+    else:
+        for img_dict in img_dict_list:
+            for k in keys_struct:
+                if key_to_match is not None and key_to_match != '':
+                    if keys_struct[key_to_match].split('.nii') in core_name:
