@@ -674,4 +674,6 @@ def get_seg_dict(seg_folder, keys_struct=None, key_to_match='b1000', relative_pa
         for img_dict in img_dict_list:
             for k in keys_struct:
                 if key_to_match is not None and key_to_match != '':
-                    if keys_struct[key_to_match].split('.nii') in core_name:
+                    if keys_struct[key_to_match].split('.nii') in Path(img_dict['b1000']).name:
+                        seg_dict[k] = img_dict
+    return seg_dict
