@@ -640,6 +640,7 @@ def get_seg_dict(seg_folder, keys_struct=None, key_to_match='b1000', relative_pa
     label_list = [p for p in file_list if p.name.startswith('label_')]
     output_list = [p for p in file_list if p.name.startswith('output_')]
     no_labels = True if len(label_list) == 0 else False
+    print('All lists created')
     img_dict_list = []
     for img in input_list:
         fname = img.name.split('input_')[-1]
@@ -652,6 +653,7 @@ def get_seg_dict(seg_folder, keys_struct=None, key_to_match='b1000', relative_pa
             if fname in out.name:
                 img_dict['segmentation'] = str(out if not relative_paths else out.relative_to(seg_folder))
         img_dict_list.append(img_dict)
+    print('img_dict_list created')
     labels_not_matched = 0
     outputs_not_matched = 0
     for img_dict in img_dict_list:
@@ -665,15 +667,18 @@ def get_seg_dict(seg_folder, keys_struct=None, key_to_match='b1000', relative_pa
     if not no_labels and labels_not_matched > 0:
         raise ValueError(f'Could not match {labels_not_matched} labels')
     seg_dict = {}
+    print('Creating seg_dict')
     if keys_struct is None:
-        for img_dict in img_dict_list:
+        for img_dict in tqdm(img_dict_list):
             # Just in case the original filename contains _v
-            core_name = '_v'.join(Path(img_dict['b1000']).name.split('_v')[:-1]).split('input_')
+            core_name = '_v'.join(Path(img_dict['b1000']).name.split('_v')[:-1]).split('input_')[-1]
             seg_dict[core_name] = img_dict
     else:
-        for img_dict in img_dict_list:
-            for k in keys_struct:
+        names_to_keys = {Path(keys_struct[k][key_to_match]).name.split('.nii')[0]: k for k in keys_struct}
+        for img_dict in tqdm(img_dict_list):
+            for name in names_to_keys:
                 if key_to_match is not None and key_to_match != '':
-                    if keys_struct[key_to_match].split('.nii') in Path(img_dict['b1000']).name:
-                        seg_dict[k] = img_dict
+                    if name in Path(img_dict['b1000']).name:
+                        seg_dict[names_to_keys[name]] = img_dict
+                        break
     return seg_dict
