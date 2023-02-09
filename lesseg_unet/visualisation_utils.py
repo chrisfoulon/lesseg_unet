@@ -7,6 +7,7 @@ import re
 from tqdm import tqdm
 from collections import defaultdict
 import importlib.resources as rsc
+from pprint import pprint
 
 import numpy as np
 import pandas as pd
@@ -19,7 +20,7 @@ import seaborn as sns
 from scipy.ndimage import center_of_mass
 from bcblib.tools.nifti_utils import is_nifti, file_to_list
 from bcblib.tools.spreadsheet_io_utils import import_spreadsheet
-from lesseg_unet.utils import LesionAreaFinder, open_json
+from lesseg_unet.utils import LesionAreaFinder, open_json, save_json
 from bcblib.tools.nifti_utils import nifti_overlap_images
 
 
@@ -441,7 +442,6 @@ def plot_archetype_and_cluster_seg(cluster_dict, output_path, key='segmentation'
     pp.close()
 
 
-
 def perf_dataset_overlap(input_images, spreadsheet, filename_col='core_filename', perf_col='dice_metric',
                          operation='mean', filter_pref='', recursive=False, non_zero_only=False, header=0,
                          window_size=-1):
@@ -502,3 +502,99 @@ def perf_dataset_overlap(input_images, spreadsheet, filename_col='core_filename'
         temp_overlap_data = da.nanstd(temp_overlap_data, axis=0).compute()
     temp_overlap = nib.Nifti1Image(temp_overlap_data, temp_overlap.affine)
     return temp_overlap
+
+
+def check_and_annotate_segmentation(seg_dict, output_path, images_root='', label_dict_path=None, spreadsheets=None,
+                                    matching_columns=None, info_columns=None, display='fsleyes',
+                                    zfill_matching_col=True):
+    if not isinstance(seg_dict, dict):
+        seg_dict = open_json(seg_dict)
+    if not Path(output_path).parent.is_dir():
+        raise ValueError(f'Parent folder of {output_path} must be an existing directory')
+    label_dict = open_json(label_dict_path)
+    if spreadsheets is not None:
+        if not isinstance(spreadsheets, list):
+            spreadsheets = [spreadsheets]
+        for ind, spreadsheet in enumerate(spreadsheets):
+            if not isinstance(spreadsheet, pd.DataFrame):
+                if Path(spreadsheet).name.endswith('.csv'):
+                    spreadsheets[ind] = pd.read_csv(spreadsheet, header=0)
+                else:
+                    spreadsheets[ind] = pd.read_excel(spreadsheet, header=0)
+    if matching_columns is not None:
+        if not isinstance(matching_columns, list):
+            matching_columns = [matching_columns]
+        for ind, matching_column in enumerate(matching_columns):
+            if matching_column not in spreadsheets[ind].columns:
+                raise ValueError(f'{matching_column} not in spreadsheet number {ind}')
+            if zfill_matching_col:
+                spreadsheets[ind][matching_column] = [
+                    str(value).zfill(8) for value in spreadsheets[ind][matching_column]]
+    if info_columns is not None:
+        if not isinstance(info_columns, list):
+            info_columns = [info_columns]
+        for ind, info_column in enumerate(info_columns):
+            if info_column not in spreadsheets[ind].columns:
+                raise ValueError(f'{info_column} not in spreadsheet number {ind}')
+    if len(spreadsheets) != len(matching_columns) != len(info_columns):
+        raise ValueError('There must be the same number of spreadsheets, matching_columns and info_columns!')
+    if Path(output_path).is_file():
+        output_dict = open_json(output_path)
+    else:
+        output_dict = {}
+    try:
+        save_json(output_path, output_dict)
+    except Exception as e:
+        print(f'Exception caught when trying to save {output_path}')
+        raise e
+    for counter, k in enumerate(seg_dict):
+        pid = seg_dict[k]['PatientID']
+        b1000 = Path(images_root, seg_dict[k]['b1000'])
+        label = None
+        if 'label' in seg_dict[k]:
+            label = Path(images_root, seg_dict[k]['label'])
+        seg = None
+        if 'segmentation' in seg_dict[k]:
+            seg = Path(images_root, seg_dict[k]['segmentation'])
+        show_image = True
+        show_report = True
+        print(f'############### IMAGE NUMBER {counter}/{len(seg_dict)} #################')
+        while show_image or show_report:
+            if show_image:
+                display_img(b1000, label, seg, display)
+            if show_report:
+                for ind, spreadsheet in enumerate(spreadsheets):
+                    matched_entries = spreadsheet[spreadsheet[matching_columns[ind]] == pid][info_columns[ind]]
+                    print(f'Spreadsheet number {ind} ###############')
+                    for entry_ind, entry in enumerate(matched_entries):
+                        print(f'###### {entry_ind}: {entry}')
+            pprint(label_dict)
+            print('Select a label from the list above using either the number or the label itself or ')
+            print('quit [exit]: to quit and save')
+            print('image: to display the image again and ask for an answer again')
+            print('report: to show the report(s) information again and ask for an answer again')
+            resp = input()
+            show_image = False
+            show_report = False
+            if resp.lower() == 'report':
+                show_report = True
+            elif resp.lower() == 'show':
+                show_image = True
+            elif resp.lower() in ['quit', 'exit']:
+                save_json(output_path, output_dict)
+                return output_dict
+            else:
+                if resp in label_dict.values():
+                    output_dict[k] = resp
+                elif resp in label_dict.keys():
+                    output_dict[k] = label_dict[resp]
+                else:
+                    yn = input(f'{resp} is neither a label nor a label code. Do you want to add a new label [Y/n]')
+                    if yn.lower() == 'n':
+                        print('Alright! Showing the image again!')
+                        show_image = True
+                    else:
+                        label_dict.update({str(len(label_dict)): resp})
+                        save_json(label_dict_path, label_dict)
+    save_json(output_path, output_dict)
+    return output_dict

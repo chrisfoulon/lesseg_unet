@@ -1184,6 +1184,13 @@ unetr_cc_std_norm = deepcopy(unetr_cc)
 unetr_cc_std_norm['first_transform'][3]['MyNormalizeIntensityd']['no_std'] = False
 unetr_cc_std_norm['last_transform'][1]['MyNormalizeIntensityd']['no_std'] = False
 
+
+unetr_cc_resize = deepcopy(unetr_cc)
+unetr_cc_resize['first_transform'][2] = {'Resized': {
+            'keys': ['image', 'label'],
+            'spatial_size': def_spatial_size}
+         }
+
 unetr_cc_patches = deepcopy(unetr_cc)
 del unetr_cc_patches['first_transform'][2]
 unetr_cc_patches.update({'patches': [
