@@ -31,21 +31,20 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
         if seg_path_list is None:
             matching_les_list = []
         else:
+            def condition(les):
+                matched = Path(img).name.split('.nii')[0] in Path(les).name.split('.nii')[0]
+                if matched:
+                    return True
+                else:
+                    if img_cut_suffix is not None and img_cut_pref is not None:
+                        return Path(img).name.split(
+                            img_cut_pref)[-1].split(img_cut_suffix)[0] in Path(les).name.split('.nii')[0]
+                    if img_cut_suffix is not None:
+                        return Path(img).name.split(img_cut_suffix)[0] in Path(les).name.split('.nii')[0]
+                    if img_cut_pref is not None:
+                        return Path(img).name.split(img_cut_pref)[-1] in Path(les).name.split('.nii')[0]
             # TODO make it work with both prefix and suffix
-            if img_cut_suffix is None:
-                matching_les_list = [str(les) for les in seg_path_list
-                                     if Path(img).name.split('.nii')[0] in Path(les).name.split('.nii')[0]]
-            else:
-                matching_les_list = [str(les) for les in seg_path_list
-                                     if Path(img).name.split('.nii')[0] in Path(les).name.split('.nii')[0]
-                                     or Path(img).name.split(img_cut_suffix)[0] in Path(les).name.split('.nii')[0]]
-            if img_cut_pref is None:
-                matching_les_list = [str(les) for les in seg_path_list
-                                     if Path(img).name.split('.nii')[0] in Path(les).name.split('.nii')[0]]
-            else:
-                matching_les_list = [str(les) for les in seg_path_list
-                                     if Path(img).name.split('.nii')[0] in Path(les).name.split('.nii')[0]
-                                     or Path(img).name.split(img_cut_pref)[-1] in Path(les).name.split('.nii')[0]]
+            matching_les_list = [str(les) for les in seg_path_list if condition(les)]
         if len(matching_les_list) == 0:
             controls.append(img)
         elif len(matching_les_list) > 1:
