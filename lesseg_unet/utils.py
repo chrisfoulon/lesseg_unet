@@ -101,7 +101,7 @@ def create_input_path_list_from_root(root_folder_path, recursive_search=False):
 
 def nifti_affine_from_dataset(nifti_path: Union[str, bytes, os.PathLike]):
     if not Path(nifti_path).is_file():
-        raise ValueError('{} is not an existing file')
+        raise ValueError(f'{nifti_path} is not an existing file')
     return nib.load(nifti_path).affine
 
 
