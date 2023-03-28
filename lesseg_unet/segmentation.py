@@ -336,8 +336,8 @@ def segmentation_loop(img_path_list: Sequence,
             img_count += 1
             inputs = val_data['image'].to(device)
             with torch.cuda.amp.autocast():
-                # TODO if training_img_size < inputs size we need several patches to cover the inputs
-                # TODO if training_img_size > inputs sliding_window_inference pads for the inference and then crops back
+                # if training_img_size < inputs size we need several patches to cover the inputs
+                # if training_img_size > inputs sliding_window_inference pads for the inference and then crops back
                 val_data['pred'] = sliding_window_inference(inputs, training_img_size,
                                                             1, model, overlap=0.8)
                 val_data['pred'].applied_operations = deepcopy(val_data['image'].applied_operations)
