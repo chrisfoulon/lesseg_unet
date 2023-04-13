@@ -10,23 +10,16 @@ import monai
 from monai.data import list_data_collate, DataLoader
 from monai.data import Dataset, PersistentDataset, CacheDataset
 from lesseg_unet import transformations, utils
+from lesseg_unet.utils import get_str_path_list
 
 
 def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
                            img_pref: str = None, img_cut_pref: str = None,
                            img_cut_suffix: str = None, check_inputs=True) -> (dict, dict):
-    # create_default_label = False
-    # if default_label is not None:
-    #     if Path(default_label).is_dir():
-    #         create_default_label = True
-    #     else:
-    #         if not Path(default_label).is_file():
-    #             raise ValueError('fill_up_empty_labels must be an existing nifti file ')
-    controls = []
+    unmatched_images = []
     img_dict = {}
     no_match = False
-    if img_pref is not None and img_pref != '':
-        img_path_list = [str(img) for img in img_path_list if img_pref in Path(img).name]
+    img_path_list = get_str_path_list(img_path_list, img_pref)
     for img in img_path_list:
         if seg_path_list is None:
             matching_les_list = []
@@ -46,24 +39,24 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
             # TODO make it work with both prefix and suffix
             matching_les_list = [str(les) for les in seg_path_list if condition(les)]
         if len(matching_les_list) == 0:
-            controls.append(img)
+            unmatched_images.append(img)
         elif len(matching_les_list) > 1:
             raise ValueError('Multiple matching seg file found for {}'.format(img))
         else:
             img_dict[img] = matching_les_list[0]
     if no_match:
-        print(f'Some images did not have a label ({len(controls)} they have been added to the controls list')
+        print(f'Some images did not have a label ({len(unmatched_images)} they have been added to the controls list')
     print('Number of images: {}'.format(len(img_dict)))
     if img_dict:
         print(f'First image and label in img_dict: {list(img_dict.keys())[0]}, {img_dict[list(img_dict.keys())[0]]}')
-    if controls:
+    if unmatched_images:
         # print('Number of controls: {}'.format(len(controls)))
-        raise ValueError(f'{len(controls)} could not be matched with a label')
+        raise ValueError(f'{len(unmatched_images)} could not be matched with a label')
     if check_inputs:
         utils.check_inputs(img_dict)
-        utils.check_inputs(controls)
+        utils.check_inputs(unmatched_images)
         print('The inputs passed the checks')
-    return img_dict, controls
+    return img_dict, unmatched_images
 
 
 def create_file_dict_lists(raw_img_path_list: Sequence, raw_seg_path_list: Sequence,

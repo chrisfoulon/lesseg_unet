@@ -87,15 +87,19 @@ def kwargs_argparse(unknown_param_list):
     return kwargs_dict
 
 
-def create_input_path_list_from_root(root_folder_path, recursive_search=False):
+def get_str_path_list(img_path_list, pref=None):
+    return [str(img) for img in img_path_list if (pref is None or pref in img.name)]
+
+
+def create_input_path_list_from_root(root_folder_path, pref=None, recursive_search=False):
     root_folder_path = Path(root_folder_path)
     if not root_folder_path.is_dir():
         raise ValueError('{} does not exist or is not a directory'.format(root_folder_path))
     input_path_list = []
     if not recursive_search:
-        input_path_list = [p for p in root_folder_path.iterdir() if is_nifti(p)]
+        input_path_list = [p for p in root_folder_path.iterdir() if is_nifti(p) and (pref is None or pref in p.name)]
     if recursive_search or len(input_path_list) == 0:
-        input_path_list = [p for p in root_folder_path.rglob('*') if is_nifti(p)]
+        input_path_list = [p for p in root_folder_path.rglob('*') if is_nifti(p) and (pref is None or pref in p.name)]
     return input_path_list
 
 

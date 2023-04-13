@@ -57,17 +57,13 @@ def main():
     # Losses and metric parameters
     parser.add_argument('-lfct', '--loss_function', type=str, default='dice',
                         help='Loss function used for training')
-    parser.add_argument('-wf', '--weight_factor', type=float, default=1,
-                        help='Multiply the control loss by this factor')
     parser.add_argument('-vlfct', '--val_loss_function', type=str, default='dice',
                         help='Loss function used for validation')
+    parser.add_argument('-wf', '--weight_factor', type=float, default=1,
+                        help='Multiply the control loss by this factor')
     # Parameters for control data
-    default_label_group = parser.add_mutually_exclusive_group(required=False)
-    default_label_group.add_argument('-cdl', '--create_default_label', action='store_true',
-                                     help='Creates a default image filled with zeros for control images label')
-    default_label_group.add_argument('-dl', '--default_label', type=str,
-                                     help='Path to a default mask that will be used in case no '
-                                          'lesion mask is found for the b1000')
+    parser.add_argument('-ctr_pref', '--control_image_prefix', type=str,
+                        help='Define a prefix to filter the control images')
     # Segmentation parameters
     parser.add_argument('-pt', '--checkpoint', type=str, help='file path to a torch checkpoint file'
                                                               ' or directory (in that case, the most recent '
@@ -91,9 +87,6 @@ def main():
                                                                'torch.device()')
     parser.add_argument('-dropout', type=float, help='Set a dropout value for the model')
     parser.add_argument('-fs', '--feature_size', type=int, help='Set the feature size for (SWIN)UNETR')
-    # TODO maybe
-    # parser.add_argument('-ctr_pref', '--control_image_prefix', type=str,
-    #                     help='Define a prefix to filter the control images')
     # Files split and matching options
     parser.add_argument('-tv', '--train_val', type=int, help='Training / validation percentage cut')
     parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
@@ -259,12 +252,13 @@ def main_worker(local_rank, args, kwargs):
     # if args.debug_img_num is not None and les_list is not None:
     #     img_list = les_list[:args.debug_img_num]
     if args.controls_path is not None:
-        ctr_list = utils.create_input_path_list_from_root(args.controls_path)
+        ctr_list = utils.create_input_path_list_from_root(args.controls_path, pref=args.ctrl_image_prefix)
         if args.controls_path == args.output:
             raise ValueError("The output directory CANNOT be the input directory")
     # So args.lesion_input_list is not None
     elif args.controls_list is not None:
         ctr_list = file_to_list(args.controls_list)
+        ctr_list = utils.get_str_path_list(ctr_list, pref=args.ctrl_image_prefix)
     else:
         ctr_list = None
     if args.image_prefix is not None:

@@ -461,6 +461,8 @@ def training(img_path_list: Sequence,
                     # In case we use CoordConv, we only take the mask of the labels without the coordinates
                     masks_only_labels = labels[:, :1, :, :, :]
                     loss = loss_function(logit_outputs, masks_only_labels)
+                    # TODO add a control loss based on the old implementation:
+                    # controls_loss = torch.mean(outputs_batch_images_sigmoid) * control_weight_factor
                     # Regularisation
                     loss += utils.sum_non_bias_l2_norms(params, 1e-4)
 
