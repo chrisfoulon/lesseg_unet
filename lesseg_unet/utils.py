@@ -578,6 +578,37 @@ def get_segmentation_areas(img_list, comp_meth='dice', cluster_thr=0.1, root_dir
     return img_cluster_isflipped_dict
 
 
+def add_cluster_to_dict(info_dict, lesion_mask_key='label', output_cluster_name_key='lesion_cluster',
+                        comp_meth='dice', cluster_thr=0.1, add_side_prefix=False):
+    """
+    Add a key to the info_dict with the cluster name to which the lesion belongs to
+    Parameters
+    ----------
+    info_dict
+    lesion_mask_key
+    output_cluster_name_key
+    comp_meth
+    cluster_thr
+    add_side_prefix
+
+    Returns
+    -------
+
+    """
+    for k in info_dict:
+        if output_cluster_name_key not in info_dict[k]:
+            if lesion_mask_key not in info_dict[k]:
+                raise ValueError(f'key {lesion_mask_key} not found in {k}')
+            clu, flipped = get_image_area(info_dict[k][lesion_mask_key], comp_meth=comp_meth, cluster_thr=cluster_thr)
+            if not add_side_prefix:
+                if flipped:
+                    clu = 'L_' + clu
+                else:
+                    clu = 'R_' + clu
+            info_dict[k][output_cluster_name_key] = clu
+    return info_dict
+
+
 def get_img_size(img):
     return load_nifti(img).shape
 
