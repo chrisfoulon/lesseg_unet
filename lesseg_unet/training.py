@@ -214,7 +214,8 @@ def training(img_path_list: Sequence,
             img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, lbl_path_list, img_pref,
                                                                      image_cut_suffix=image_cut_suffix)
 
-            split_lists_to_share = [utils.split_lists_in_folds(img_dict, folds_number, train_val_percentage, shuffle=True)]
+            split_lists_to_share = [utils.split_lists_in_folds(
+                img_dict, folds_number, train_val_percentage, shuffle=True)]
     else:
         split_lists_to_share = [None]
     torch.distributed.broadcast_object_list(split_lists_to_share, src=0)
@@ -224,14 +225,22 @@ def training(img_path_list: Sequence,
         json.dump(split_lists, f, indent=4)
 
     """
-    Now we do the same but for the controls
+    We want the same thing for the controls here. The input is control_list a list of dict of list like [{'image':[]}]
+    If we need to create new variables for the controls, we add the prefix ctr_ to the name of the variable
     """
-    if dist.get_rank() == 0:
-        if ctr_path_list is not None:
-            split_lists_to_share = [utils.split_lists_in_folds(ctr_path_list, folds_number, train_val_percentage,
-                                                               shuffle=True)]
+    control_list = []  # TODO change for the right input when the controls are implemented
+    if control_list is not None:
+        if dist.get_rank() == 0:
+            ctr_dict = {}  # TODO use the right function to get the controls from data_loading (unpushed changes)
+            split_lists_to_share = [utils.split_lists_in_folds(
+                ctr_dict, folds_number, train_val_percentage, shuffle=True)]
         else:
             split_lists_to_share = [None]
+        torch.distributed.broadcast_object_list(split_lists_to_share, src=0)
+        control_list = split_lists_to_share[0]
+        # Save the split_lists to easily get the content of the folds and all
+        with open(Path(output_dir, 'control_split_lists.json'), 'w+') as f:
+            json.dump(control_list, f, indent=4)
 
     """
     TRANSFORMATIONS AND AUGMENTATIONS
@@ -267,6 +276,15 @@ def training(img_path_list: Sequence,
     # Extract only the 'first' and 'last' transformations from transform_dict ignoring the augmentations
     val_img_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp,
                                                         device=transformations_device)
+
+    # control transforms
+    if control_list is not None:
+        # TODO make sure all the transformations can be used with 'allow_missing_keys=True'
+        train_ctr_transforms = transformations.train_transformd(transform_dict, lesion_set_clamp,
+                                                                device=transformations_device,
+                                                                writing_rank=dist.get_rank())
+        val_ctr_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp,
+                                                            device=transformations_device)
     """
     POST TRANSFORMATIONS
     """

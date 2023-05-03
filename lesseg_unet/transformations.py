@@ -578,7 +578,7 @@ class TorchIOWrapper(Randomizable, MapTransform):
         if not self._do_transform:
             return d
         transformed = None
-        for idx, key in enumerate(self.keys):
+        for idx, key in enumerate(self.key_iterator(d)):
             subject = Subject(datum=ScalarImage(tensor=d[key]))
             if transformed is None:
                 transformed = self.trans
