@@ -102,6 +102,7 @@ def testing(train_loader, output_dir):
 def training(img_path_list: Sequence,
              lbl_path_list: Sequence,
              output_dir: Union[str, bytes, os.PathLike],
+             ctr_path_list=None,
              img_pref: str = None,
              image_cut_suffix: str = None,
              transform_dict=None,
@@ -206,6 +207,7 @@ def training(img_path_list: Sequence,
     """
     if dist.get_rank() == 0:
         if lbl_path_list is None:
+            # If no label list is provided, then it means img_path_list is a split list (split per fold)
             split_lists_to_share = [img_path_list]
         else:
             # Get the images from the image and label list and tries to match them
@@ -220,6 +222,16 @@ def training(img_path_list: Sequence,
     # Save the split_lists to easily get the content of the folds and all
     with open(Path(output_dir, 'split_lists.json'), 'w+') as f:
         json.dump(split_lists, f, indent=4)
+
+    """
+    Now we do the same but for the controls
+    """
+    if dist.get_rank() == 0:
+        if ctr_path_list is not None:
+            split_lists_to_share = [utils.split_lists_in_folds(ctr_path_list, folds_number, train_val_percentage,
+                                                               shuffle=True)]
+        else:
+            split_lists_to_share = [None]
 
     """
     TRANSFORMATIONS AND AUGMENTATIONS

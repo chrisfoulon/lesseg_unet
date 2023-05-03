@@ -14,8 +14,8 @@ from lesseg_unet.utils import get_str_path_list
 
 
 def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
-                           img_pref: str = None, img_cut_pref: str = None,
-                           img_cut_suffix: str = None, check_inputs=True) -> (dict, dict):
+                           img_pref: str = None, image_cut_pref: str = None,
+                           image_cut_suffix: str = None, check_inputs=True) -> (dict, dict):
     unmatched_images = []
     img_dict = {}
     no_match = False
@@ -29,13 +29,13 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
                 if matched:
                     return True
                 else:
-                    if img_cut_suffix is not None and img_cut_pref is not None:
+                    if image_cut_suffix is not None and image_cut_pref is not None:
                         return Path(img).name.split(
-                            img_cut_pref)[-1].split(img_cut_suffix)[0] in Path(les).name.split('.nii')[0]
-                    if img_cut_suffix is not None:
-                        return Path(img).name.split(img_cut_suffix)[0] in Path(les).name.split('.nii')[0]
-                    if img_cut_pref is not None:
-                        return Path(img).name.split(img_cut_pref)[-1] in Path(les).name.split('.nii')[0]
+                            image_cut_pref)[-1].split(image_cut_suffix)[0] in Path(les).name.split('.nii')[0]
+                    if image_cut_suffix is not None:
+                        return Path(img).name.split(image_cut_suffix)[0] in Path(les).name.split('.nii')[0]
+                    if image_cut_pref is not None:
+                        return Path(img).name.split(image_cut_pref)[-1] in Path(les).name.split('.nii')[0]
             # TODO make it work with both prefix and suffix
             matching_les_list = [str(les) for les in seg_path_list if condition(les)]
         if len(matching_les_list) == 0:

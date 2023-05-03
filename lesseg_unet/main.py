@@ -326,7 +326,7 @@ def main_worker(local_rank, args, kwargs):
         training.training(img_path_list=img_list,
                           lbl_path_list=les_list,
                           output_dir=output_root,
-                          # ctr_path_list=ctr_list,
+                          ctr_path_list=ctr_list,
                           img_pref=b1000_pref,
                           image_cut_suffix=args.image_cut_suffix,
                           transform_dict=transform_dict,
