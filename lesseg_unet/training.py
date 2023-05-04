@@ -228,19 +228,19 @@ def training(img_path_list: Sequence,
     We want the same thing for the controls here. The input is control_list a list of dict of list like [{'image':[]}]
     If we need to create new variables for the controls, we add the prefix ctr_ to the name of the variable
     """
-    control_list = []  # TODO change for the right input when the controls are implemented
-    if control_list is not None:
+    ctr_split_lists = None
+    if ctr_path_list is not None:
         if dist.get_rank() == 0:
-            ctr_dict = {}  # TODO use the right function to get the controls from data_loading (unpushed changes)
+            ctr_dict = {'image': p for p in ctr_path_list}
             split_lists_to_share = [utils.split_lists_in_folds(
                 ctr_dict, folds_number, train_val_percentage, shuffle=True)]
         else:
             split_lists_to_share = [None]
         torch.distributed.broadcast_object_list(split_lists_to_share, src=0)
-        control_list = split_lists_to_share[0]
+        ctr_split_lists = split_lists_to_share[0]
         # Save the split_lists to easily get the content of the folds and all
         with open(Path(output_dir, 'control_split_lists.json'), 'w+') as f:
-            json.dump(control_list, f, indent=4)
+            json.dump(ctr_split_lists, f, indent=4)
 
     """
     TRANSFORMATIONS AND AUGMENTATIONS
@@ -278,12 +278,12 @@ def training(img_path_list: Sequence,
                                                         device=transformations_device)
 
     # control transforms
-    if control_list is not None:
+    if ctr_split_lists is not None:
         # TODO make sure all the transformations can be used with 'allow_missing_keys=True'
-        train_ctr_transforms = transformations.train_transformd(transform_dict, lesion_set_clamp,
+        ctr_train_transforms = transformations.train_transformd(transform_dict, lesion_set_clamp,
                                                                 device=transformations_device,
                                                                 writing_rank=dist.get_rank())
-        val_ctr_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp,
+        ctr_val_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp,
                                                             device=transformations_device)
     """
     POST TRANSFORMATIONS
@@ -381,6 +381,18 @@ def training(img_path_list: Sequence,
             val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
             world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num, debug=debug
         )
+# actually we need to put the controls in the same structures as the abnormal otherwise it might mess with DDP
+# so, the easiest would be to add a new key to the split_lists dict.
+# Maybe add a function to modify the transform dict to add the controls
+        """
+        If the ctr_split_list is not None we now create the control and training data loaders
+        """
+        if ctr_split_lists is not None:
+            ctr_train_loader, ctr_val_loader = data_loading.create_fold_dataloaders(
+                ctr_split_lists, fold, train_img_transforms,
+                val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
+                world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num, debug=debug
+            )
 
         """EPOCHS LOOP VARIABLES"""
         batches_per_epoch = len(train_loader)

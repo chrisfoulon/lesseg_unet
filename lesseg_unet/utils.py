@@ -595,7 +595,7 @@ def add_cluster_to_dict(info_dict, lesion_mask_key='label', output_cluster_name_
     -------
 
     """
-    for k in info_dict:
+    for k in tqdm(info_dict):
         if output_cluster_name_key not in info_dict[k]:
             if lesion_mask_key not in info_dict[k]:
                 raise ValueError(f'key {lesion_mask_key} not found in {k}')
