@@ -213,7 +213,7 @@ def training(img_path_list: Sequence,
             # Get the images from the image and label list and tries to match them
             img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, lbl_path_list, img_pref,
                                                                      image_cut_suffix=image_cut_suffix)
-
+            print(f'Number of images: {len(img_dict)}')
             split_lists_to_share = [utils.split_lists_in_folds(
                 img_dict, folds_number, train_val_percentage, shuffle=True)]
     else:
@@ -303,20 +303,29 @@ def training(img_path_list: Sequence,
     val_interval = 1
     # val_meh_thr = 0.7
     # val_trash_thr = 0.3
+    # If pretrained_point is not None, we will load the model from the checkpoint here because we need to know the
+    # at what fold we are
+    checkpoint_to_share = None
+    starting_fold = 0
+    if pretrained_point is not None:
+        if dist.get_rank() == 0:
+            checkpoint_to_share = [torch.load(pretrained_point, map_location="cpu")]
+        else:
+            checkpoint_to_share = [None]
+        torch.distributed.broadcast_object_list(checkpoint_to_share, src=0)
+        starting_fold = checkpoint_to_share[0]['fold']
     if stop_best_epoch != -1:
         utils.logging_rank_0(f'Will stop after {stop_best_epoch} epochs without improvement', dist.get_rank())
     for fold in range(folds_number):
+        if fold < starting_fold:
+            utils.logging_rank_0(f'Skipping fold {fold}', dist.get_rank())
+            continue
         """
         SET MODEL PARAM AND CREATE / LOAD MODEL OBJECT
         """
         utils.logging_rank_0(f'Creating monai {model_type}', dist.get_rank())
         scaler = torch.cuda.amp.GradScaler()
-        if pretrained_point is not None:
-            if dist.get_rank() == 0:
-                checkpoint_to_share = [torch.load(pretrained_point, map_location="cpu")]
-            else:
-                checkpoint_to_share = [None]
-            torch.distributed.broadcast_object_list(checkpoint_to_share, src=0)
+        if checkpoint_to_share is not None:
             checkpoint = checkpoint_to_share[0]
             hyper_params = checkpoint['hyper_params']
             model = utils.load_model_from_checkpoint(checkpoint, device, hyper_params, model_name=model_type)
@@ -652,7 +661,7 @@ def training(img_path_list: Sequence,
                             utils.tensorboard_write_rank_0(writer, 'val_best_mean_distance', best_dist.item(),
                                                            epoch + 1, dist.get_rank())
                             checkpoint_path = utils.save_checkpoint(
-                                model, epoch + 1, optimizer, scaler, hyper_params,
+                                model, epoch + 1, fold, optimizer, scaler, hyper_params,
                                 output_fold_dir, model_type, transform_dict,
                                 f'best_dice_and_dist_model_segmentation3d_epo{epoch_suffix}.pth')
                             utils.logging_rank_0(f'New best (dice and dist) model saved in {checkpoint_path}',
@@ -666,7 +675,7 @@ def training(img_path_list: Sequence,
                         # Here, only dice improved
                         else:
                             checkpoint_path = utils.save_checkpoint(
-                                model, epoch + 1, optimizer, scaler, hyper_params,
+                                model, epoch + 1, fold, optimizer, scaler, hyper_params,
                                 output_fold_dir, model_type, transform_dict,
                                 f'best_dice_model_segmentation3d_epo{epoch_suffix}.pth')
                             utils.logging_rank_0(f'New best model saved in {checkpoint_path}', dist.get_rank())
@@ -680,8 +689,12 @@ def training(img_path_list: Sequence,
                             best_epoch_count = epoch + 1 - best_metric_dist_epoch
                         else:
                             best_epoch_count = epoch + 1 - best_metric_epoch
+                        print(f'best_epoch_count: {best_epoch_count}')
+                        print(f'best_metric_epoch: {best_metric_epoch}')
+                        print(f'epoch: {epoch}')
                         str_current_epoch = (
-                                f'[Fold: {fold}]Current epoch: {epoch + 1} current mean loss: {mean_loss_val.item():.4f}'
+                                f'[Fold: {fold}]Current epoch: {epoch + 1} current mean loss: '
+                                f'{mean_loss_val.item():.4f}'
                                 f' current mean dice metric: {mean_dice_val.item()}' + mean_dist_str + '\n'
                                 + str_best_epoch + str_best_dist_epoch + '\n'
                         )
