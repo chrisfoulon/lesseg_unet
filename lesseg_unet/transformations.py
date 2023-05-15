@@ -6,13 +6,16 @@ import time
 from enum import Enum
 
 import numpy as np
+from monai.data import get_track_meta
+
 from lesseg_unet.utils import logging_rank_0
-from monai.utils import Method, fall_back_tuple
+from monai.utils import Method, fall_back_tuple, convert_to_tensor, ensure_tuple_rep
 from monai.transforms.compose import Randomizable
 from monai.transforms.inverse import InvertibleTransform
 from monai.config import KeysCollection, DtypeLike
 import torch
 from torch.nn.functional import pad
+from monai.transforms import RandRicianNoise
 from monai.transforms import (
     ToNumpyd,
     GaussianSmoothd,
@@ -339,7 +342,11 @@ class MyNormalizeIntensity(Transform):
 
     def _normalize(self, img: Union[torch.Tensor, np.ndarray], no_std: bool = True) -> Union[torch.Tensor, np.ndarray]:
         img, pkg = get_data_and_pkg(img)
-        slices = (img != 0) if self.nonzero else pkg.ones(img.shape, dtype=pkg.bool)
+        if pkg == np:
+            bool_dtype = bool
+        else:
+            bool_dtype = pkg.bool
+        slices = (img != 0) if self.nonzero else pkg.ones(img.shape, dtype=bool_dtype)
         if not pkg.any(slices):
             return img
         _sub = pkg.mean(img[slices])
@@ -442,6 +449,25 @@ class MyNormalizeIntensityd(MapTransform):
         for key in self.key_iterator(d):
             d[key] = self.normalizer(d[key])
         return d
+
+
+
+class RicianBlobRobotNoise(Transform):
+    def __init__(self):
+        super().__init__()
+    def __call__(self, img: torch.Tensor, blob_robot_img: torch.Tensor) -> torch.Tensor:
+        img = convert_to_tensor(img, track_meta=get_track_meta(), dtype=self.dtype)
+
+        if not isinstance(self.mean, (int, float)):
+            raise RuntimeError("If channel_wise is False, mean must be a float or int number.")
+        if not isinstance(self.std, (int, float)):
+            raise RuntimeError("If channel_wise is False, std must be a float or int number.")
+        std = self.std * img.std().item() if self.relative else self.std
+        if not isinstance(std, (int, float)):
+            raise RuntimeError("std must be a float or int number.")
+        img = self._add_noise(img, mean=self.mean, std=std)
+        return img
+
 
 
 class MyRandHistogramShiftd(RandomizableTransform, MapTransform):
@@ -885,3 +911,25 @@ def image_only_transformd(hyper_param_dict=None, training=True, clamping=None, d
             trans_list_from_list(seg_tr_dict['last_transform'])
         )
         return seg_transd
+
+
+def add_control_key(transform_dict):
+    """
+    Add the control key to the transform dict in every transform that has an 'image' key
+    Parameters
+    ----------
+    transform_dict: dict
+
+    Returns
+    -------
+
+    """
+    for tr in transform_dict:
+        # 'image' can be in 'keys' or 'include'
+        keys_or_include = 'keys'
+        if 'keys' not in transform_dict[tr]:
+            keys_or_include = 'include'
+        if 'image' in transform_dict[tr][keys_or_include]:
+            if 'control' not in transform_dict[tr][keys_or_include]:
+                transform_dict[tr][keys_or_include].append('control')
+    return transform_dict

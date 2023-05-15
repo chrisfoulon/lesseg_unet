@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import logging
+from copy import deepcopy
 from pathlib import Path
 from typing import Sequence, Union
 import time
@@ -213,7 +214,7 @@ def training(img_path_list: Sequence,
             # Get the images from the image and label list and tries to match them
             img_dict, controls = data_loading.match_img_seg_by_names(img_path_list, lbl_path_list, img_pref,
                                                                      image_cut_suffix=image_cut_suffix)
-            print(f'Number of images: {len(img_dict)}')
+            utils.logging_rank_0(f'##### Number of abnormal images for training: {len(img_dict)}', dist.get_rank())
             split_lists_to_share = [utils.split_lists_in_folds(
                 img_dict, folds_number, train_val_percentage, shuffle=True)]
     else:
@@ -223,7 +224,7 @@ def training(img_path_list: Sequence,
     # Save the split_lists to easily get the content of the folds and all
     with open(Path(output_dir, 'split_lists.json'), 'w+') as f:
         json.dump(split_lists, f, indent=4)
-
+    # TODO The controls could just be added to the split_lists and the control key can be added to the transforms
     """
     We want the same thing for the controls here. The input is control_list a list of dict of list like [{'image':[]}]
     If we need to create new variables for the controls, we add the prefix ctr_ to the name of the variable
@@ -269,6 +270,10 @@ def training(img_path_list: Sequence,
         model_img_size = transformations.find_param_from_hyper_dict(
             transform_dict, 'spatial_size', find_last=True)
         transformations.setup_coord_conv(transform_dict, model_img_size)
+
+    # If we use controls, we need to add 'control' to the transform_dict every time the 'image' key is used
+    if ctr_split_lists is not None:
+        transform_dict = transformations.add_control_key(transform_dict)
     # Extract all the transformations from transform_dict
     train_img_transforms = transformations.train_transformd(transform_dict, lesion_set_clamp,
                                                             device=transformations_device,
@@ -276,19 +281,11 @@ def training(img_path_list: Sequence,
     # Extract only the 'first' and 'last' transformations from transform_dict ignoring the augmentations
     val_img_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp,
                                                         device=transformations_device)
-
-    # control transforms
-    if ctr_split_lists is not None:
-        # TODO make sure all the transformations can be used with 'allow_missing_keys=True'
-        ctr_train_transforms = transformations.train_transformd(transform_dict, lesion_set_clamp,
-                                                                device=transformations_device,
-                                                                writing_rank=dist.get_rank())
-        ctr_val_transforms = transformations.val_transformd(transform_dict, lesion_set_clamp,
-                                                            device=transformations_device)
     """
     POST TRANSFORMATIONS
     """
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
+    ctr_post_trans = Compose([Activations(sigmoid=True)])
 
     """
     FOLDS LOOP VARIABLES
@@ -385,11 +382,12 @@ def training(img_path_list: Sequence,
         utils.print_rank_0('Tensorboard SummaryWriter created', dist.get_rank())
         # Creates both the training and validation loaders based on the fold number
         # (e.g. fold 0 means the first sublist of split_lists will be the validation set for this fold)
-        train_loader, val_loader = data_loading.create_fold_dataloaders(
-            split_lists, fold, train_img_transforms,
-            val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
-            world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num, debug=debug
-        )
+        if ctr_split_lists is None:
+            train_loader, val_loader = data_loading.create_fold_dataloaders(
+                split_lists, fold, train_img_transforms,
+                val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
+                world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num, debug=debug
+            )
 # actually we need to put the controls in the same structures as the abnormal otherwise it might mess with DDP
 # so, the easiest would be to add a new key to the split_lists dict.
 # Maybe add a function to modify the transform dict to add the controls
@@ -404,7 +402,6 @@ def training(img_path_list: Sequence,
             )
 
         """EPOCHS LOOP VARIABLES"""
-        batches_per_epoch = len(train_loader)
         time_list = []
         epoch_time_list = []
         str_best_epoch = ''
@@ -427,7 +424,36 @@ def training(img_path_list: Sequence,
         for epoch in range(epoch_num):
             utils.print_rank_0('-' * 10, dist.get_rank())
             utils.print_rank_0(f'epoch {epoch + 1}/{epoch_num}', dist.get_rank())
+            # If ctr_split_lists is not None we need to create a new training loader with the controls
+            if ctr_split_lists is not None:
+                # We need to add the same number of controls as the abnormal images in each fold after shuffling them
+                # The new split_list has to be shared between all the ranks
+                if pretrained_point is not None:
+                    if dist.get_rank() == 0:
+                        split_lists_with_ctr = []
+                        for i in range(len(split_lists)):
+                            ctr_fold_list = deepcopy(ctr_split_lists[i])
+                            ctr_fold_list.shuffle()
+                            split_lists_with_ctr.append(deepcopy(split_lists[i]))
+                            for img_dict in split_lists_with_ctr[i]:
+                                img_dict['control'] = ctr_fold_list.pop()
+                        split_lists_with_ctr_to_share = [split_lists_with_ctr]
+                    else:
+                        split_lists_with_ctr_to_share = [None]
+                    torch.distributed.broadcast_object_list(split_lists_with_ctr_to_share, src=0)
+                split_lists_with_ctr = split_lists_with_ctr_to_share[0]
+                train_loader, val_loader = data_loading.create_fold_dataloaders(
+                    split_lists_with_ctr, fold, train_img_transforms,
+                    val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
+                    world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num, debug=debug
+                )
+                # train_loader = data_loading.create_ctr_dataloader(
+                #     split_lists, ctr_split_lists, fold, train_img_transforms,
+                #     val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
+                #     world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num, debug=debug
+                # )
             # This is required with multi-gpu
+            batches_per_epoch = len(train_loader)
             train_loader.sampler.set_epoch(epoch)
 
             model.train()
@@ -518,6 +544,16 @@ def training(img_path_list: Sequence,
                     loss += utils.sum_non_bias_l2_norms(params, 1e-4)
 
                     scaler.scale(loss).backward()
+                    # # TODO Control loss
+                    # ctr_logit_outputs = model(controls)
+                    # # In case we use CoordConv, we only take the mask of the labels without the coordinates
+                    # # masks_only_labels = labels[:, :1, :, :, :]
+                    # # outputs_batch_images_sigmoid = sigmoid(ctr_logit_outputs)
+                    # controls_loss = torch.mean(outputs_batch_images_sigmoid) * control_weight_factor
+                    # # Regularisation
+                    # controls_loss += utils.sum_non_bias_l2_norms(params, 1e-4)
+                    #
+                    # scaler.scale(controls_loss).backward()
                     # loss.backward()
                     """
                     The different ranks are coming together here
