@@ -1193,10 +1193,10 @@ unetr_cc_resize['first_transform'][2] = {'Resized': {
 
 unetr_cc_patches = deepcopy(unetr_cc)
 del unetr_cc_patches['first_transform'][2]
-unetr_cc_patches.update({'patches': [
+unetr_cc_patches['patches'] = [
     {'RandSpatialCropSamplesd': {
         'keys': ['image', 'label'],
-        'roi_size': [80, 80, 80],
+        'roi_size': [64, 64, 64],
         'num_samples': 5,
         'random_center': True,
         'random_size': False}},
@@ -1207,18 +1207,18 @@ unetr_cc_patches.update({'patches': [
     #     'pos': 1,
     #     'neg': 1,
     #     'num_samples': 4}},
-    # {'RandFlipd': {
-    #     'keys': ["image", "label"],
-    #     'spatial_axis': [1],
-    #     'prob': low_prob}
-    # },
-    # {'RandFlipd': {
-    #     'keys': ["image", "label"],
-    #     'spatial_axis': [2],
-    #     'prob': low_prob}
-    # },
-],
-})
+    {'RandFlipd': {
+        'keys': ["image", "label"],
+        'spatial_axis': [1],
+        'prob': low_prob}
+     },
+    {'RandFlipd': {
+        'keys': ["image", "label"],
+        'spatial_axis': [2],
+        'prob': low_prob}
+     },
+]
+
 
 swinunetr_cc_patches = deepcopy(unetr_cc_patches)
 # SwinUNETR requires an images size divisible by 12 and divisible by 2 five times ... So, multiples of 32 essentially
