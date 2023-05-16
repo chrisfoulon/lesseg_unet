@@ -75,7 +75,7 @@ def main():
                                                                                        'segmentation in the '
                                                                                        'spatial_size of the model')
     parser.add_argument('-kifs', '--keep_input_folder_structure',
-                        type=str, help='Segmentation output will reflect the folder structure from'
+                        action='store_true', help='Segmentation output will reflect the folder structure from'
                                        ' the given root_folder')
 
     # Model parameters
