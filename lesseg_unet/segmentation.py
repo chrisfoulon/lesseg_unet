@@ -398,7 +398,7 @@ def segmentation_loop(img_path_list: Sequence,
                     '{}_{}'.format(str(input_filename), str(img_count)))
             for i, input_image_path in enumerate(val_data['image_meta_dict']['filename_or_obj']):
                 input_output_paths_dict[input_image_path] = output_path_list[i]
-            save_json(input_output_paths_dict, Path(output_dir, f'__input_output_paths_dict.json'))
+            save_json(Path(output_dir, f'__input_output_paths_dict.json'), input_output_paths_dict)
             with open(Path(output_dir, f'__output_image_volumes.json'), 'w+') as j:
                 json.dump(img_vol_dict, j, indent=4)
             pd.DataFrame().from_dict(img_vol_dict, orient='index').to_csv(
@@ -609,7 +609,7 @@ def validation_loop(img_path_list: Sequence,
             img_vol_dict[output_path_list[-1]] = vol_output
             for i, input_image_path in enumerate(val_data['image_meta_dict']['filename_or_obj']):
                 input_output_paths_dict[input_image_path] = output_path_list[i]
-            save_json(input_output_paths_dict, Path(output_dir, f'__input_output_paths_dict.json'))
+            save_json(Path(output_dir, f'__input_output_paths_dict.json'), input_output_paths_dict)
         mean_metric = np.mean(np.array(val_score_list))
         median = np.median(np.array(val_score_list))
         std = np.std(np.array(val_score_list))
