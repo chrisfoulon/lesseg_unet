@@ -77,6 +77,7 @@ def main():
     parser.add_argument('-kifs', '--keep_input_folder_structure',
                         type=str, help='Segmentation output will reflect the folder structure from'
                                        ' the given root_folder')
+
     # Model parameters
     parser.add_argument('-pp', '--pretrained_point', type=str, help='[Training opt]file path to a torch checkpoint file'
                                                                     ' or directory (in that case, the most recent '

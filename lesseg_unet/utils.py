@@ -657,11 +657,12 @@ def get_seg_dict(seg_folder, keys_struct=None, key_to_match='b1000', relative_pa
     If some images could not be matched, print a warning
     Parameters
     ----------
-    seg_folder
-    keys_struct: dict or list with keys to use as output keys
-    key_to_match
-    relative_paths
-    recursive
+    seg_folder: str or Path
+    keys_struct: dict or list
+        dict or list with keys to use as output keys
+    key_to_match: str
+    relative_paths: bool
+    recursive: bool
 
     Returns
     -------

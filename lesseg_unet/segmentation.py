@@ -11,6 +11,7 @@ import nibabel as nib
 import pandas as pd
 from tqdm import tqdm
 import torch
+from bcblib.tools.general_utils import save_json
 from lesseg_unet import data_loading, utils, net, transformations
 from monai.transforms.utils import allow_missing_keys_mode
 from monai.metrics import DiceMetric, HausdorffDistanceMetric
@@ -331,6 +332,7 @@ def segmentation_loop(img_path_list: Sequence,
         les_area_finder = utils.LesionAreaFinder()
     img_count = 0
     img_vol_dict = {}
+    input_output_paths_dict = {}
     with torch.no_grad():
         for val_data in tqdm(val_loader, desc=f'Segmentation '):
             img_count += 1
@@ -394,8 +396,9 @@ def segmentation_loop(img_path_list: Sequence,
                 output_path_list = utils.save_img_lbl_seg_to_nifti(
                     inputs_np, tmp, outputs_np, output_dir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(img_count)))
-
-            img_vol_dict[output_path_list[-1]] = vol_output
+            for i, input_image_path in enumerate(val_data['image_meta_dict']['filename_or_obj']):
+                input_output_paths_dict[input_image_path] = output_path_list[i]
+            save_json(input_output_paths_dict, Path(output_dir, f'__input_output_paths_dict.json'))
             with open(Path(output_dir, f'__output_image_volumes.json'), 'w+') as j:
                 json.dump(img_vol_dict, j, indent=4)
             pd.DataFrame().from_dict(img_vol_dict, orient='index').to_csv(
@@ -504,6 +507,7 @@ def validation_loop(img_path_list: Sequence,
         # img_max_num = len(train_ds) + len(val_ds)
         val_score_list = []
         val_dist_list = []
+        input_output_paths_dict = {}
         for val_data in tqdm(val_loader, desc=f'Validation '):
             inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
             input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
@@ -603,6 +607,9 @@ def validation_loop(img_path_list: Sequence,
                     inputs_np, labels_np, outputs_np, output_subdir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(img_count)))
             img_vol_dict[output_path_list[-1]] = vol_output
+            for i, input_image_path in enumerate(val_data['image_meta_dict']['filename_or_obj']):
+                input_output_paths_dict[input_image_path] = output_path_list[i]
+            save_json(input_output_paths_dict, Path(output_dir, f'__input_output_paths_dict.json'))
         mean_metric = np.mean(np.array(val_score_list))
         median = np.median(np.array(val_score_list))
         std = np.std(np.array(val_score_list))

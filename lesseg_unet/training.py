@@ -428,19 +428,18 @@ def training(img_path_list: Sequence,
             if ctr_split_lists is not None:
                 # We need to add the same number of controls as the abnormal images in each fold after shuffling them
                 # The new split_list has to be shared between all the ranks
-                if pretrained_point is not None:
-                    if dist.get_rank() == 0:
-                        split_lists_with_ctr = []
-                        for i in range(len(split_lists)):
-                            ctr_fold_list = deepcopy(ctr_split_lists[i])
-                            ctr_fold_list.shuffle()
-                            split_lists_with_ctr.append(deepcopy(split_lists[i]))
-                            for img_dict in split_lists_with_ctr[i]:
-                                img_dict['control'] = ctr_fold_list.pop()
-                        split_lists_with_ctr_to_share = [split_lists_with_ctr]
-                    else:
-                        split_lists_with_ctr_to_share = [None]
-                    torch.distributed.broadcast_object_list(split_lists_with_ctr_to_share, src=0)
+                if dist.get_rank() == 0:
+                    split_lists_with_ctr = []
+                    for i in range(len(split_lists)):
+                        ctr_fold_list = deepcopy(ctr_split_lists[i])
+                        ctr_fold_list.shuffle()
+                        split_lists_with_ctr.append(deepcopy(split_lists[i]))
+                        for img_dict in split_lists_with_ctr[i]:
+                            img_dict['control'] = ctr_fold_list.pop()
+                    split_lists_with_ctr_to_share = [split_lists_with_ctr]
+                else:
+                    split_lists_with_ctr_to_share = [None]
+                torch.distributed.broadcast_object_list(split_lists_with_ctr_to_share, src=0)
                 split_lists_with_ctr = split_lists_with_ctr_to_share[0]
                 train_loader, val_loader = data_loading.create_fold_dataloaders(
                     split_lists_with_ctr, fold, train_img_transforms,
