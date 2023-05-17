@@ -121,7 +121,7 @@ def training(img_path_list: Sequence,
              stop_best_epoch=-1,
              training_loss_fct='dice',
              val_loss_fct='dice',
-             # weight_factor=1,
+             weight_factor=1,
              folds_number=1,
              dropout=0,
              cache_dir=None,
@@ -496,6 +496,9 @@ def training(img_path_list: Sequence,
                 optimizer.zero_grad()
                 inputs, labels = batch_data['image'].to(device, non_blocking=non_blocking), batch_data['label'].to(
                     device, non_blocking=non_blocking)
+                ctr_inputs = None
+                if ctr_split_lists is not None:
+                    ctr_inputs = batch_data['control'].to(device, non_blocking=non_blocking)
                 """
                 DEBUG AND IMAGE DISPLAY BLOCK
                 """
@@ -544,6 +547,16 @@ def training(img_path_list: Sequence,
 
                     scaler.scale(loss).backward()
                     # # TODO Control loss
+                    if ctr_inputs is not None:
+                        ctr_logit_outputs = model(ctr_inputs)
+                        # In case we use CoordConv, we only take the mask of the labels without the coordinates
+                        masks_only_labels = labels[:, :1, :, :, :]
+                        outputs_batch_images_sigmoid = ctr_post_trans(ctr_logit_outputs)
+                        controls_loss = torch.mean(outputs_batch_images_sigmoid) * weight_factor
+                        # Regularisation
+                        controls_loss += utils.sum_non_bias_l2_norms(params, 1e-4)
+
+                        scaler.scale(controls_loss).backward()
                     # ctr_logit_outputs = model(controls)
                     # # In case we use CoordConv, we only take the mask of the labels without the coordinates
                     # # masks_only_labels = labels[:, :1, :, :, :]
