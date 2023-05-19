@@ -457,6 +457,7 @@ def training(img_path_list: Sequence,
 
             model.train()
             epoch_loss = 0
+            ctr_epoch_loss = 0
             step = 0
             start_time = time.time()
             loading_time = True
@@ -540,8 +541,6 @@ def training(img_path_list: Sequence,
                     # In case we use CoordConv, we only take the mask of the labels without the coordinates
                     masks_only_labels = labels[:, :1, :, :, :]
                     loss = loss_function(logit_outputs, masks_only_labels)
-                    # TODO add a control loss based on the old implementation:
-                    # controls_loss = torch.mean(outputs_batch_images_sigmoid) * control_weight_factor
                     # Regularisation
                     loss += utils.sum_non_bias_l2_norms(params, 1e-4)
 
@@ -549,24 +548,12 @@ def training(img_path_list: Sequence,
                     # # TODO Control loss
                     if ctr_inputs is not None:
                         ctr_logit_outputs = model(ctr_inputs)
-                        # In case we use CoordConv, we only take the mask of the labels without the coordinates
-                        masks_only_labels = labels[:, :1, :, :, :]
                         outputs_batch_images_sigmoid = ctr_post_trans(ctr_logit_outputs)
                         controls_loss = torch.mean(outputs_batch_images_sigmoid) * weight_factor
                         # Regularisation
                         controls_loss += utils.sum_non_bias_l2_norms(params, 1e-4)
 
                         scaler.scale(controls_loss).backward()
-                    # ctr_logit_outputs = model(controls)
-                    # # In case we use CoordConv, we only take the mask of the labels without the coordinates
-                    # # masks_only_labels = labels[:, :1, :, :, :]
-                    # # outputs_batch_images_sigmoid = sigmoid(ctr_logit_outputs)
-                    # controls_loss = torch.mean(outputs_batch_images_sigmoid) * control_weight_factor
-                    # # Regularisation
-                    # controls_loss += utils.sum_non_bias_l2_norms(params, 1e-4)
-                    #
-                    # scaler.scale(controls_loss).backward()
-                    # loss.backward()
                     """
                     The different ranks are coming together here
                     """
@@ -574,13 +561,20 @@ def training(img_path_list: Sequence,
                     scaler.step(optimizer)
                     scaler.update()
                 epoch_loss += loss
+                if ctr_inputs is not None:
+                    ctr_epoch_loss += controls_loss
                 if dist.get_rank() == 0:
                     if no_progressbar_training or dist.get_rank() != 0:
                         utils.print_rank_0(f'[{fold}]{step}/{batches_per_epoch}, train loss: {loss.item():.4f}',
                                            dist.get_rank())
                     else:
+                        ctr_desc = ''
+                        if ctr_inputs is not None:
+                            ctr_desc = f' [ctr_loss: {controls_loss.item():.4f} / {ctr_epoch_loss.item()/step:.4f}]' \
+                                       f' [sum: {loss.item() + controls_loss.item():.4f}]'
                         train_iter.set_description(
-                            f'Training[{epoch + 1}] batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss.item()/step:.4f}]')
+                            f'Training[{epoch + 1}] '
+                            f'batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss.item()/step:.4f}]' + ctr_desc)
 
             if one_loop:
                 exit()
@@ -590,10 +584,21 @@ def training(img_path_list: Sequence,
             if world_size > 1:
                 dist.all_reduce(epoch_loss, op=dist.ReduceOp.SUM)
                 epoch_loss /= world_size
+                if ctr_split_lists is not None:
+                    dist.all_reduce(ctr_epoch_loss, op=dist.ReduceOp.SUM)
+                    ctr_epoch_loss /= world_size
             mean_epoch_loss = epoch_loss.item() / step
+            ctr_mean_epoch_loss = None
+            if ctr_split_lists is not None:
+                ctr_mean_epoch_loss = ctr_epoch_loss.item() / step
             if dist.get_rank() == 0:
                 utils.logging_rank_0(f"Epoch {epoch + 1}, average loss: {mean_epoch_loss:.4f}", dist.get_rank())
                 utils.tensorboard_write_rank_0(writer, 'epoch_train_loss', mean_epoch_loss, epoch + 1, dist.get_rank())
+                if ctr_mean_epoch_loss is not None:
+                    utils.logging_rank_0(f"Epoch {epoch + 1}, average ctr loss: {ctr_mean_epoch_loss:.4f}",
+                                         dist.get_rank())
+                    utils.tensorboard_write_rank_0(writer, 'epoch_train_ctr_loss', ctr_mean_epoch_loss, epoch + 1,
+                                                   dist.get_rank())
             """
             VALIDATION LOOP
             """
@@ -606,6 +611,8 @@ def training(img_path_list: Sequence,
                     # loss_list = []
                     # val_batch_dice_list = []
                     val_epoch_dice = 0
+                    ctr_val_epoch_loss = 0
+                    ctr_val_epoch_volume = 0
                     # val_batch_dist_list = None
                     if 'dist' in val_loss_fct.lower():
                         # val_batch_dist_list = []
@@ -620,6 +627,9 @@ def training(img_path_list: Sequence,
                         val_inputs, val_labels = val_data['image'].to(
                             device, non_blocking=non_blocking), val_data['label'].to(
                             device, non_blocking=non_blocking)
+                        ctr_val_inputs = None
+                        if ctr_split_lists is not None:
+                            ctr_val_inputs = val_data['control'].to(device, non_blocking=non_blocking)
                         # In case CoordConv is used
                         with torch.cuda.amp.autocast():
                             masks_only_val_labels = val_labels[:, :1, :, :, :]
@@ -636,6 +646,28 @@ def training(img_path_list: Sequence,
                             val_output_convert = [
                                 post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
                             ]
+                            """
+                            Validation of the controls if they are present
+                            First we compute the same loss as for the training and then we count the number of 
+                            predicted voxels (non-zero) and average it over the batch
+                            """
+                            ctr_val_desc = ''
+                            if ctr_val_inputs is not None:
+                                ctr_val_outputs = model(ctr_val_inputs)
+                                ctr_val_loss = torch.mean(outputs_batch_images_sigmoid)
+                                               # * weight_factor
+                                ctr_val_outputs_list = decollate_batch(ctr_val_outputs)
+                                ctr_val_convert = [
+                                    post_trans(ctr_val_pred_tensor) for ctr_val_pred_tensor in ctr_val_outputs_list
+                                ]
+                                # For each element of ctr_val_convert, count non-zero voxels and average number over
+                                ctr_vox_count = torch.mean(torch.tensor([torch.count_nonzero(ctr_val_pred_tensor) for
+                                                                         ctr_val_pred_tensor in ctr_val_convert]))
+                                ctr_val_epoch_volume += ctr_vox_count
+                                ctr_val_epoch_loss += ctr_val_loss
+                                ctr_val_desc = f' ctr_val_loss:[{ctr_val_loss.item():.4f}]' \
+                                               f' ctr_vox_count:[{ctr_vox_count.item():.4f}]'
+
                             dice_metric(y_pred=val_output_convert, y=masks_only_val_labels)
                             dice = dice_metric.aggregate()
                             val_epoch_dice += dice
@@ -646,7 +678,8 @@ def training(img_path_list: Sequence,
                                 # val_batch_dist_list.append(distance.item())
                                 val_epoch_dist += distance
                         # val_batch_dice_list.append(dice.item())
-                        pbar.set_description(f'Val[{epoch + 1}] mean_loss:[{val_epoch_loss.item()/step}]')
+                        pbar.set_description(f'Val[{epoch + 1}] mean_loss:[{val_epoch_loss.item()/step}] '
+                                             f'{ctr_val_desc}')
 
                     """
                     GLOBAL VALIDATION MEASURES HANDLING
@@ -660,6 +693,11 @@ def training(img_path_list: Sequence,
                         if 'dist' in val_loss_fct.lower():
                             dist.all_reduce(val_epoch_dist, op=dist.ReduceOp.SUM)
                             val_epoch_dist /= world_size
+                        if ctr_val_inputs is not None:
+                            dist.all_reduce(ctr_val_epoch_loss, op=dist.ReduceOp.SUM)
+                            ctr_val_epoch_loss /= world_size
+                            dist.all_reduce(ctr_val_epoch_volume, op=dist.ReduceOp.SUM)
+                            ctr_val_epoch_volume /= world_size
 
                     val_epoch_loss /= step
                     val_epoch_dice /= step
@@ -671,6 +709,20 @@ def training(img_path_list: Sequence,
                                                    dist.get_rank())
                     utils.tensorboard_write_rank_0(writer, 'val_mean_dice', val_epoch_dice.item(), epoch + 1,
                                                    dist.get_rank())
+                    ctr_val_epoch_str = ''
+                    if ctr_val_inputs is not None:
+                        ctr_val_epoch_loss /= step
+                        ctr_val_epoch_volume /= step
+                        # mean_ctr_val_loss = ctr_val_epoch_loss
+                        # mean_ctr_val_volume = ctr_val_epoch_volume
+                        utils.tensorboard_write_rank_0(writer, 'ctr_val_loss', ctr_val_epoch_loss.item(), epoch + 1,
+                                                       dist.get_rank())
+                        utils.tensorboard_write_rank_0(writer, 'ctr_val_volume', ctr_val_epoch_volume.item(), epoch + 1,
+                                                       dist.get_rank())
+                        ctr_val_epoch_str = f'\n ctr_val_loss:[{ctr_val_epoch_loss.item():.4f}]' \
+                                            f' ctr_val_loss * {weight_factor} ' \
+                                            f'(:[{ctr_val_epoch_volume.item() * weight_factor:.4f}]' \
+                                            f' ctr_val_volume:[{ctr_val_epoch_volume.item():.4f}]'
 
                     mean_dist_val = None
                     mean_dist_str = ''
@@ -744,7 +796,7 @@ def training(img_path_list: Sequence,
                                 f'[Fold: {fold}]Current epoch: {epoch + 1} current mean loss: '
                                 f'{mean_loss_val.item():.4f}'
                                 f' current mean dice metric: {mean_dice_val.item()}' + mean_dist_str + '\n'
-                                + str_best_epoch + str_best_dist_epoch + '\n'
+                                + str_best_epoch + str_best_dist_epoch + ctr_val_epoch_str + '\n'
                         )
                         print(str_current_epoch)
                         print(f'It has been [{best_epoch_count}] since a best epoch has been found')
