@@ -87,7 +87,8 @@ def create_training_data_loader(train_ds: monai.data.Dataset,
         shuffle=shuffle,
         drop_last=True,
         num_workers=dataloader_workers,
-        pin_memory=torch.cuda.is_available(),
+        pin_memory=False,
+        # pin_memory=torch.cuda.is_available(),
         persistent_workers=persistent_workers,
         sampler=sampler,
         # TODO check which number is faster
@@ -102,13 +103,15 @@ def create_validation_data_loader(val_ds: monai.data.Dataset,
                                   sampler=None):
     print('Creating validation data loader')
     val_loader = DataLoader(val_ds, batch_size=batch_size, num_workers=dataloader_workers,
-                            pin_memory=torch.cuda.is_available(), persistent_workers=True, sampler=sampler)
+                            pin_memory=False,
+                            # pin_memory=torch.cuda.is_available(),
+                            persistent_workers=True, sampler=sampler)
     return val_loader
 
 
 def data_loader_checker_first(check_ds, set_name=''):
     # use batch_size=2 to load images and use RandCropByPosNegLabeld to generate 2 x 4 images for network training
-    check_loader = DataLoader(check_ds, batch_size=1, num_workers=2, pin_memory=torch.cuda.is_available(),
+    check_loader = DataLoader(check_ds, batch_size=1, num_workers=2, pin_memory=False,
                               collate_fn=list_data_collate, persistent_workers=False)
     first_dict = monai.utils.misc.first(check_loader)
     img_batch, seg_batch = first_dict['image'], first_dict['label']
@@ -168,7 +171,7 @@ def init_segmentation(img_path_list: Sequence,
 
 def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_transforms, batch_size,
                             dataloader_workers, val_batch_size=1, cache_dir=None, world_size=1, rank=0,
-                            shuffle_training=True, cache_num=None, debug=False):
+                            shuffle_training=True, cache_num=None, training_persistent_workers=True, debug=False):
     train_data_list = []
     val_data_list = []
     for ind, chunk in enumerate(split_lists):
@@ -215,7 +218,8 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
     # val_ds = Dataset(val_data_list, transform=val_img_transforms)
     # data_loader_checker_first(train_ds, 'validation')
     train_loader = create_training_data_loader(train_ds, batch_size, dataloader_workers,
-                                               sampler=train_sampler, shuffle=shuffle_training)
+                                               sampler=train_sampler, shuffle=shuffle_training,
+                                               persistent_workers=training_persistent_workers)
     val_loader = create_validation_data_loader(val_ds, val_batch_size, dataloader_workers, sampler=val_sampler)
 
     return train_loader, val_loader

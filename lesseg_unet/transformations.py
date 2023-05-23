@@ -924,12 +924,15 @@ def add_control_key(transform_dict):
     -------
 
     """
-    for tr in transform_dict:
-        # 'image' can be in 'keys' or 'include'
-        keys_or_include = 'keys'
-        if 'keys' not in transform_dict[tr]:
-            keys_or_include = 'include'
-        if 'image' in transform_dict[tr][keys_or_include]:
-            if 'control' not in transform_dict[tr][keys_or_include]:
-                transform_dict[tr][keys_or_include].append('control')
+    for tr_list in transform_dict:
+        for tr_dict in transform_dict[tr_list]:
+            for tr in tr_dict:
+                # 'image' can be in 'keys' or 'include'
+                keys_or_include = 'keys'
+                if 'keys' not in tr_dict[tr]:
+                    keys_or_include = 'include'
+                if 'image' in tr_dict[tr][keys_or_include]:
+                    if 'control' not in tr_dict[tr][keys_or_include]:
+                        tr_dict[tr][keys_or_include].append('control')
+
     return transform_dict

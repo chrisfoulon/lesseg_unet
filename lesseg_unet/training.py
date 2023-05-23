@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import shutil
 import logging
 from copy import deepcopy
@@ -132,6 +133,12 @@ def training(img_path_list: Sequence,
              debug=False,
              **kwargs
              ):
+    import resource
+    rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    print("LIMIT before: {}".format(rlimit))
+    resource.setrlimit(resource.RLIMIT_NOFILE, (40000, rlimit[1]))
+    rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    print("LIMIT after: {}".format(rlimit))
     shuffle_training = True
     display_training = False
     if 'display_training' in kwargs:
@@ -232,9 +239,9 @@ def training(img_path_list: Sequence,
     ctr_split_lists = None
     if ctr_path_list is not None:
         if dist.get_rank() == 0:
-            ctr_dict = {'image': p for p in ctr_path_list}
+            utils.logging_rank_0(f'##### Number of control images for training: {len(ctr_path_list)}', dist.get_rank())
             split_lists_to_share = [utils.split_lists_in_folds(
-                ctr_dict, folds_number, train_val_percentage, shuffle=True)]
+                ctr_path_list, folds_number, train_val_percentage, shuffle=True, image_key='control')]
         else:
             split_lists_to_share = [None]
         torch.distributed.broadcast_object_list(split_lists_to_share, src=0)
@@ -388,18 +395,6 @@ def training(img_path_list: Sequence,
                 val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
                 world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num, debug=debug
             )
-# actually we need to put the controls in the same structures as the abnormal otherwise it might mess with DDP
-# so, the easiest would be to add a new key to the split_lists dict.
-# Maybe add a function to modify the transform dict to add the controls
-        """
-        If the ctr_split_list is not None we now create the control and training data loaders
-        """
-        if ctr_split_lists is not None:
-            ctr_train_loader, ctr_val_loader = data_loading.create_fold_dataloaders(
-                ctr_split_lists, fold, train_img_transforms,
-                val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
-                world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num, debug=debug
-            )
 
         """EPOCHS LOOP VARIABLES"""
         time_list = []
@@ -432,10 +427,10 @@ def training(img_path_list: Sequence,
                     split_lists_with_ctr = []
                     for i in range(len(split_lists)):
                         ctr_fold_list = deepcopy(ctr_split_lists[i])
-                        ctr_fold_list.shuffle()
+                        random.shuffle(ctr_fold_list)
                         split_lists_with_ctr.append(deepcopy(split_lists[i]))
                         for img_dict in split_lists_with_ctr[i]:
-                            img_dict['control'] = ctr_fold_list.pop()
+                            img_dict.update(ctr_fold_list.pop())
                     split_lists_with_ctr_to_share = [split_lists_with_ctr]
                 else:
                     split_lists_with_ctr_to_share = [None]
@@ -444,8 +439,14 @@ def training(img_path_list: Sequence,
                 train_loader, val_loader = data_loading.create_fold_dataloaders(
                     split_lists_with_ctr, fold, train_img_transforms,
                     val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
-                    world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num, debug=debug
+                    world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num,
+                    training_persistent_workers=False, debug=debug
                 )
+
+                print('#################DEBUG#################')
+                print('Train loader length: ', len(train_loader))
+                print('Val loader length: ', len(val_loader))
+                print('#################DEBUG#################')
                 # train_loader = data_loading.create_ctr_dataloader(
                 #     split_lists, ctr_split_lists, fold, train_img_transforms,
                 #     val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
@@ -470,11 +471,11 @@ def training(img_path_list: Sequence,
             else:
                 train_iter = train_loader
             no_progressbar_training = False
-            if 'no_progressbar_training' in kwargs:
-                v = kwargs['no_progressbar_training']
-                if v == 'True' or v == 0:
-                    train_iter = train_loader
-                    no_progressbar_training = True
+            # if 'no_progressbar_training' in kwargs:
+            #     v = kwargs['no_progressbar_training']
+            #     if v == 'True' or v == 0:
+            #         train_iter = train_loader
+            #         no_progressbar_training = True
             """
             INNER TRAINING LOOP
             """

@@ -62,7 +62,7 @@ def main():
     parser.add_argument('-wf', '--weight_factor', type=float, default=1,
                         help='Multiply the control loss by this factor')
     # Parameters for control data
-    parser.add_argument('-ctr_pref', '--control_image_prefix', type=str,
+    parser.add_argument('-ctr_pref', '--ctrl_image_prefix', type=str,
                         help='Define a prefix to filter the control images')
     # Segmentation parameters
     parser.add_argument('-pt', '--checkpoint', type=str, help='file path to a torch checkpoint file'
