@@ -664,7 +664,8 @@ def training(img_path_list: Sequence,
                                 ]
                                 # For each element of ctr_val_convert, count non-zero voxels and average number over
                                 ctr_vox_count = torch.mean(torch.tensor([torch.count_nonzero(ctr_val_pred_tensor) for
-                                                                         ctr_val_pred_tensor in ctr_val_convert]))
+                                                                         ctr_val_pred_tensor in ctr_val_convert]),
+                                                           dtype=torch.float32)
                                 ctr_val_epoch_volume += ctr_vox_count
                                 ctr_val_epoch_loss += ctr_val_loss
                                 ctr_val_desc = f' ctr_val_loss:[{ctr_val_loss.item():.4f}]' \
