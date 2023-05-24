@@ -443,10 +443,6 @@ def training(img_path_list: Sequence,
                     training_persistent_workers=False, debug=debug
                 )
 
-                print('#################DEBUG#################')
-                print('Train loader length: ', len(train_loader))
-                print('Val loader length: ', len(val_loader))
-                print('#################DEBUG#################')
                 # train_loader = data_loading.create_ctr_dataloader(
                 #     split_lists, ctr_split_lists, fold, train_img_transforms,
                 #     val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
@@ -656,7 +652,7 @@ def training(img_path_list: Sequence,
                             ctr_val_desc = ''
                             if ctr_val_inputs is not None:
                                 ctr_val_outputs = model(ctr_val_inputs)
-                                ctr_val_loss = torch.mean(outputs_batch_images_sigmoid)
+                                ctr_val_loss = torch.mean(outputs_batch_images_sigmoid).to(device)
                                                # * weight_factor
                                 ctr_val_outputs_list = decollate_batch(ctr_val_outputs)
                                 ctr_val_convert = [
@@ -665,7 +661,7 @@ def training(img_path_list: Sequence,
                                 # For each element of ctr_val_convert, count non-zero voxels and average number over
                                 ctr_vox_count = torch.mean(torch.tensor([torch.count_nonzero(ctr_val_pred_tensor) for
                                                                          ctr_val_pred_tensor in ctr_val_convert]),
-                                                           dtype=torch.float32)
+                                                           dtype=torch.float32).to(device)
                                 ctr_val_epoch_volume += ctr_vox_count
                                 ctr_val_epoch_loss += ctr_val_loss
                                 ctr_val_desc = f' ctr_val_loss:[{ctr_val_loss.item():.4f}]' \
