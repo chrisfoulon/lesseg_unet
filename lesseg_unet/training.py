@@ -538,6 +538,7 @@ def training(img_path_list: Sequence,
                         continue
 
                 with torch.cuda.amp.autocast():
+                    # TODO Look up gradient accumulation
                     logit_outputs = model(inputs)
                     # In case we use CoordConv, we only take the mask of the labels without the coordinates
                     masks_only_labels = labels[:, :1, :, :, :]
