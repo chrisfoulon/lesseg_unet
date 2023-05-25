@@ -396,6 +396,7 @@ def segmentation_loop(img_path_list: Sequence,
                 output_path_list = utils.save_img_lbl_seg_to_nifti(
                     inputs_np, tmp, outputs_np, output_dir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(img_count)))
+            img_vol_dict[output_path_list[-1]] = vol_output
             for i, input_image_path in enumerate(val_data['image_meta_dict']['filename_or_obj']):
                 input_output_paths_dict[input_image_path] = output_path_list[i]
             save_json(Path(output_dir, f'__input_output_paths_dict.json'), input_output_paths_dict)

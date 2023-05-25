@@ -88,6 +88,9 @@ def main():
                                                                'torch.device()')
     parser.add_argument('-dropout', type=float, help='Set a dropout value for the model')
     parser.add_argument('-fs', '--feature_size', type=int, help='Set the feature size for (SWIN)UNETR')
+    # Gradient accumulation
+    parser.add_argument('-ga', '--gradient_accumulation', type=int, default=1,
+                        help='Number of batches to accumulate before performing a backward/update pass')
     # Files split and matching options
     parser.add_argument('-tv', '--train_val', type=int, help='Training / validation percentage cut')
     parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
@@ -103,6 +106,8 @@ def main():
                         help='Cache the non-random transformation in cache in output directory')
     parser.add_argument('-cn', '--cache_num', type=int, default=0,
                         help='Number of images to be cached with CacheDataset (default)')
+    parser.add_argument('-cr', '--cache_rate', type=int, default=0,
+                        help='Rate cached images with CacheDataset (default)')
     # Epochs parameters
     parser.add_argument('-ne', '--num_epochs', default=50, type=int, help='Number of epochs')
     parser.add_argument('-sbe', '--stop_best_epoch', type=int, help='Number of epochs without improvement before it '
@@ -337,6 +342,7 @@ def main_worker(local_rank, args, kwargs):
                           batch_size=args.batch_size,
                           val_batch_size=args.val_batch_size,
                           epoch_num=args.num_epochs,
+                          gradient_accumulation_steps=args.gradient_accumulation_steps,
                           dataloader_workers=args.num_workers,
                           train_val_percentage=train_val_percentage,
                           lesion_set_clamp=clamp_lesion_set,

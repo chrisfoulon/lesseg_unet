@@ -114,6 +114,7 @@ def training(img_path_list: Sequence,
              batch_size: int = 1,
              val_batch_size: int = 1,
              epoch_num: int = 50,
+             gradient_accumulation_steps: int = 1,
              dataloader_workers: int = 4,
              train_val_percentage=80,
              lesion_set_clamp=None,
@@ -491,7 +492,6 @@ def training(img_path_list: Sequence,
                         dist.get_rank())
                     loading_time = False
                 step += 1
-                optimizer.zero_grad()
                 inputs, labels = batch_data['image'].to(device, non_blocking=non_blocking), batch_data['label'].to(
                     device, non_blocking=non_blocking)
                 ctr_inputs = None
@@ -540,24 +540,32 @@ def training(img_path_list: Sequence,
                     masks_only_labels = labels[:, :1, :, :, :]
                     loss = loss_function(logit_outputs, masks_only_labels)
                     # Regularisation
-                    loss += utils.sum_non_bias_l2_norms(params, 1e-4)
+                    l2_reg = utils.sum_non_bias_l2_norms(params, 1e-4)
+                    loss += l2_reg
 
-                    scaler.scale(loss).backward()
-                    # # TODO Control loss
+                    controls_loss = None
                     if ctr_inputs is not None:
                         ctr_logit_outputs = model(ctr_inputs)
                         outputs_batch_images_sigmoid = ctr_post_trans(ctr_logit_outputs)
                         controls_loss = torch.mean(outputs_batch_images_sigmoid) * weight_factor
                         # Regularisation
-                        controls_loss += utils.sum_non_bias_l2_norms(params, 1e-4)
+                        controls_loss += l2_reg
 
-                        scaler.scale(controls_loss).backward()
-                    """
-                    The different ranks are coming together here
-                    """
+                # No need to autocast the scaler stuff
+                scaler.scale(loss).backward()
+                if controls_loss is not None:
+                    scaler.scale(controls_loss).backward()
+                """
+                The different ranks are coming together here
+                """
+                if epoch % gradient_accumulation_steps == 0:
                     # optimizer.step()
                     scaler.step(optimizer)
                     scaler.update()
+                    optimizer.zero_grad()
+                """
+                Progress and other str formatting
+                """
                 epoch_loss += loss
                 if ctr_inputs is not None:
                     ctr_epoch_loss += controls_loss
@@ -569,7 +577,7 @@ def training(img_path_list: Sequence,
                         ctr_desc = ''
                         if ctr_inputs is not None:
                             ctr_desc = f' [ctr_loss: {controls_loss.item():.4f} / {ctr_epoch_loss.item()/step:.4f}]' \
-                                       f' [sum: {loss.item() + controls_loss.item():.4f}]'
+                                       f' [losses sum: {loss.item() + controls_loss.item():.4f}]'
                         train_iter.set_description(
                             f'Training[{epoch + 1}] '
                             f'batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss.item()/step:.4f}]' + ctr_desc)
@@ -600,7 +608,7 @@ def training(img_path_list: Sequence,
             """
             VALIDATION LOOP
             """
-            if (epoch + 1) % val_interval == 0:
+            if epoch % gradient_accumulation_steps == 0:
                 # if (epoch + 1) % val_interval == 0 and dist.get_rank() == 0:
                 model.eval()
                 with torch.no_grad():
@@ -708,6 +716,9 @@ def training(img_path_list: Sequence,
                                                    dist.get_rank())
                     utils.tensorboard_write_rank_0(writer, 'val_mean_dice', val_epoch_dice.item(), epoch + 1,
                                                    dist.get_rank())
+                    """
+                    CONTROL VALIDATION MEASURES HANDLING
+                    """
                     ctr_val_epoch_str = ''
                     if ctr_val_inputs is not None:
                         ctr_val_epoch_loss /= step
@@ -718,14 +729,16 @@ def training(img_path_list: Sequence,
                                                        dist.get_rank())
                         utils.tensorboard_write_rank_0(writer, 'ctr_val_volume', ctr_val_epoch_volume.item(), epoch + 1,
                                                        dist.get_rank())
-                        ctr_val_epoch_str = f'\n ctr_val_loss:[{ctr_val_epoch_loss.item():.4f}]' \
-                                            f' ctr_val_loss * {weight_factor} ' \
-                                            f'(:[{ctr_val_epoch_volume.item() * weight_factor:.4f}]' \
+                        ctr_val_epoch_str = f'\nctr_val_loss:[{ctr_val_epoch_loss.item():.4f}]' \
+                                            f' (ctr_val_loss * {weight_factor} ' \
+                                            f':[{ctr_val_epoch_loss.item() * weight_factor:.4f}])' \
                                             f' ctr_val_volume:[{ctr_val_epoch_volume.item():.4f}]'
 
+                    """
+                    DISTANCE VALIDATION MEASURES HANDLING
+                    """
                     mean_dist_val = None
                     mean_dist_str = ''
-
                     if 'dist' in val_loss_fct.lower():
                         val_epoch_dist /= step
                         mean_dist_val = val_epoch_dist
@@ -769,7 +782,7 @@ def training(img_path_list: Sequence,
                                     f'\n{best_epoch_pref_str} {best_metric_dist_epoch} '
                                     # f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
                                     f'Dice metric {best_dice.item():.4f} / mean loss {val_epoch_loss.item()}'
-                                    + best_dist_str
+                                    + best_dist_str + ctr_val_epoch_str
                             )
                         # Here, only dice improved
                         else:
@@ -782,20 +795,22 @@ def training(img_path_list: Sequence,
                                 f'\n{best_epoch_pref_str} {best_metric_epoch} '
                                 # f'metric {best_metric:.4f}/distance {best_distance}/avgloss {best_avg_loss}\n'
                                 f'Dice metric {best_dice.item():.4f} / mean loss {best_avg_loss.item()}'
+                                + ctr_val_epoch_str
                             )
                     if rank == 0:
-                        if keep_dice_and_dist:
+                        if 'dist' in val_loss_fct.lower():
                             best_epoch_count = epoch + 1 - best_metric_dist_epoch
                         else:
                             best_epoch_count = epoch + 1 - best_metric_epoch
                         print(f'best_epoch_count: {best_epoch_count}')
                         print(f'best_metric_epoch: {best_metric_epoch}')
                         print(f'epoch: {epoch}')
+                        current_ctr_val_perf_str = f' current control perf: {ctr_val_epoch_str}'
                         str_current_epoch = (
                                 f'[Fold: {fold}]Current epoch: {epoch + 1} current mean loss: '
                                 f'{mean_loss_val.item():.4f}'
-                                f' current mean dice metric: {mean_dice_val.item()}' + mean_dist_str + '\n'
-                                + str_best_epoch + str_best_dist_epoch + ctr_val_epoch_str + '\n'
+                                f' current mean dice metric: {mean_dice_val.item()}' + mean_dist_str +
+                                current_ctr_val_perf_str + '\n' + str_best_epoch + str_best_dist_epoch + '\n'
                         )
                         print(str_current_epoch)
                         print(f'It has been [{best_epoch_count}] since a best epoch has been found')
