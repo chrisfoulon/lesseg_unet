@@ -707,6 +707,9 @@ def training(img_path_list: Sequence,
                                                    dist.get_rank())
                     utils.tensorboard_write_rank_0(writer, 'val_mean_dice', val_epoch_dice.item(), epoch + 1,
                                                    dist.get_rank())
+                    """
+                    CONTROL VALIDATION MEASURES HANDLING
+                    """
                     ctr_val_epoch_str = ''
                     if ctr_val_inputs is not None:
                         ctr_val_epoch_loss /= step
@@ -717,14 +720,16 @@ def training(img_path_list: Sequence,
                                                        dist.get_rank())
                         utils.tensorboard_write_rank_0(writer, 'ctr_val_volume', ctr_val_epoch_volume.item(), epoch + 1,
                                                        dist.get_rank())
-                        ctr_val_epoch_str = f'\n ctr_val_loss:[{ctr_val_epoch_loss.item():.4f}]' \
-                                            f' ctr_val_loss * {weight_factor} ' \
-                                            f'(:[{ctr_val_epoch_volume.item() * weight_factor:.4f}]' \
+                        ctr_val_epoch_str = f'\nctr_val_loss:[{ctr_val_epoch_loss.item():.4f}]' \
+                                            f' (ctr_val_loss * {weight_factor} ' \
+                                            f':[{ctr_val_epoch_loss.item() * weight_factor:.4f}])' \
                                             f' ctr_val_volume:[{ctr_val_epoch_volume.item():.4f}]'
 
+                    """
+                    DISTANCE VALIDATION MEASURES HANDLING
+                    """
                     mean_dist_val = None
                     mean_dist_str = ''
-
                     if 'dist' in val_loss_fct.lower():
                         val_epoch_dist /= step
                         mean_dist_val = val_epoch_dist
@@ -768,7 +773,7 @@ def training(img_path_list: Sequence,
                                     f'\n{best_epoch_pref_str} {best_metric_dist_epoch} '
                                     # f'metric {best_metric:.4f}/dist {best_distance}/avgloss {best_avg_loss}\n'
                                     f'Dice metric {best_dice.item():.4f} / mean loss {val_epoch_loss.item()}'
-                                    + best_dist_str
+                                    + best_dist_str + ctr_val_epoch_str
                             )
                         # Here, only dice improved
                         else:
@@ -781,20 +786,22 @@ def training(img_path_list: Sequence,
                                 f'\n{best_epoch_pref_str} {best_metric_epoch} '
                                 # f'metric {best_metric:.4f}/distance {best_distance}/avgloss {best_avg_loss}\n'
                                 f'Dice metric {best_dice.item():.4f} / mean loss {best_avg_loss.item()}'
+                                + ctr_val_epoch_str
                             )
                     if rank == 0:
-                        if keep_dice_and_dist:
+                        if 'dist' in val_loss_fct.lower():
                             best_epoch_count = epoch + 1 - best_metric_dist_epoch
                         else:
                             best_epoch_count = epoch + 1 - best_metric_epoch
                         print(f'best_epoch_count: {best_epoch_count}')
                         print(f'best_metric_epoch: {best_metric_epoch}')
                         print(f'epoch: {epoch}')
+                        current_ctr_val_perf_str = f' current control perf: {ctr_val_epoch_str}'
                         str_current_epoch = (
                                 f'[Fold: {fold}]Current epoch: {epoch + 1} current mean loss: '
                                 f'{mean_loss_val.item():.4f}'
-                                f' current mean dice metric: {mean_dice_val.item()}' + mean_dist_str + '\n'
-                                + str_best_epoch + str_best_dist_epoch + ctr_val_epoch_str + '\n'
+                                f' current mean dice metric: {mean_dice_val.item()}' + mean_dist_str +
+                                current_ctr_val_perf_str + '\n' + str_best_epoch + str_best_dist_epoch + '\n'
                         )
                         print(str_current_epoch)
                         print(f'It has been [{best_epoch_count}] since a best epoch has been found')
