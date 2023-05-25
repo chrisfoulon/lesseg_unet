@@ -170,8 +170,8 @@ def init_segmentation(img_path_list: Sequence,
 
 
 def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_transforms, batch_size,
-                            dataloader_workers, val_batch_size=1, cache_dir=None, world_size=1, rank=0,
-                            shuffle_training=True, cache_num=None, training_persistent_workers=True, debug=False):
+                            dataloader_workers, val_batch_size=1, cache_dir=None, cache_rate=0, world_size=1, rank=0,
+                            shuffle_training=True, cache_num=None, training_persistent_workers=True):
     train_data_list = []
     val_data_list = []
     for ind, chunk in enumerate(split_lists):
@@ -183,10 +183,6 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
     if cache_dir is not None:
         train_ds = PersistentDataset(train_data_list, transform=train_img_transforms, cache_dir=cache_dir)
     else:
-        if debug:
-            cache_rate = 0
-        else:
-            cache_rate = 1
         if cache_num is None:
             cache_num = len(train_data_list)
         train_ds = CacheDataset(train_data_list, transform=train_img_transforms, cache_num=cache_num,
@@ -198,10 +194,6 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
     if cache_dir is not None:
         val_ds = PersistentDataset(val_data_list, transform=val_img_transforms, cache_dir=cache_dir)
     else:
-        if debug:
-            cache_rate = 0
-        else:
-            cache_rate = 1
         # val_ds = CacheDataset(val_data_list, transform=val_img_transforms, cache_num=cache_num,
         val_ds = CacheDataset(val_data_list, transform=val_img_transforms, cache_rate=cache_rate)
     if world_size > 0:

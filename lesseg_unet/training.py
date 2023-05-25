@@ -114,6 +114,7 @@ def training(img_path_list: Sequence,
              batch_size: int = 1,
              val_batch_size: int = 1,
              epoch_num: int = 50,
+             gradient_accumulation_steps: int = 1,
              dataloader_workers: int = 4,
              train_val_percentage=80,
              lesion_set_clamp=None,
@@ -491,7 +492,6 @@ def training(img_path_list: Sequence,
                         dist.get_rank())
                     loading_time = False
                 step += 1
-                optimizer.zero_grad()
                 inputs, labels = batch_data['image'].to(device, non_blocking=non_blocking), batch_data['label'].to(
                     device, non_blocking=non_blocking)
                 ctr_inputs = None
@@ -539,24 +539,32 @@ def training(img_path_list: Sequence,
                     masks_only_labels = labels[:, :1, :, :, :]
                     loss = loss_function(logit_outputs, masks_only_labels)
                     # Regularisation
-                    loss += utils.sum_non_bias_l2_norms(params, 1e-4)
+                    l2_reg = utils.sum_non_bias_l2_norms(params, 1e-4)
+                    loss += l2_reg
 
-                    scaler.scale(loss).backward()
-                    # # TODO Control loss
+                    controls_loss = None
                     if ctr_inputs is not None:
                         ctr_logit_outputs = model(ctr_inputs)
                         outputs_batch_images_sigmoid = ctr_post_trans(ctr_logit_outputs)
                         controls_loss = torch.mean(outputs_batch_images_sigmoid) * weight_factor
                         # Regularisation
-                        controls_loss += utils.sum_non_bias_l2_norms(params, 1e-4)
+                        controls_loss += l2_reg
 
-                        scaler.scale(controls_loss).backward()
-                    """
-                    The different ranks are coming together here
-                    """
+                # No need to autocast the scaler stuff
+                scaler.scale(loss).backward()
+                if controls_loss is not None:
+                    scaler.scale(controls_loss).backward()
+                """
+                The different ranks are coming together here
+                """
+                if epoch % gradient_accumulation_steps == 0:
                     # optimizer.step()
                     scaler.step(optimizer)
                     scaler.update()
+                    optimizer.zero_grad()
+                """
+                Progress and other str formatting
+                """
                 epoch_loss += loss
                 if ctr_inputs is not None:
                     ctr_epoch_loss += controls_loss
@@ -568,7 +576,7 @@ def training(img_path_list: Sequence,
                         ctr_desc = ''
                         if ctr_inputs is not None:
                             ctr_desc = f' [ctr_loss: {controls_loss.item():.4f} / {ctr_epoch_loss.item()/step:.4f}]' \
-                                       f' [sum: {loss.item() + controls_loss.item():.4f}]'
+                                       f' [losses sum: {loss.item() + controls_loss.item():.4f}]'
                         train_iter.set_description(
                             f'Training[{epoch + 1}] '
                             f'batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss.item()/step:.4f}]' + ctr_desc)
@@ -599,7 +607,7 @@ def training(img_path_list: Sequence,
             """
             VALIDATION LOOP
             """
-            if (epoch + 1) % val_interval == 0:
+            if epoch % gradient_accumulation_steps == 0:
                 # if (epoch + 1) % val_interval == 0 and dist.get_rank() == 0:
                 model.eval()
                 with torch.no_grad():
