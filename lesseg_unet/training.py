@@ -394,7 +394,7 @@ def training(img_path_list: Sequence,
             train_loader, val_loader = data_loading.create_fold_dataloaders(
                 split_lists, fold, train_img_transforms,
                 val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
-                world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num, debug=debug
+                world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num
             )
 
         """EPOCHS LOOP VARIABLES"""
@@ -441,13 +441,13 @@ def training(img_path_list: Sequence,
                     split_lists_with_ctr, fold, train_img_transforms,
                     val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
                     world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num,
-                    training_persistent_workers=False, debug=debug
+                    training_persistent_workers=False
                 )
 
                 # train_loader = data_loading.create_ctr_dataloader(
                 #     split_lists, ctr_split_lists, fold, train_img_transforms,
                 #     val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
-                #     world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num, debug=debug
+                #     world_size, dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num
                 # )
             # This is required with multi-gpu
             batches_per_epoch = len(train_loader)
