@@ -452,6 +452,7 @@ def training(img_path_list: Sequence,
                 # )
             # This is required with multi-gpu
             batches_per_epoch = len(train_loader)
+            optimizer.zero_grad()
             if world_size > 1:
                 train_loader.sampler.set_epoch(epoch)
 
