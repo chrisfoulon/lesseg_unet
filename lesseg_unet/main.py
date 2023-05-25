@@ -76,7 +76,7 @@ def main():
                                                                                        'spatial_size of the model')
     parser.add_argument('-kifs', '--keep_input_folder_structure',
                         action='store_true', help='Segmentation output will reflect the folder structure from'
-                                       ' the given root_folder')
+                                                  ' the given root_folder')
 
     # Model parameters
     parser.add_argument('-pp', '--pretrained_point', type=str, help='[Training opt]file path to a torch checkpoint file'
@@ -342,7 +342,7 @@ def main_worker(local_rank, args, kwargs):
                           batch_size=args.batch_size,
                           val_batch_size=args.val_batch_size,
                           epoch_num=args.num_epochs,
-                          gradient_accumulation_steps=args.gradient_accumulation_steps,
+                          gradient_accumulation_steps=args.gradient_accumulation,
                           dataloader_workers=args.num_workers,
                           train_val_percentage=train_val_percentage,
                           lesion_set_clamp=clamp_lesion_set,
