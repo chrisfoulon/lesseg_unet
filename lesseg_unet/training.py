@@ -481,8 +481,6 @@ def training(img_path_list: Sequence,
             if display_training:
                 print(train_img_transforms.transforms)
             for batch_data in train_iter:
-
-                optimizer.zero_grad()
                 # TODO print image names both in training and validation loop
                 # TODO Try to resume the model but mess up with the label (zero_like / one_like)
                 # TODO turn off the augmentations
@@ -547,6 +545,8 @@ def training(img_path_list: Sequence,
                     l2_reg = utils.sum_non_bias_l2_norms(params, 1e-4)
                     loss += l2_reg
 
+                scaler.scale(loss).backward()
+                with torch.cuda.amp.autocast():
                     controls_loss = None
                     if ctr_inputs is not None:
                         ctr_logit_outputs = model(ctr_inputs)
@@ -555,8 +555,6 @@ def training(img_path_list: Sequence,
                         # Regularisation
                         controls_loss += l2_reg
 
-                # No need to autocast the scaler stuff
-                scaler.scale(loss).backward()
                 if controls_loss is not None:
                     scaler.scale(controls_loss).backward()
                 """
