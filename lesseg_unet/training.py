@@ -452,7 +452,6 @@ def training(img_path_list: Sequence,
                 # )
             # This is required with multi-gpu
             batches_per_epoch = len(train_loader)
-            optimizer.zero_grad()
             if world_size > 1:
                 train_loader.sampler.set_epoch(epoch)
 
@@ -482,6 +481,8 @@ def training(img_path_list: Sequence,
             if display_training:
                 print(train_img_transforms.transforms)
             for batch_data in train_iter:
+
+                optimizer.zero_grad()
                 # TODO print image names both in training and validation loop
                 # TODO Try to resume the model but mess up with the label (zero_like / one_like)
                 # TODO turn off the augmentations
