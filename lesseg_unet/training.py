@@ -545,8 +545,6 @@ def training(img_path_list: Sequence,
                     l2_reg = utils.sum_non_bias_l2_norms(params, 1e-4)
                     loss += l2_reg
 
-                scaler.scale(loss).backward()
-                with torch.cuda.amp.autocast():
                     controls_loss = None
                     if ctr_inputs is not None:
                         ctr_logit_outputs = model(ctr_inputs)
@@ -555,8 +553,12 @@ def training(img_path_list: Sequence,
                         # Regularisation
                         controls_loss += l2_reg
 
+                # No need to autocast the scaler stuff
                 if controls_loss is not None:
-                    scaler.scale(controls_loss).backward()
+                    mean_loss = (loss + controls_loss) / 2
+                    scaler.scale(mean_loss).backward()
+                else:
+                    scaler.scale(loss).backward()
                 """
                 The different ranks are coming together here
                 """
