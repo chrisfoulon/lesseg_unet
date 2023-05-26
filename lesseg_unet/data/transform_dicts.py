@@ -1370,19 +1370,19 @@ unetr_no_aug = {
     ],
 }
 import random
-shear_min = 0.1
-shear_max = 0.15
+shear_min = 0.05
+shear_max = 0.1
 unetr_elastic = deepcopy(unetr_no_aug)
 unetr_elastic['mid_transform'].append({'Rand3DElasticd': {
             'keys': ['image', 'label'],
-            'sigma_range': (1, 3),
-            'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
+            'sigma_range': (10, 10),
+            'magnitude_range': (5, 5),  # hyper_params['Rand3DElastic_magnitude_range']
             'prob': tiny_prob,
-            'rotate_range': (radians(15), radians(15)),
-            'shear_range': ([random.uniform(shear_min, shear_max) for i in range(6)]),
-            'translate_range': (5, 5),
-            'scale_range': (0.1, 0.1),
-            'padding_mode': "reflection",
+            # 'rotate_range': (radians(10), radians(10)),
+            # 'shear_range': ([(shear_min, shear_max) for i in range(6)]),
+            # 'translate_range': (3, 3),
+            # 'scale_range': (0.1, 0.1),
+            'padding_mode': "zeros",
             'mode': 'nearest',
             # 'padding_mode': "border",
             # 'padding_mode': "zeros"
