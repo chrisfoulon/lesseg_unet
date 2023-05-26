@@ -1369,6 +1369,26 @@ unetr_no_aug = {
         {'CoordConvd': {'keys': ['image']}}
     ],
 }
+import random
+unetr_elastic = deepcopy(unetr_no_aug)
+unetr_elastic['mid_transform'].append({'Rand3DElasticd': {
+            'keys': ['image', 'label'],
+            'sigma_range': (1, 3),
+            'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
+            'prob': tiny_prob,
+            'rotate_range': (radians(15), radians(15)),
+            # 1 tuple containing 6 random float between 0.2 and 0.3
+            'shear_range': (random.uniform(0.2, 0.3), random.uniform(0.2, 0.3),
+                            random.uniform(0.2, 0.3), random.uniform(0.2, 0.3),
+                            random.uniform(0.2, 0.3), random.uniform(0.2, 0.3)),
+            'translate_range': (5, 5),
+            'scale_range': (0.1, 0.1),
+            'padding_mode': "reflection",
+            'mode': 'nearest',
+            # 'padding_mode': "border",
+            # 'padding_mode': "zeros"
+        }
+        })
 
 unetr_gibbs = deepcopy(unetr_no_aug)
 unetr_gibbs['mid_transform'].append({
