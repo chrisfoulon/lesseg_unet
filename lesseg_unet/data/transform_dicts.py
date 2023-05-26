@@ -1067,6 +1067,9 @@ unetr_dict_lastflip = {
             'num_samples': 4}},
     ]
 }
+
+shear_min = 0.05
+shear_max = 0.1
 # low_prob = high_prob = tiny_prob = 1
 unetr_cc = {
     'first_transform': [
@@ -1092,25 +1095,25 @@ unetr_cc = {
             'prob': low_prob}
          },
         # TODO maybe 'Orientation': {} but it would interact with the flip,
-        {'RandAffined': {
-            'keys': ['image', 'label'],
-            'prob': low_prob,
-            'rotate_range': radians(5),
-            'shear_range': radians(5),
-            'translate_range': 0.05,
-            'scale_range': 0.05,
-            'padding_mode': 'border',
-            'mode': 'nearest'}  # was False
-         },
+        # {'RandAffined': {
+        #     'keys': ['image', 'label'],
+        #     'prob': low_prob,
+        #     'rotate_range': radians(5),
+        #     'shear_range': radians(5),
+        #     'translate_range': 0.05,
+        #     'scale_range': 0.05,
+        #     'padding_mode': 'border',
+        #     'mode': 'nearest'}  # was False
+        #  },
         {'Rand3DElasticd': {
             'keys': ['image', 'label'],
-            'sigma_range': (1, 3),
-            'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
+            'sigma_range': (3, 15),
+            'magnitude_range': (3, 10),  # hyper_params['Rand3DElastic_magnitude_range']
             'prob': tiny_prob,
-            'rotate_range': None,
-            'shear_range': None,
-            'translate_range': None,
-            'scale_range': None,
+            'rotate_range': (radians(1), radians(10)),
+            'shear_range': ([(shear_min, shear_max) for i in range(6)]),
+            'translate_range': (0.5, 3),
+            'scale_range': (0.02, 0.15),
             'padding_mode': "reflection",
             'mode': 'nearest',
             # 'padding_mode': "border",
@@ -1369,7 +1372,7 @@ unetr_no_aug = {
         {'CoordConvd': {'keys': ['image']}}
     ],
 }
-import random
+
 shear_min = 0.05
 shear_max = 0.1
 unetr_elastic = deepcopy(unetr_no_aug)
