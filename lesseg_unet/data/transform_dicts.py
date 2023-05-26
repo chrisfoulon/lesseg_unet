@@ -1377,7 +1377,6 @@ unetr_elastic['mid_transform'].append({'Rand3DElasticd': {
             'magnitude_range': (3, 5),  # hyper_params['Rand3DElastic_magnitude_range']
             'prob': tiny_prob,
             'rotate_range': (radians(15), radians(15)),
-            # 1 tuple containing 6 random float between 0.2 and 0.3
             'shear_range': (random.uniform(0.2, 0.3), random.uniform(0.2, 0.3),
                             random.uniform(0.2, 0.3), random.uniform(0.2, 0.3),
                             random.uniform(0.2, 0.3), random.uniform(0.2, 0.3)),

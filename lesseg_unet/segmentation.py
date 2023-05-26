@@ -280,7 +280,7 @@ def segmentation_loop(img_path_list: Sequence,
                       original_size=True,
                       clamping: tuple = None,
                       segmentation_area=True,
-                      keep_input_folder_structure=None,
+                      keep_input_folder_structure=False,
                       **kwargs):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -375,7 +375,7 @@ def segmentation_loop(img_path_list: Sequence,
                         output_subdir = Path(output_dir, cluster_name)
                     os.makedirs(output_subdir, exist_ok=True)
                 else:
-                    if keep_input_folder_structure is None:
+                    if not keep_input_folder_structure:
                         output_subdir = output_dir
                     else:
                         relative_path = Path(val_data['image_meta_dict']['filename_or_obj'][0]).parent.relative_to(
