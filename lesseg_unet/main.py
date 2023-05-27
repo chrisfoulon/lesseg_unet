@@ -68,6 +68,8 @@ def main():
     parser.add_argument('-pt', '--checkpoint', type=str, help='file path to a torch checkpoint file'
                                                               ' or directory (in that case, the most recent '
                                                               'checkpoint will be used)')
+    parser.add_argument('-om', '--output_mode', type=str, default='segmentation',
+                        help='Select the segmentation output mode (segmentation, sigmoid, logits)')
     parser.add_argument('-sa', '--segmentation_area', action='store_true', help='Associate the segmentated masks'
                                                                                 ' to lesion areas in a csv file')
     parser.add_argument('-overlap', action='store_true', help='Create the overlap of the segmentations')
@@ -125,7 +127,10 @@ def main():
     kwargs = {}
 
     # Gather input data and setup based on script arguments
-    output_root = Path(args.output)
+    if args.output_mode != 'segmentation':
+        output_root = Path(args.output + '_' + args.output_mode)
+    else:
+        output_root = Path(args.output)
 
     os.makedirs(output_root, exist_ok=True)
     # TODO FIND A SOLUTION TO WRITE IN A FILE
@@ -389,6 +394,7 @@ def main_worker(local_rank, args, kwargs):
                                                    b1000_pref,
                                                    image_cut_suffix=args.image_cut_suffix,
                                                    transform_dict=transform_dict,
+                                                   output_mode=args.output_mode,
                                                    device=args.torch_device,
                                                    dataloader_workers=args.num_workers,
                                                    clamping=clamp_tuple,
@@ -405,6 +411,7 @@ def main_worker(local_rank, args, kwargs):
                                                b1000_pref,
                                                image_cut_suffix=args.image_cut_suffix,
                                                transform_dict=transform_dict,
+                                               output_mode=args.output_mode,
                                                device=args.torch_device,
                                                dataloader_workers=args.num_workers,
                                                clamping=clamp_tuple,

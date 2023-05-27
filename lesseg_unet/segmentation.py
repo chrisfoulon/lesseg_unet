@@ -274,6 +274,7 @@ def segmentation_loop(img_path_list: Sequence,
                       img_pref: str = None,
                       image_cut_suffix=None,
                       transform_dict: dict = None,
+                      output_mode='segmentation',
                       device: str = None,
                       batch_size: int = 1,
                       dataloader_workers: int = 8,
@@ -315,15 +316,30 @@ def segmentation_loop(img_path_list: Sequence,
     model = utils.load_model_from_checkpoint(checkpoint, device, checkpoint['hyper_params'],
                                              model_name=checkpoint['model_name'])
     model.to(device)
-    post_trans = Compose([Activationsd(keys=['pred'], sigmoid=True), AsDiscreted(keys=['pred'], threshold=0.5),
-                          Invertd(
-                              keys=['pred'],  # invert the `pred` data field, also support multiple fields
-                              transform=val_ds.transform,
-                              orig_keys='image',
-                          ),
-                          # SaveImaged(keys="image", output_dir=output_subdir, output_postfix="seg", resample=False),
-                          # SaveImaged(keys="pred", output_dir=output_subdir, output_postfix="seg", resample=False)
-                          ])
+    if output_mode == 'sigmoid':
+        post_trans = Compose([Activationsd(keys=['pred'], sigmoid=True),
+                              Invertd(
+                                  keys=['pred'],  # invert the `pred` data field, also support multiple fields
+                                  transform=val_ds.transform,
+                                  orig_keys='image',
+                              )])
+    elif output_mode == 'logits':
+        post_trans = Compose([Invertd(
+                                  keys=['pred'],  # invert the `pred` data field, also support multiple fields
+                                  transform=val_ds.transform,
+                                  orig_keys='image',
+                              )])
+    else:
+        post_trans = Compose([Activationsd(keys=['pred'], sigmoid=True), AsDiscreted(keys=['pred'], threshold=0.5),
+                              Invertd(
+                                  keys=['pred'],  # invert the `pred` data field, also support multiple fields
+                                  transform=val_ds.transform,
+                                  orig_keys='image',
+                              ),
+                              # SaveImaged(keys="image", output_dir=output_subdir, output_postfix="seg", resample=False)
+                              # ,
+                              # SaveImaged(keys="pred", output_dir=output_subdir, output_postfix="seg", resample=False)
+                              ])
 
     # TODO maybe have 2 sets of post transformations. The first sigmoid and the second binarises a **copy** of the first
     model.eval()
