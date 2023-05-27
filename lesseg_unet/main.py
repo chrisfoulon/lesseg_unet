@@ -57,6 +57,8 @@ def main():
     # Losses and metric parameters
     parser.add_argument('-lfct', '--loss_function', type=str, default='dice',
                         help='Loss function used for training')
+    parser.add_argument('-ctrfct', '--ctr_loss_function', type=str, default='mean_sigmoid',
+                        help='Loss function used for training on controls')
     parser.add_argument('-vlfct', '--val_loss_function', type=str, default='dice',
                         help='Loss function used for validation')
     parser.add_argument('-wf', '--weight_factor', type=float, default=1,
@@ -355,6 +357,7 @@ def main_worker(local_rank, args, kwargs):
                           # label_smoothing=args.label_smoothing,
                           stop_best_epoch=stop_best_epoch,
                           training_loss_fct=args.loss_function,
+                          ctr_loss_fct=args.ctr_loss_function,
                           val_loss_fct=args.val_loss_function,
                           weight_factor=args.weight_factor,
                           folds_number=args.folds_number,

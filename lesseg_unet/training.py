@@ -122,6 +122,7 @@ def training(img_path_list: Sequence,
              # label_smoothing=False,
              stop_best_epoch=-1,
              training_loss_fct='dice',
+             ctr_loss_fct='mean_sigmoid',
              val_loss_fct='dice',
              weight_factor=1,
              folds_number=1,
@@ -183,6 +184,12 @@ def training(img_path_list: Sequence,
     else:
         loss_function = DiceLoss(sigmoid=True)
     utils.logging_rank_0(f'Training loss fct: {loss_function}', dist.get_rank())
+    # Controls training losses
+    if ctr_loss_fct != 'mean_sigmoid':
+        ctr_loss_function = lambda x: 1 if torch.count_nonzero(x) else 0
+    else:
+        ctr_loss_function = lambda x: torch.mean(x) * weight_factor
+
     # Validation
     if any([s in val_loss_fct.lower() for s in
             ['dice_ce', 'dicece', 'dice_ce_loss', 'diceceloss', 'dice_cross_entropy']]):
@@ -548,10 +555,14 @@ def training(img_path_list: Sequence,
                     controls_loss = None
                     if ctr_inputs is not None:
                         ctr_logit_outputs = model(ctr_inputs)
-                        outputs_batch_images_sigmoid = ctr_post_trans(ctr_logit_outputs)
-                        controls_loss = torch.mean(outputs_batch_images_sigmoid) * weight_factor
+                        if ctr_loss_fct == 'mean_sigmoid':
+                            outputs_batch_images_sigmoid = ctr_post_trans(ctr_logit_outputs)
+                            controls_loss = ctr_loss_function(outputs_batch_images_sigmoid)
+                            controls_loss += l2_reg
+                        else:
+                            outputs_batch_images_post = post_trans(ctr_logit_outputs)
+                            controls_loss = ctr_loss_function(outputs_batch_images_post)
                         # Regularisation
-                        controls_loss += l2_reg
 
                 # No need to autocast the scaler stuff
                 if controls_loss is not None:
