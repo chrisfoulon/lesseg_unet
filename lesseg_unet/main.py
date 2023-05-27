@@ -131,7 +131,7 @@ def main():
         output_root = Path(args.output + '_' + args.output_mode)
     else:
         output_root = Path(args.output)
-
+    args.output = output_root
     os.makedirs(output_root, exist_ok=True)
     # TODO FIND A SOLUTION TO WRITE IN A FILE
     if args.debug:
