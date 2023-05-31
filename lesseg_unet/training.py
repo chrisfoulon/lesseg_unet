@@ -123,7 +123,7 @@ def training(img_path_list: Sequence,
              # label_smoothing=False,
              stop_best_epoch=-1,
              training_loss_fct='dice',
-             ctr_loss_fct='mean_sigmoid',
+             ctr_loss_fct='binary_empty_label',
              val_loss_fct='dice',
              weight_factor=1,
              folds_number=1,
@@ -590,8 +590,12 @@ def training(img_path_list: Sequence,
                     else:
                         ctr_desc = ''
                         if ctr_inputs is not None:
-                            ctr_desc = f' [ctr_loss: {controls_loss.item():.4f} / {ctr_epoch_loss.item() / step:.4f}]' \
-                                       f' [losses sum: {loss.item() + controls_loss.item():.4f}]'
+                            ctr_loss_str_tmp = controls_loss.item() if isinstance(controls_loss, torch.Tensor) \
+                                else controls_loss
+                            ctr_epoch_loss_tmp = ctr_epoch_loss.item() if isinstance(ctr_epoch_loss, torch.Tensor) \
+                                else ctr_epoch_loss
+                            ctr_desc = f' [ctr_loss: {ctr_loss_str_tmp:.4f} / {ctr_epoch_loss_tmp / step:.4f}]' \
+                                       f' [losses sum: {loss.item() + ctr_loss_str_tmp:.4f}]'
                         train_iter.set_description(
                             f'Training[{epoch + 1}] '
                             f'batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss.item() / step:.4f}]' + ctr_desc)
@@ -744,9 +748,9 @@ def training(img_path_list: Sequence,
                         utils.tensorboard_write_rank_0(writer, 'ctr_val_volume', ctr_val_epoch_volume.item(), epoch + 1,
                                                        dist.get_rank())
                         ctr_val_epoch_str = f'\nctr_val_loss:[{ctr_val_epoch_loss.item():.4f}]' \
-                                            f' (ctr_val_loss * {weight_factor} ' \
-                                            f':[{ctr_val_epoch_loss.item() * weight_factor:.4f}])' \
                                             f' ctr_val_volume:[{ctr_val_epoch_volume.item():.4f}]'
+                                            # f' (ctr_val_loss * {weight_factor} ' \
+                                            # f':[{ctr_val_epoch_loss.item() * weight_factor:.4f}])' \
 
                     """
                     DISTANCE VALIDATION MEASURES HANDLING
