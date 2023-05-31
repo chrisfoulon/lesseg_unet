@@ -9,6 +9,7 @@ from typing import Sequence, Union
 import time
 import signal
 import sys
+import resource
 
 from tqdm import tqdm
 import numpy as np
@@ -26,7 +27,7 @@ from monai.transforms import (
     Compose,
 )
 from torch.utils.tensorboard import SummaryWriter
-from lesseg_unet import net, utils, data_loading, transformations
+from lesseg_unet import net, utils, data_loading, transformations, loss_and_metric
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 
@@ -135,7 +136,6 @@ def training(img_path_list: Sequence,
              debug=False,
              **kwargs
              ):
-    import resource
     rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
     print("LIMIT before: {}".format(rlimit))
     resource.setrlimit(resource.RLIMIT_NOFILE, (40000, rlimit[1]))
@@ -188,7 +188,7 @@ def training(img_path_list: Sequence,
     if ctr_loss_fct != 'mean_sigmoid':
         ctr_loss_function = lambda x: 1 if torch.count_nonzero(x) else 0
     else:
-        ctr_loss_function = lambda x: torch.mean(x) * weight_factor
+        ctr_loss_function = loss_and_metric.BinaryEmptyLabelLoss()
 
     # Validation
     if any([s in val_loss_fct.lower() for s in
@@ -560,8 +560,7 @@ def training(img_path_list: Sequence,
                             controls_loss = ctr_loss_function(outputs_batch_images_sigmoid)
                             controls_loss += l2_reg
                         else:
-                            outputs_batch_images_post = post_trans(ctr_logit_outputs)
-                            controls_loss = ctr_loss_function(outputs_batch_images_post)
+                            controls_loss = ctr_loss_function(ctr_logit_outputs)
                         # Regularisation
 
                 # No need to autocast the scaler stuff
@@ -591,11 +590,11 @@ def training(img_path_list: Sequence,
                     else:
                         ctr_desc = ''
                         if ctr_inputs is not None:
-                            ctr_desc = f' [ctr_loss: {controls_loss.item():.4f} / {ctr_epoch_loss.item()/step:.4f}]' \
+                            ctr_desc = f' [ctr_loss: {controls_loss.item():.4f} / {ctr_epoch_loss.item() / step:.4f}]' \
                                        f' [losses sum: {loss.item() + controls_loss.item():.4f}]'
                         train_iter.set_description(
                             f'Training[{epoch + 1}] '
-                            f'batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss.item()/step:.4f}]' + ctr_desc)
+                            f'batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss.item() / step:.4f}]' + ctr_desc)
 
             if one_loop:
                 exit()
@@ -676,7 +675,7 @@ def training(img_path_list: Sequence,
                             if ctr_val_inputs is not None:
                                 ctr_val_outputs = model(ctr_val_inputs)
                                 ctr_val_loss = torch.mean(outputs_batch_images_sigmoid).to(device)
-                                               # * weight_factor
+                                # * weight_factor
                                 ctr_val_outputs_list = decollate_batch(ctr_val_outputs)
                                 ctr_val_convert = [
                                     post_trans(ctr_val_pred_tensor) for ctr_val_pred_tensor in ctr_val_outputs_list
@@ -700,7 +699,7 @@ def training(img_path_list: Sequence,
                                 # val_batch_dist_list.append(distance.item())
                                 val_epoch_dist += distance
                         # val_batch_dice_list.append(dice.item())
-                        pbar.set_description(f'Val[{epoch + 1}] mean_loss:[{val_epoch_loss.item()/step}] '
+                        pbar.set_description(f'Val[{epoch + 1}] mean_loss:[{val_epoch_loss.item() / step}] '
                                              f'{ctr_val_desc}')
 
                     """
@@ -807,10 +806,10 @@ def training(img_path_list: Sequence,
                                 f'best_dice_model_segmentation3d_epo{epoch_suffix}.pth')
                             utils.logging_rank_0(f'New best model saved in {checkpoint_path}', dist.get_rank())
                             str_best_epoch = (
-                                f'\n{best_epoch_pref_str} {best_metric_epoch} '
-                                # f'metric {best_metric:.4f}/distance {best_distance}/avgloss {best_avg_loss}\n'
-                                f'Dice metric {best_dice.item():.4f} / mean loss {best_avg_loss.item()}'
-                                + ctr_val_epoch_str
+                                    f'\n{best_epoch_pref_str} {best_metric_epoch} '
+                                    # f'metric {best_metric:.4f}/distance {best_distance}/avgloss {best_avg_loss}\n'
+                                    f'Dice metric {best_dice.item():.4f} / mean loss {best_avg_loss.item()}'
+                                    + ctr_val_epoch_str
                             )
                     if rank == 0:
                         if 'dist' in val_loss_fct.lower():

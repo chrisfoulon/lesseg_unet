@@ -3,6 +3,7 @@ from typing import Union, Optional
 from monai.metrics import HausdorffDistanceMetric, CumulativeIterationMetric, is_binary_tensor, \
     compute_hausdorff_distance, do_metric_reduction
 from monai.utils import MetricReduction
+from torch.nn.modules.loss import _Loss
 import torch
 
 
@@ -98,3 +99,45 @@ class HausdorffDistanceRatioMetric(CumulativeIterationMetric):
         # do metric reduction
         f, not_nans = do_metric_reduction(data, reduction or self.reduction)
         return (f, not_nans) if self.get_not_nans else f
+
+
+class BinaryEmptyLabelLoss:
+    def __init__(
+            self,
+            sigmoid: bool = True,
+            threshold: float = 0.5,
+            reduction: str = "mean"
+    ) -> None:
+        """
+            sigmoid: if True, apply a sigmoid function to the prediction.
+
+        """
+        self.sigmoid = sigmoid
+        self.threshold = threshold
+        self.reduction = reduction
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            input: the shape should be BNH[WD], where N is the number of classes.
+            target: the shape should be BNH[WD] or B1H[WD], where N is the number of classes.
+        """
+        if self.sigmoid:
+            input = torch.sigmoid(input)
+
+        if self.threshold is not None:
+            input[input >= self.threshold] = 1
+
+        f: torch.Tensor = torch.count_nonzero(input, dim=[-3, -2, -1])
+        # threshold f >= 1 becomes 1
+        f[f >= 1] = 1
+
+        if self.reduction.lower() == 'mean':
+            f = torch.mean(f)  # the batch and channel average
+        elif self.reduction.lower() == 'sum':
+            f = torch.sum(f)  # sum over the batch and channel dims
+
+        else:
+            raise ValueError(f'Unsupported reduction: {self.reduction}, available options are ["mean", "sum", "none"].')
+        # if self.reduction.lower() == 'none' we only return the loss value per channel and batch
+        return f
