@@ -120,17 +120,16 @@ class BinaryEmptyLabelLoss:
         """
         Args:
             input: the shape should be BNH[WD], where N is the number of classes.
-            target: the shape should be BNH[WD] or B1H[WD], where N is the number of classes.
         """
         if self.sigmoid:
             input = torch.sigmoid(input)
 
         if self.threshold is not None:
-            input[input >= self.threshold] = 1
+            input[input >= self.threshold] = torch.tensor(1)
 
         f: torch.Tensor = torch.count_nonzero(input, dim=[-3, -2, -1])
         # threshold f >= 1 becomes 1
-        f[f >= 1] = 1
+        f[f >= 1] = torch.tensor(1)
 
         if self.reduction.lower() == 'mean':
             f = torch.mean(f)  # the batch and channel average
