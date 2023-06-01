@@ -95,6 +95,9 @@ def main():
     # Gradient accumulation
     parser.add_argument('-ga', '--gradient_accumulation', type=int, default=1,
                         help='Number of batches to accumulate before performing a backward/update pass')
+    # Mixed precision
+    parser.add_argument('-dmp', '--disable_mixed_precision', action='store_true',
+                        help='Disable mixed precision training')
     # Files split and matching options
     parser.add_argument('-tv', '--train_val', type=int, help='Training / validation percentage cut')
     parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
@@ -366,6 +369,7 @@ def main_worker(local_rank, args, kwargs):
                           world_size=args.world_size,
                           rank=local_rank,
                           cache_num=args.cache_num,
+                          enable_amp=args.disable_mixed_precision,
                           debug=args.debug,
                           **kwargs)
     else:

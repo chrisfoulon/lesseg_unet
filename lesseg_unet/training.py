@@ -133,6 +133,7 @@ def training(img_path_list: Sequence,
              rank=0,
              world_size=1,
              cache_num=None,
+             enable_amp=True,
              debug=False,
              **kwargs
              ):
@@ -542,8 +543,8 @@ def training(img_path_list: Sequence,
                                  Path(img_dir, f'{lbl_name}.nii.gz'))
                         continue
 
-                with torch.cuda.amp.autocast():
-                    # TODO Look up gradient accumulation
+                with torch.cuda.amp.autocast(enabled=enable_amp):
+                    # TODO Look up gradient accumulation*
                     logit_outputs = model(inputs)
                     # In case we use CoordConv, we only take the mask of the labels without the coordinates
                     masks_only_labels = labels[:, :1, :, :, :]
