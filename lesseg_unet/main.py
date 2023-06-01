@@ -369,7 +369,7 @@ def main_worker(local_rank, args, kwargs):
                           world_size=args.world_size,
                           rank=local_rank,
                           cache_num=args.cache_num,
-                          enable_amp=args.disable_mixed_precision,
+                          enable_amp=not args.disable_mixed_precision,
                           debug=args.debug,
                           **kwargs)
     else:
