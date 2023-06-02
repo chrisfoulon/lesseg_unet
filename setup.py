@@ -8,7 +8,7 @@ def read(fname):
 
 setup(
     name='lesseg_unet',        # This is the name of your PyPI-package.
-    version='0.12.1',     # Update the version number for new releases
+    version='0.12.5',     # Update the version number for new releases
     zip_safe=True,
     include_package_data=True,
     packages=find_packages(exclude=['__pycache__']),

@@ -17,7 +17,6 @@ import matplotlib.pyplot as plt
 from nilearn.plotting import plot_anat
 import nibabel as nib
 from monai.data import decollate_batch
-import torch
 from monai.metrics import DiceMetric, HausdorffDistanceMetric
 from monai.losses import DiceLoss, DiceCELoss, FocalLoss, DiceFocalLoss
 from monai.inferers import sliding_window_inference
@@ -26,10 +25,12 @@ from monai.transforms import (
     AsDiscrete,
     Compose,
 )
+import torch
 from torch.utils.tensorboard import SummaryWriter
-from lesseg_unet import net, utils, data_loading, transformations, loss_and_metric
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
+from torch.nn import BCEWithLogitsLoss
+from lesseg_unet import net, utils, data_loading, transformations, loss_and_metric
 
 
 # def handler(signum, frame):
@@ -134,6 +135,8 @@ def training(img_path_list: Sequence,
              world_size=1,
              cache_num=None,
              enable_amp=True,
+             use_ema=False,
+             track_ema=False,
              debug=False,
              **kwargs
              ):
@@ -186,8 +189,8 @@ def training(img_path_list: Sequence,
         loss_function = DiceLoss(sigmoid=True)
     utils.logging_rank_0(f'Training loss fct: {loss_function}', dist.get_rank())
     # Controls training losses
-    if ctr_loss_fct != 'mean_sigmoid':
-        ctr_loss_function = lambda x: 1 if torch.count_nonzero(x) else 0
+    if ctr_loss_fct == 'mean_sigmoid':
+        ctr_loss_function = lambda x: torch.mean(x)
     else:
         ctr_loss_function = loss_and_metric.BinaryEmptyLabelLoss()
 
@@ -198,6 +201,15 @@ def training(img_path_list: Sequence,
     else:
         val_loss_function = DiceLoss(sigmoid=True)
     utils.logging_rank_0(f'Validation loss fct: {val_loss_function}', dist.get_rank())
+
+    """
+    DEBUG LOSSES
+    """
+    bce = BCEWithLogitsLoss(reduction='mean')
+    zero_label = torch.zeros((1, 1, 64, 64, 64)).to(device)
+    """
+    END DEBUG LOSSES
+    """
 
     """
     METRICS
@@ -405,6 +417,13 @@ def training(img_path_list: Sequence,
                 world_size=world_size, rank=dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num
             )
 
+        """Initiailise EMA"""
+        monitor_emas = use_ema
+        normalise_by_ema = track_ema
+        ema_decay_rate = 0.999
+        ema_magnitude_abnormals = 1
+        ema_magnitude_controls = 1
+
         """EPOCHS LOOP VARIABLES"""
         time_list = []
         epoch_time_list = []
@@ -548,9 +567,13 @@ def training(img_path_list: Sequence,
                     # In case we use CoordConv, we only take the mask of the labels without the coordinates
                     masks_only_labels = labels[:, :1, :, :, :]
                     loss = loss_function(logit_outputs, masks_only_labels)
-                    # Regularisation
-                    l2_reg = utils.sum_non_bias_l2_norms(params, 1e-4)
-                    loss += l2_reg
+
+                    if monitor_emas:
+                        ema_magnitude_abnormals = ema_decay_rate * ema_magnitude_abnormals + \
+                                                           (1 - ema_decay_rate) * loss.detach()
+                        utils.tensorboard_write_rank_0(writer, 'ema_abnormals',
+                                                       ema_magnitude_abnormals,
+                                                       (epoch + 1) * step, dist.get_rank())
 
                     controls_loss = None
                     if ctr_inputs is not None:
@@ -558,14 +581,55 @@ def training(img_path_list: Sequence,
                         if ctr_loss_fct == 'mean_sigmoid':
                             outputs_batch_images_sigmoid = ctr_post_trans(ctr_logit_outputs)
                             controls_loss = ctr_loss_function(outputs_batch_images_sigmoid)
-                            controls_loss += l2_reg
+                            # controls_loss += l2_reg
                         else:
                             controls_loss = ctr_loss_function(ctr_logit_outputs)
-                        # Regularisation
+
+                        if monitor_emas:
+                            ema_magnitude_controls = ema_decay_rate * ema_magnitude_controls + \
+                                                              (1-ema_decay_rate) * controls_loss.detach()
+                            utils.tensorboard_write_rank_0(writer, 'ema_controls',
+                                                           ema_magnitude_controls,
+                                                           (epoch + 1) * step, dist.get_rank())
+
+                        if normalise_by_ema:
+                            controls_loss /= ema_magnitude_controls
+                            controls_loss *= ema_magnitude_abnormals
+                            controls_loss /= 10
+
+                    # Regularisation
+                    l2_reg = utils.sum_non_bias_l2_norms(params, 1e-4)
+                    loss += l2_reg
+
+                    """
+                    DEBUG
+                    """
+                    sigmoid_logits = ctr_post_trans(logit_outputs)
+                    ctr_sigmoid_logits = ctr_post_trans(ctr_logit_outputs)
+
+                    utils.tensorboard_write_rank_0(writer, 'loss', loss.item(),
+                                                   (epoch + 1) * step, dist.get_rank())
+                    utils.tensorboard_write_rank_0(writer, 'mean_sigmoid', torch.mean(sigmoid_logits).item(),
+                                                   (epoch + 1) * step, dist.get_rank())
+                    utils.tensorboard_write_rank_0(writer, 'ctr_mean_sigmoid', torch.mean(ctr_sigmoid_logits).item(),
+                                                   (epoch + 1) * step, dist.get_rank())
+
+                    utils.tensorboard_write_rank_0(writer, 'bce', bce(logit_outputs, masks_only_labels).item(),
+                                                   (epoch + 1) * step, dist.get_rank())
+                    utils.tensorboard_write_rank_0(writer, 'ctr_bce', bce(ctr_logit_outputs, zero_label).item(),
+                                                   (epoch + 1) * step, dist.get_rank())
+
+                    utils.tensorboard_write_rank_0(writer, 'ctr_sum_logits', torch.sum(ctr_logit_outputs).item(),
+                                                   (epoch + 1) * step, dist.get_rank())
+
+                    """
+                    END DEBUG
+                    """
 
                 # No need to autocast the scaler stuff
                 if controls_loss is not None:
-                    mean_loss = (loss + controls_loss) / 2
+                    # mean_loss = (loss + controls_loss) / 2
+                    mean_loss = (loss + controls_loss)
                     scaler.scale(mean_loss).backward()
                 else:
                     scaler.scale(loss).backward()
@@ -678,7 +742,12 @@ def training(img_path_list: Sequence,
                             ctr_val_desc = ''
                             if ctr_val_inputs is not None:
                                 ctr_val_outputs = model(ctr_val_inputs)
-                                ctr_val_loss = torch.mean(outputs_batch_images_sigmoid).to(device)
+                                if ctr_loss_fct == 'mean_sigmoid':
+                                    outputs_batch_images_sigmoid = ctr_post_trans(ctr_logit_outputs)
+                                    ctr_val_loss = ctr_loss_function(outputs_batch_images_sigmoid)
+                                    ctr_val_loss += l2_reg
+                                else:
+                                    ctr_val_loss = ctr_loss_function(ctr_logit_outputs)
                                 # * weight_factor
                                 ctr_val_outputs_list = decollate_batch(ctr_val_outputs)
                                 ctr_val_convert = [

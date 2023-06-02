@@ -63,6 +63,8 @@ def main():
                         help='Loss function used for validation')
     parser.add_argument('-wf', '--weight_factor', type=float, default=1,
                         help='Multiply the control loss by this factor')
+    parser.add_argument('-ema', action="store_true", help='Use EMA')
+    parser.add_argument('-tema', '--track_ema', action="store_true", help='Track EMA')
     # Parameters for control data
     parser.add_argument('-ctr_pref', '--ctrl_image_prefix', type=str,
                         help='Define a prefix to filter the control images')
@@ -370,6 +372,8 @@ def main_worker(local_rank, args, kwargs):
                           rank=local_rank,
                           cache_num=args.cache_num,
                           enable_amp=not args.disable_mixed_precision,
+                          use_ema=args.ema,
+                          track_ema=args.track_ema,
                           debug=args.debug,
                           **kwargs)
     else:
