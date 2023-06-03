@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 import os
 import json
+import re
 
 from monai.config import print_config
 from lesseg_unet import utils, training, segmentation
@@ -54,6 +55,7 @@ def main():
     parser.add_argument('-clamp_lesion_set', action='store_true',
                         help='Apply intensity clamping on the training lesioned set as well'
                              ' (with default value if not given with --clamp_low and --clamp_high)')
+    parser.add_argument('--resize', type=str, help='Resize the images to the given spatial size')
     # Losses and metric parameters
     parser.add_argument('-lfct', '--loss_function', type=str, default='dice',
                         help='Loss function used for training')
@@ -203,7 +205,7 @@ def main_worker(local_rank, args, kwargs):
     # logging.basicConfig(filename=log_file_path, level=logging_level, encoding='utf-8', filemode='w', force=True)
     # file_handler = logging.StreamHandler(sys.stdout)
     # logging.getLogger().addHandler(file_handler)
-    # TODO use amp to accelerate training
+    # TODO Organise the code the same way as the argparse
     # scaler = torch.cuda.amp.GradScaler()
     if 'MASTER_ADDR' not in os.environ:
         os.environ['MASTER_ADDR'] = 'localhost'
@@ -320,6 +322,8 @@ def main_worker(local_rank, args, kwargs):
         utils.logging_rank_0(f'Clamping of training set : {clamp_lesion_set}', dist.get_rank())
     if clamp_tuple is not None:
         utils.logging_rank_0(f'Clamping of control set: {clamp_tuple}', dist.get_rank())
+    if args.resize is not None:
+        args.resize = re.split(r'\D+', args.resize)
     train_val_percentage = None
     if args.train_val is not None:
         train_val_percentage = args.train_val
@@ -359,6 +363,7 @@ def main_worker(local_rank, args, kwargs):
                           train_val_percentage=train_val_percentage,
                           lesion_set_clamp=clamp_lesion_set,
                           controls_clamping=clamp_tuple,
+                          resize=args.resize,
                           # label_smoothing=args.label_smoothing,
                           stop_best_epoch=stop_best_epoch,
                           training_loss_fct=args.loss_function,

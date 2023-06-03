@@ -784,6 +784,29 @@ def find_param_from_hyper_dict(hyper_param_dict, param_name, transform_list_name
     return param_val
 
 
+def replace_tr(transform_dict, transform_name, new_transform_subidct, only_replace_first=False):
+    """
+    Replace a transformation in the hyper_param_dict with a new one
+    Parameters
+    ----------
+    transform_name
+    new_transform_subidct
+    only_replace_first
+
+    Returns
+    -------
+
+    """
+    for k in transform_dict:
+        for d in transform_dict[k]:
+            for t in d:
+                if t == transform_name:
+                    d[t] = new_transform_subidct
+                    if only_replace_first:
+                        return transform_dict
+    return transform_dict
+
+
 """
 Transformation compositions for the image segmentation
 """

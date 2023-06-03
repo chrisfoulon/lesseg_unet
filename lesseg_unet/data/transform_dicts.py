@@ -7,8 +7,8 @@ tiny_prob = 0.05
 # high_prob = 1
 # low_prob = 1
 # tiny_prob = 1
-# def_spatial_size = [96, 128, 96]
-def_spatial_size = [64, 64, 64]
+def_spatial_size = [96, 128, 96]
+# def_spatial_size = [64, 64, 64]
 # def_spatial_size = [96, 96, 96]
 # for 1mm images
 # def_spatial_size = [192, 224, 192]
@@ -1077,14 +1077,14 @@ unetr_cc = {
         {'LoadImaged': {
             'keys': ['image', 'label']}},
         {'EnsureChannelFirstd': {'keys': ['image', 'label']}},
-        # {'ResizeWithPadOrCropd': {
-        #     'keys': ['image', 'label'],
-        #     'spatial_size': def_spatial_size}
-        #  },
-        {'Resized': {
+        {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
          },
+        # {'Resized': {
+        #     'keys': ['image', 'label'],
+        #     'spatial_size': def_spatial_size}
+        #  },
         {'MyNormalizeIntensityd': {
             'keys': ['image'],
             'out_min_max': (0, 1),

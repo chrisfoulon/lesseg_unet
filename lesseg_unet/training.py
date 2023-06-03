@@ -121,6 +121,7 @@ def training(img_path_list: Sequence,
              train_val_percentage=80,
              lesion_set_clamp=None,
              # controls_clamping=None,
+             resize=None,
              # label_smoothing=False,
              stop_best_epoch=-1,
              training_loss_fct='dice',
@@ -302,6 +303,18 @@ def training(img_path_list: Sequence,
     # If we use controls, we need to add 'control' to the transform_dict every time the 'image' key is used
     if ctr_split_lists is not None:
         transform_dict = transformations.add_control_key(transform_dict)
+
+    """
+    If resize is used, replace the crop pad transform with the resize transform
+    """
+    if resize is not None:
+        resize_function = {'Resized': {
+            'keys': ['image', 'label'],
+            'spatial_size': resize}
+         }
+        transform_dict = transformations.replace_tr(
+            transform_dict, 'ResizeWithPadOrCropd', resize_function)
+
     # Extract all the transformations from transform_dict
     train_img_transforms = transformations.train_transformd(transform_dict, lesion_set_clamp,
                                                             device=transformations_device,
