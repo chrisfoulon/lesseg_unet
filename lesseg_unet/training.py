@@ -630,10 +630,10 @@ def training(img_path_list: Sequence,
                     utils.tensorboard_write_rank_0(writer, 'ctr_mean_sigmoid', torch.mean(ctr_sigmoid_logits).item(),
                                                    (epoch + 1) * step, dist.get_rank())
 
-                    utils.tensorboard_write_rank_0(writer, 'bce', bce(logit_outputs, masks_only_labels).item(),
-                                                   (epoch + 1) * step, dist.get_rank())
-                    utils.tensorboard_write_rank_0(writer, 'ctr_bce', bce(ctr_logit_outputs, zero_label).item(),
-                                                   (epoch + 1) * step, dist.get_rank())
+                    # utils.tensorboard_write_rank_0(writer, 'bce', bce(logit_outputs, masks_only_labels).item(),
+                    #                                (epoch + 1) * step, dist.get_rank())
+                    # utils.tensorboard_write_rank_0(writer, 'ctr_bce', bce(ctr_logit_outputs, zero_label).item(),
+                    #                                (epoch + 1) * step, dist.get_rank())
 
                     utils.tensorboard_write_rank_0(writer, 'ctr_sum_logits', torch.sum(ctr_logit_outputs).item(),
                                                    (epoch + 1) * step, dist.get_rank())
