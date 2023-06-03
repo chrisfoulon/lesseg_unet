@@ -207,7 +207,9 @@ def training(img_path_list: Sequence,
     DEBUG LOSSES
     """
     bce = BCEWithLogitsLoss(reduction='mean')
-    zero_label = torch.zeros((1, 1, 64, 64, 64)).to(device)
+    if resize is not None:
+        zero_label = torch.zeros((1, 1, resize[0], resize[1], resize[2])).to(device)
+    zero_label = torch.zeros((1, 1, 96, 128, 96)).to(device)
     """
     END DEBUG LOSSES
     """
