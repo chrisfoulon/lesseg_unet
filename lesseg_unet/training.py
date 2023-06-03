@@ -578,7 +578,7 @@ def training(img_path_list: Sequence,
                 with torch.cuda.amp.autocast(enabled=enable_amp):
                     logit_outputs = model(inputs)
                     # In case we use CoordConv, we only take the mask of the labels without the coordinates
-                    masks_only_labels = labels[:, :1, :, :, :]
+                    masks_only_labels = labels
                     loss = loss_function(logit_outputs, masks_only_labels)
 
                     if monitor_emas:
@@ -591,6 +591,7 @@ def training(img_path_list: Sequence,
                     controls_loss = None
                     if ctr_inputs is not None:
                         ctr_logit_outputs = model(ctr_inputs)
+                        ctr_logit_outputs = ctr_logit_outputs[:, :1, :, :, :]
                         if ctr_loss_fct == 'mean_sigmoid':
                             outputs_batch_images_sigmoid = ctr_post_trans(ctr_logit_outputs)
                             controls_loss = ctr_loss_function(outputs_batch_images_sigmoid)
@@ -755,6 +756,7 @@ def training(img_path_list: Sequence,
                             ctr_val_desc = ''
                             if ctr_val_inputs is not None:
                                 ctr_val_outputs = model(ctr_val_inputs)
+                                ctr_val_outputs = ctr_val_outputs[:, :1, :, :, :]
                                 if ctr_loss_fct == 'mean_sigmoid':
                                     outputs_batch_images_sigmoid = ctr_post_trans(ctr_logit_outputs)
                                     ctr_val_loss = ctr_loss_function(outputs_batch_images_sigmoid)
