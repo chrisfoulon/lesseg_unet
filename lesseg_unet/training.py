@@ -138,6 +138,7 @@ def training(img_path_list: Sequence,
              enable_amp=True,
              use_ema=False,
              track_ema=False,
+             no_backward_on_controls=False,
              debug=False,
              **kwargs
              ):
@@ -591,6 +592,7 @@ def training(img_path_list: Sequence,
                                                        (epoch + 1) * step, dist.get_rank())
 
                     controls_loss = None
+                    writer_step = len(train_loader) * epoch + step
                     if ctr_inputs is not None:
                         ctr_logit_outputs = model(ctr_inputs)
                         ctr_logit_outputs = ctr_logit_outputs[:, :1, :, :, :]
@@ -606,7 +608,7 @@ def training(img_path_list: Sequence,
                                                               (1-ema_decay_rate) * controls_loss.detach()
                             utils.tensorboard_write_rank_0(writer, 'ema_controls',
                                                            ema_magnitude_controls,
-                                                           (epoch + 1) * step, dist.get_rank())
+                                                           writer_step, dist.get_rank())
 
                         if normalise_by_ema:
                             controls_loss /= ema_magnitude_controls
@@ -625,27 +627,27 @@ def training(img_path_list: Sequence,
                         ctr_sigmoid_logits = ctr_post_trans(ctr_logit_outputs)
 
                         utils.tensorboard_write_rank_0(writer, 'loss', loss.item(),
-                                                       (epoch + 1) * step, dist.get_rank())
+                                                       writer_step, dist.get_rank())
                         utils.tensorboard_write_rank_0(writer, 'mean_sigmoid', torch.mean(sigmoid_logits).item(),
-                                                       (epoch + 1) * step, dist.get_rank())
+                                                       writer_step, dist.get_rank())
                         utils.tensorboard_write_rank_0(writer, 'ctr_mean_sigmoid',
                                                        torch.mean(ctr_sigmoid_logits).item(),
-                                                       (epoch + 1) * step, dist.get_rank())
+                                                       writer_step, dist.get_rank())
 
                         utils.tensorboard_write_rank_0(writer, 'bce', bce(logit_outputs, masks_only_labels).item(),
-                                                       (epoch + 1) * step, dist.get_rank())
+                                                       writer_step, dist.get_rank())
                         utils.tensorboard_write_rank_0(writer, 'ctr_bce', bce(ctr_logit_outputs, zero_label).item(),
-                                                       (epoch + 1) * step, dist.get_rank())
+                                                       writer_step, dist.get_rank())
 
                         utils.tensorboard_write_rank_0(writer, 'ctr_sum_logits', torch.sum(ctr_logit_outputs).item(),
-                                                       (epoch + 1) * step, dist.get_rank())
+                                                       writer_step, dist.get_rank())
 
                     """
                     END DEBUG
                     """
 
                 # No need to autocast the scaler stuff
-                if controls_loss is not None:
+                if controls_loss is not None and not no_backward_on_controls:
                     # mean_loss = (loss + controls_loss) / 2
                     mean_loss = (loss + controls_loss)
                     scaler.scale(mean_loss).backward()
