@@ -208,8 +208,8 @@ def training(img_path_list: Sequence,
     """
     bce = BCEWithLogitsLoss(reduction='mean')
     if resize is not None:
-        zero_label = torch.zeros((1, 1, resize[0], resize[1], resize[2])).to(device)
-    zero_label = torch.zeros((1, 1, 96, 128, 96)).to(device)
+        zero_label = torch.zeros((batch_size, 1, resize[0], resize[1], resize[2])).to(device)
+    zero_label = torch.zeros((batch_size, 1, 96, 128, 96)).to(device)
     """
     END DEBUG LOSSES
     """
@@ -620,23 +620,25 @@ def training(img_path_list: Sequence,
                     """
                     DEBUG
                     """
-                    sigmoid_logits = ctr_post_trans(logit_outputs)
-                    ctr_sigmoid_logits = ctr_post_trans(ctr_logit_outputs)
+                    if dist.get_rank() == 0:
+                        sigmoid_logits = ctr_post_trans(logit_outputs)
+                        ctr_sigmoid_logits = ctr_post_trans(ctr_logit_outputs)
 
-                    utils.tensorboard_write_rank_0(writer, 'loss', loss.item(),
-                                                   (epoch + 1) * step, dist.get_rank())
-                    utils.tensorboard_write_rank_0(writer, 'mean_sigmoid', torch.mean(sigmoid_logits).item(),
-                                                   (epoch + 1) * step, dist.get_rank())
-                    utils.tensorboard_write_rank_0(writer, 'ctr_mean_sigmoid', torch.mean(ctr_sigmoid_logits).item(),
-                                                   (epoch + 1) * step, dist.get_rank())
+                        utils.tensorboard_write_rank_0(writer, 'loss', loss.item(),
+                                                       (epoch + 1) * step, dist.get_rank())
+                        utils.tensorboard_write_rank_0(writer, 'mean_sigmoid', torch.mean(sigmoid_logits).item(),
+                                                       (epoch + 1) * step, dist.get_rank())
+                        utils.tensorboard_write_rank_0(writer, 'ctr_mean_sigmoid',
+                                                       torch.mean(ctr_sigmoid_logits).item(),
+                                                       (epoch + 1) * step, dist.get_rank())
 
-                    # utils.tensorboard_write_rank_0(writer, 'bce', bce(logit_outputs, masks_only_labels).item(),
-                    #                                (epoch + 1) * step, dist.get_rank())
-                    # utils.tensorboard_write_rank_0(writer, 'ctr_bce', bce(ctr_logit_outputs, zero_label).item(),
-                    #                                (epoch + 1) * step, dist.get_rank())
+                        utils.tensorboard_write_rank_0(writer, 'bce', bce(logit_outputs, masks_only_labels).item(),
+                                                       (epoch + 1) * step, dist.get_rank())
+                        utils.tensorboard_write_rank_0(writer, 'ctr_bce', bce(ctr_logit_outputs, zero_label).item(),
+                                                       (epoch + 1) * step, dist.get_rank())
 
-                    utils.tensorboard_write_rank_0(writer, 'ctr_sum_logits', torch.sum(ctr_logit_outputs).item(),
-                                                   (epoch + 1) * step, dist.get_rank())
+                        utils.tensorboard_write_rank_0(writer, 'ctr_sum_logits', torch.sum(ctr_logit_outputs).item(),
+                                                       (epoch + 1) * step, dist.get_rank())
 
                     """
                     END DEBUG

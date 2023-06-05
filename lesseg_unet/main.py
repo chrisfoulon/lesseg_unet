@@ -124,7 +124,7 @@ def main():
     parser.add_argument('-sbe', '--stop_best_epoch', type=int, help='Number of epochs without improvement before it '
                                                                     'stops')
     # DDP arguments
-    parser.add_argument("--distributed", action="store_true", help="start distributed training")
+    # parser.add_argument("--distributed", action="store_true", help="start distributed training")
     parser.add_argument("--world_size", default=1, type=int, help="number of nodes for distributed training")
     parser.add_argument("--local_rank", type=int, help="node rank for distributed training")
     parser.add_argument("-cvd", "--cuda_visible_devices", type=str, help="List of visible devices for cuda")
