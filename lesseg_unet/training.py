@@ -584,15 +584,15 @@ def training(img_path_list: Sequence,
                     masks_only_labels = labels
                     loss = loss_function(logit_outputs, masks_only_labels)
 
+                    writer_step = len(train_loader) * epoch + step
                     if monitor_emas:
                         ema_magnitude_abnormals = ema_decay_rate * ema_magnitude_abnormals + \
                                                            (1 - ema_decay_rate) * loss.detach()
                         utils.tensorboard_write_rank_0(writer, 'ema_abnormals',
                                                        ema_magnitude_abnormals,
-                                                       (epoch + 1) * step, dist.get_rank())
+                                                       writer_step, dist.get_rank())
 
                     controls_loss = None
-                    writer_step = len(train_loader) * epoch + step
                     if ctr_inputs is not None:
                         ctr_logit_outputs = model(ctr_inputs)
                         ctr_logit_outputs = ctr_logit_outputs[:, :1, :, :, :]
