@@ -18,7 +18,7 @@ from nilearn.plotting import plot_anat
 import nibabel as nib
 from monai.data import decollate_batch
 from monai.metrics import DiceMetric, HausdorffDistanceMetric
-from monai.losses import DiceLoss, DiceCELoss, FocalLoss, DiceFocalLoss
+from monai.losses import DiceLoss, DiceCELoss, FocalLoss, DiceFocalLoss, GeneralizedDiceFocalLoss, GeneralizedDiceLoss
 from monai.inferers import sliding_window_inference
 from monai.transforms import (
     Activations,
@@ -185,6 +185,12 @@ def training(img_path_list: Sequence,
         loss_function = DiceCELoss(sigmoid=True)
     elif training_loss_fct.lower() in ['focal', 'focalloss', 'focal_loss']:
         loss_function = FocalLoss(gamma=2.0)
+    elif training_loss_fct.lower() in ['generalized_dice', 'gen_dice', 'generalised_dice', 'gen_dice_loss',
+                                       'generalised_dice_loss']:
+        loss_function = GeneralizedDiceLoss(sigmoid=True)
+    elif training_loss_fct.lower() in ['generalized_dice_focal', 'gen_dice_focal', 'generalised_dice_focal',
+                                       'gen_dice_focal_loss', 'generalised_dice_focal_loss']:
+        loss_function = GeneralizedDiceFocalLoss(sigmoid=True, gamma=2.0)
     elif training_loss_fct.lower() in ['dicefocal', 'dicefocalloss', 'dice_focal_loss']:
         loss_function = DiceFocalLoss(sigmoid=True, gamma=2.0)
     else:
