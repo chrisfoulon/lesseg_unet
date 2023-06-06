@@ -797,13 +797,12 @@ def replace_tr(transform_dict, transform_name, new_transform_subidct, only_repla
     -------
 
     """
-    for k in transform_dict:
-        for d in transform_dict[k]:
-            for t in d:
-                if t == transform_name:
-                    d[t] = new_transform_subidct
-                    if only_replace_first:
-                        return transform_dict
+    for tr_list in transform_dict.values():
+        for ind, tr_dict in enumerate(tr_list):
+            if list(tr_dict.keys())[0] == transform_name:
+                tr_list[ind] = new_transform_subidct
+                if only_replace_first:
+                    return transform_dict
     return transform_dict
 
 

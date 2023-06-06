@@ -325,7 +325,7 @@ def main_worker(local_rank, args, kwargs):
     if clamp_tuple is not None:
         utils.logging_rank_0(f'Clamping of control set: {clamp_tuple}', dist.get_rank())
     if args.resize is not None:
-        args.resize = re.split(r'\D+', args.resize)
+        args.resize = [int(val) for val in re.split(r'\D+', args.resize)]
     train_val_percentage = None
     if args.train_val is not None:
         train_val_percentage = args.train_val

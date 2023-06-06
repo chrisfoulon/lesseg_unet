@@ -210,7 +210,8 @@ def training(img_path_list: Sequence,
     bce = BCEWithLogitsLoss(reduction='mean')
     if resize is not None:
         zero_label = torch.zeros((batch_size, 1, resize[0], resize[1], resize[2])).to(device)
-    zero_label = torch.zeros((batch_size, 1, 96, 128, 96)).to(device)
+    else:
+        zero_label = torch.zeros((batch_size, 1, 96, 128, 96)).to(device)
     """
     END DEBUG LOSSES
     """
@@ -289,6 +290,17 @@ def training(img_path_list: Sequence,
             transformations_device = device
     utils.print_rank_0('Initialisation of the training transformations', dist.get_rank())
 
+    """
+        If resize is used, replace the crop pad transform with the resize transform
+        """
+    if resize is not None:
+        resize_function = {'Resized': {
+            'keys': ['image', 'label'],
+            'spatial_size': resize}
+        }
+        transform_dict = transformations.replace_tr(
+            transform_dict, 'ResizeWithPadOrCropd', resize_function)
+
     original_image_shape = utils.get_img_size(split_lists[0][0]['image'])
     utils.print_rank_0(f'Original image shape: {original_image_shape}', dist.get_rank())
     # We need the training image size for the unetr as we need to know the size of the model to create it
@@ -306,17 +318,6 @@ def training(img_path_list: Sequence,
     # If we use controls, we need to add 'control' to the transform_dict every time the 'image' key is used
     if ctr_split_lists is not None:
         transform_dict = transformations.add_control_key(transform_dict)
-
-    """
-    If resize is used, replace the crop pad transform with the resize transform
-    """
-    if resize is not None:
-        resize_function = {'Resized': {
-            'keys': ['image', 'label'],
-            'spatial_size': resize}
-         }
-        transform_dict = transformations.replace_tr(
-            transform_dict, 'ResizeWithPadOrCropd', resize_function)
 
     # Extract all the transformations from transform_dict
     train_img_transforms = transformations.train_transformd(transform_dict, lesion_set_clamp,
