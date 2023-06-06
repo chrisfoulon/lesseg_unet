@@ -187,12 +187,13 @@ class ThresholdedAverageLoss(_Loss):
         Args:
             input: the shape should be BNH[WD], where N is the number of classes.
         """
+        input = torch.tensor(input, dtype=torch.float)
         if self.sigmoid:
             input = torch.sigmoid(input)
         if self.reduction.lower() == 'mean':
-            return torch.mean(input[input >= self.threshold], dtype=torch.float)  # the batch and channel average
+            return torch.mean(input[input >= self.threshold])  # the batch and channel average
         elif self.reduction.lower() == 'sum':
-            return torch.sum(input[input >= self.threshold], dtype=torch.float)  # sum over the batch and channel dims
+            return torch.sum(input[input >= self.threshold])  # sum over the batch and channel dims
         elif self.reduction.lower() == 'max':
             return torch.max(input[input >= self.threshold])
         elif self.reduction.lower() == 'min':
