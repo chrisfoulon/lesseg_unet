@@ -659,7 +659,7 @@ def training(img_path_list: Sequence,
                 """
                 The different ranks are coming together here
                 """
-                if epoch % gradient_accumulation_steps == 0:
+                if step % gradient_accumulation_steps == 0:
                     # optimizer.step()
                     scaler.step(optimizer)
                     scaler.update()
@@ -713,7 +713,7 @@ def training(img_path_list: Sequence,
             """
             VALIDATION LOOP
             """
-            if epoch % gradient_accumulation_steps == 0:
+            if (epoch + 1) % val_interval == 0:
                 # if (epoch + 1) % val_interval == 0 and dist.get_rank() == 0:
                 model.eval()
                 with torch.no_grad():
