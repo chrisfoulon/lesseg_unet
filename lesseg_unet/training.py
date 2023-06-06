@@ -192,9 +192,13 @@ def training(img_path_list: Sequence,
     utils.logging_rank_0(f'Training loss fct: {loss_function}', dist.get_rank())
     # Controls training losses
     if ctr_loss_fct == 'mean_sigmoid':
-        ctr_loss_function = lambda x: torch.mean(x)
-    else:
+        ctr_loss_function = loss_and_metric.ThresholdedAverageLoss(threshold=0.0, reduction='mean')
+    elif ctr_loss_fct == 'binary_empty_label':
         ctr_loss_function = loss_and_metric.BinaryEmptyLabelLoss()
+    elif ctr_loss_fct == 'thresholded_average':
+        ctr_loss_function = loss_and_metric.ThresholdedAverageLoss(threshold=0.5, reduction='mean')
+    else:
+        raise ValueError(f'Unknown controls loss function: {ctr_loss_fct}')
 
     # Validation
     if any([s in val_loss_fct.lower() for s in
@@ -589,29 +593,23 @@ def training(img_path_list: Sequence,
                     if monitor_emas:
                         ema_magnitude_abnormals = ema_decay_rate * ema_magnitude_abnormals + \
                                                            (1 - ema_decay_rate) * loss.detach()
-                        if dist.get_rank() == 0:
-                            utils.tensorboard_write_rank_0(writer, 'ema_abnormals',
-                                                           ema_magnitude_abnormals,
-                                                           writer_step, dist.get_rank())
+                        utils.tensorboard_write_rank_0(writer, 'ema_abnormals',
+                                                       ema_magnitude_abnormals,
+                                                       writer_step, dist.get_rank())
 
                     controls_loss = None
                     if ctr_inputs is not None:
                         ctr_logit_outputs = model(ctr_inputs)
-                        ctr_logit_outputs = ctr_logit_outputs[:, :1, :, :, :]
-                        if ctr_loss_fct == 'mean_sigmoid':
-                            outputs_batch_images_sigmoid = ctr_post_trans(ctr_logit_outputs)
-                            controls_loss = ctr_loss_function(outputs_batch_images_sigmoid)
-                            # controls_loss += l2_reg
-                        else:
-                            controls_loss = ctr_loss_function(ctr_logit_outputs)
+                        # ctr_logit_outputs = ctr_logit_outputs[:, :1, :, :, :]
+                        controls_loss = ctr_loss_function(ctr_logit_outputs)
+                        # controls_loss += l2_reg
 
                         if monitor_emas:
                             ema_magnitude_controls = ema_decay_rate * ema_magnitude_controls + \
                                                               (1-ema_decay_rate) * controls_loss.detach()
-                            if dist.get_rank() == 0:
-                                utils.tensorboard_write_rank_0(writer, 'ema_controls',
-                                                               ema_magnitude_controls,
-                                                               writer_step, dist.get_rank())
+                            utils.tensorboard_write_rank_0(writer, 'ema_controls',
+                                                           ema_magnitude_controls,
+                                                           writer_step, dist.get_rank())
 
                         if normalise_by_ema:
                             controls_loss /= ema_magnitude_controls
@@ -625,12 +623,45 @@ def training(img_path_list: Sequence,
                     """
                     DEBUG
                     """
-                    if dist.get_rank() == 0:
+                    with torch.no_grad():
                         sigmoid_logits = ctr_post_trans(logit_outputs)
                         ctr_sigmoid_logits = ctr_post_trans(ctr_logit_outputs)
 
                         utils.tensorboard_write_rank_0(writer, 'loss', loss.item(),
                                                        writer_step, dist.get_rank())
+                        # use the sigmoid values of these voxels as the penalty (track and loss)
+                        # (with thresholded_average loss)
+                        utils.tensorboard_write_rank_0(writer, 'ctr_loss', controls_loss.item(),
+                                                       writer_step, dist.get_rank())
+
+                        # count number of predicted vox on controls (track)
+                        utils.tensorboard_write_rank_0(writer, 'ctr_num_vox',
+                                                       torch.count_nonzero(
+                                                           ctr_sigmoid_logits[ctr_sigmoid_logits > 0.5]).item(),
+                                                       writer_step, dist.get_rank())
+                        # percentage per bin in the sigmoid of the controls (track) (0-0.1, 0.1-0.2, ..., 0.9-1)
+                        if dist.get_rank() == 0:
+                            num_voxels = torch.prod(torch.tensor(ctr_sigmoid_logits.shape)).item()
+                            writer.add_scalars(
+                                'ctr_sigmoid_bins',
+                                {'0-0.1': len(ctr_sigmoid_logits[0 <= ctr_sigmoid_logits < 0.1]) / num_voxels,
+                                 '0.1-0.2': len(ctr_sigmoid_logits[0.1 <= ctr_sigmoid_logits < 0.2]) / num_voxels,
+                                 '0.2-0.3': len(ctr_sigmoid_logits[0.2 <= ctr_sigmoid_logits < 0.3]) / num_voxels,
+                                 '0.3-0.4': len(ctr_sigmoid_logits[0.3 <= ctr_sigmoid_logits < 0.4]) / num_voxels,
+                                 '0.4-0.5': len(ctr_sigmoid_logits[0.4 <= ctr_sigmoid_logits < 0.5]) / num_voxels,
+                                 '0.5-0.6': len(ctr_sigmoid_logits[0.5 <= ctr_sigmoid_logits < 0.6]) / num_voxels,
+                                 '0.6-0.7': len(ctr_sigmoid_logits[0.6 <= ctr_sigmoid_logits < 0.7]) / num_voxels,
+                                 '0.7-0.8': len(ctr_sigmoid_logits[0.7 <= ctr_sigmoid_logits < 0.8]) / num_voxels,
+                                 '0.8-0.9': len(ctr_sigmoid_logits[0.8 <= ctr_sigmoid_logits < 0.9]) / num_voxels,
+                                 '0.9-1': len(ctr_sigmoid_logits[0.9 <= ctr_sigmoid_logits <= 1]) / num_voxels},
+                                writer_step)
+
+                        utils.tensorboard_write_rank_0(writer, 'sum_sigmoid', torch.sum(sigmoid_logits).item(),
+                                                       writer_step, dist.get_rank())
+                        utils.tensorboard_write_rank_0(writer, 'ctr_sum_sigmoid',
+                                                       torch.sum(ctr_sigmoid_logits).item(),
+                                                       writer_step, dist.get_rank())
+
                         utils.tensorboard_write_rank_0(writer, 'mean_sigmoid', torch.mean(sigmoid_logits).item(),
                                                        writer_step, dist.get_rank())
                         utils.tensorboard_write_rank_0(writer, 'ctr_mean_sigmoid',
@@ -743,10 +774,10 @@ def training(img_path_list: Sequence,
                             ctr_val_inputs = val_data['control'].to(device, non_blocking=non_blocking)
                         # In case CoordConv is used
                         with torch.cuda.amp.autocast():
-                            masks_only_val_labels = val_labels[:, :1, :, :, :]
+                            # masks_only_val_labels = val_labels[:, :1, :, :, :]
                             val_outputs = sliding_window_inference(val_inputs, model_img_size,
                                                                    val_batch_size, model)
-                            val_loss = val_loss_function(val_outputs, masks_only_val_labels)
+                            val_loss = val_loss_function(val_outputs, val_labels)
                             # loss_list.append(val_loss.item())
                             val_epoch_loss += val_loss
                             val_outputs_list = decollate_batch(val_outputs)
@@ -765,13 +796,8 @@ def training(img_path_list: Sequence,
                             ctr_val_desc = ''
                             if ctr_val_inputs is not None:
                                 ctr_val_outputs = model(ctr_val_inputs)
-                                ctr_val_outputs = ctr_val_outputs[:, :1, :, :, :]
-                                if ctr_loss_fct == 'mean_sigmoid':
-                                    outputs_batch_images_sigmoid = ctr_post_trans(ctr_logit_outputs)
-                                    ctr_val_loss = ctr_loss_function(outputs_batch_images_sigmoid)
-                                    ctr_val_loss += l2_reg
-                                else:
-                                    ctr_val_loss = ctr_loss_function(ctr_logit_outputs)
+                                # ctr_val_outputs = ctr_val_outputs[:, :1, :, :, :]
+                                ctr_val_loss = ctr_loss_function(ctr_logit_outputs)
                                 # * weight_factor
                                 ctr_val_outputs_list = decollate_batch(ctr_val_outputs)
                                 ctr_val_convert = [
@@ -786,11 +812,11 @@ def training(img_path_list: Sequence,
                                 ctr_val_desc = f' ctr_val_loss:[{ctr_val_loss.item():.4f}]' \
                                                f' ctr_vox_count:[{ctr_vox_count.item():.4f}]'
 
-                            dice_metric(y_pred=val_output_convert, y=masks_only_val_labels)
+                            dice_metric(y_pred=val_output_convert, y=val_labels)
                             dice = dice_metric.aggregate()
                             val_epoch_dice += dice
                             if 'dist' in val_loss_fct.lower():
-                                hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
+                                hausdorff_metric(y_pred=val_output_convert, y=val_labels)
                                 # For whatever reason, this metric is going back to cpu unlike the dice_metric ...
                                 distance = hausdorff_metric.aggregate().to(device)
                                 # val_batch_dist_list.append(distance.item())

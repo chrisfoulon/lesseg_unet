@@ -169,3 +169,33 @@ class BinaryEmptyLabelLoss(_Loss):
             raise ValueError(f'Unsupported reduction: {self.reduction}, available options are ["mean", "sum", "none"].')
         # if self.reduction.lower() == 'none' we only return the loss value per channel and batch
         return f
+
+
+class ThresholdedAverageLoss(_Loss):
+    def __init__(self, sigmoid: bool = True, threshold: float = 0.5, reduction: str = "mean") -> None:
+        """
+            sigmoid: if True, apply a sigmoid function to the prediction.
+
+        """
+        super().__init__(reduction=reduction)
+        self.sigmoid = sigmoid
+        self.threshold = threshold
+        self.reduction = reduction
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            input: the shape should be BNH[WD], where N is the number of classes.
+        """
+        if self.sigmoid:
+            input = torch.sigmoid(input)
+        if self.reduction.lower() == 'mean':
+            return torch.mean(input[input >= self.threshold], dtype=torch.float)  # the batch and channel average
+        elif self.reduction.lower() == 'sum':
+            return torch.sum(input[input >= self.threshold], dtype=torch.float)  # sum over the batch and channel dims
+        elif self.reduction.lower() == 'max':
+            return torch.max(input[input >= self.threshold])
+        elif self.reduction.lower() == 'min':
+            return torch.min(input[input >= self.threshold])
+        else:
+            raise ValueError(f'Unsupported reduction: {self.reduction}, available options are ["mean", "sum", "none"].')

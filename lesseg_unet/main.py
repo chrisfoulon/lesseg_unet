@@ -59,7 +59,7 @@ def main():
     # Losses and metric parameters
     parser.add_argument('-lfct', '--loss_function', type=str, default='dice',
                         help='Loss function used for training')
-    parser.add_argument('-ctrfct', '--ctr_loss_function', type=str, default='binary_empty_label',
+    parser.add_argument('-ctrfct', '--ctr_loss_function', type=str, default='thresholded_average',
                         help='Loss function used for training on controls')
     parser.add_argument('-vlfct', '--val_loss_function', type=str, default='dice',
                         help='Loss function used for validation')
