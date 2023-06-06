@@ -588,9 +588,10 @@ def training(img_path_list: Sequence,
                     if monitor_emas:
                         ema_magnitude_abnormals = ema_decay_rate * ema_magnitude_abnormals + \
                                                            (1 - ema_decay_rate) * loss.detach()
-                        utils.tensorboard_write_rank_0(writer, 'ema_abnormals',
-                                                       ema_magnitude_abnormals,
-                                                       writer_step, dist.get_rank())
+                        if dist.get_rank() == 0:
+                            utils.tensorboard_write_rank_0(writer, 'ema_abnormals',
+                                                           ema_magnitude_abnormals,
+                                                           writer_step, dist.get_rank())
 
                     controls_loss = None
                     if ctr_inputs is not None:
@@ -606,9 +607,10 @@ def training(img_path_list: Sequence,
                         if monitor_emas:
                             ema_magnitude_controls = ema_decay_rate * ema_magnitude_controls + \
                                                               (1-ema_decay_rate) * controls_loss.detach()
-                            utils.tensorboard_write_rank_0(writer, 'ema_controls',
-                                                           ema_magnitude_controls,
-                                                           writer_step, dist.get_rank())
+                            if dist.get_rank() == 0:
+                                utils.tensorboard_write_rank_0(writer, 'ema_controls',
+                                                               ema_magnitude_controls,
+                                                               writer_step, dist.get_rank())
 
                         if normalise_by_ema:
                             controls_loss /= ema_magnitude_controls
