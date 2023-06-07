@@ -192,8 +192,6 @@ class ThresholdedAverageLoss(_Loss):
             input = torch.sigmoid(input)
         if self.reduction.lower() == 'mean':
             data = input[input >= self.threshold]
-            print(data.dtype)
-            print(data.shape)
 
             return torch.mean(data)  # the batch and channel average
         elif self.reduction.lower() == 'sum':
