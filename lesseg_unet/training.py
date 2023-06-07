@@ -632,67 +632,68 @@ def training(img_path_list: Sequence,
                     """
                     with torch.no_grad():
                         sigmoid_logits = ctr_post_trans(logit_outputs)
-                        ctr_sigmoid_logits = ctr_post_trans(ctr_logit_outputs)
 
                         utils.tensorboard_write_rank_0(writer, 'loss', loss.item(),
                                                        writer_step, dist.get_rank())
-                        # use the sigmoid values of these voxels as the penalty (track and loss)
-                        # (with thresholded_average loss)
-                        utils.tensorboard_write_rank_0(writer, 'ctr_loss', controls_loss.item(),
-                                                       writer_step, dist.get_rank())
-
-                        # count number of predicted vox on controls (track)
-                        utils.tensorboard_write_rank_0(writer, 'ctr_num_vox',
-                                                       torch.count_nonzero(
-                                                           ctr_sigmoid_logits[ctr_sigmoid_logits > 0.5]).item(),
-                                                       writer_step, dist.get_rank())
-                        # percentage per bin in the sigmoid of the controls (track) (0-0.1, 0.1-0.2, ..., 0.9-1)
-                        if dist.get_rank() == 0:
-                            num_voxels = torch.prod(torch.tensor(ctr_sigmoid_logits.shape)).item()
-                            writer.add_scalars(
-                                'ctr_sigmoid_bins',
-                                {'0-0.1': len(ctr_sigmoid_logits[(0 <= ctr_sigmoid_logits) &
-                                                                 (ctr_sigmoid_logits < 0.1)]) / num_voxels,
-                                 '0.1-0.2': len(ctr_sigmoid_logits[(0.1 <= ctr_sigmoid_logits) &
-                                                                   (ctr_sigmoid_logits < 0.2)]) / num_voxels,
-                                 '0.2-0.3': len(ctr_sigmoid_logits[(0.2 <= ctr_sigmoid_logits) &
-                                                                   (ctr_sigmoid_logits < 0.3)]) / num_voxels,
-                                 '0.3-0.4': len(ctr_sigmoid_logits[(0.3 <= ctr_sigmoid_logits) &
-                                                                   (ctr_sigmoid_logits < 0.4)]) / num_voxels,
-                                 '0.4-0.5': len(ctr_sigmoid_logits[(0.4 <= ctr_sigmoid_logits) &
-                                                                   (ctr_sigmoid_logits < 0.5)]) / num_voxels,
-                                 '0.5-0.6': len(ctr_sigmoid_logits[(0.5 <= ctr_sigmoid_logits) &
-                                                                   (ctr_sigmoid_logits < 0.6)]) / num_voxels,
-                                 '0.6-0.7': len(ctr_sigmoid_logits[(0.6 <= ctr_sigmoid_logits) &
-                                                                   (ctr_sigmoid_logits < 0.7)]) / num_voxels,
-                                 '0.7-0.8': len(ctr_sigmoid_logits[(0.7 <= ctr_sigmoid_logits) &
-                                                                   (ctr_sigmoid_logits < 0.8)]) / num_voxels,
-                                 '0.8-0.9': len(ctr_sigmoid_logits[(0.8 <= ctr_sigmoid_logits) &
-                                                                   (ctr_sigmoid_logits < 0.9)]) / num_voxels,
-                                 '0.9-1': len(ctr_sigmoid_logits[(0.9 <= ctr_sigmoid_logits) &
-                                                                   (ctr_sigmoid_logits <= 1)]) / num_voxels,
-                                 },
-                                writer_step)
 
                         utils.tensorboard_write_rank_0(writer, 'sum_sigmoid', torch.sum(sigmoid_logits).item(),
-                                                       writer_step, dist.get_rank())
-                        utils.tensorboard_write_rank_0(writer, 'ctr_sum_sigmoid',
-                                                       torch.sum(ctr_sigmoid_logits).item(),
                                                        writer_step, dist.get_rank())
 
                         utils.tensorboard_write_rank_0(writer, 'mean_sigmoid', torch.mean(sigmoid_logits).item(),
                                                        writer_step, dist.get_rank())
-                        utils.tensorboard_write_rank_0(writer, 'ctr_mean_sigmoid',
-                                                       torch.mean(ctr_sigmoid_logits).item(),
-                                                       writer_step, dist.get_rank())
 
                         utils.tensorboard_write_rank_0(writer, 'bce', bce(logit_outputs, masks_only_labels).item(),
                                                        writer_step, dist.get_rank())
-                        utils.tensorboard_write_rank_0(writer, 'ctr_bce', bce(ctr_logit_outputs, zero_label).item(),
-                                                       writer_step, dist.get_rank())
+                        if ctr_inputs is not None:
+                            ctr_sigmoid_logits = ctr_post_trans(ctr_logit_outputs)
+                            # use the sigmoid values of these voxels as the penalty (track and loss)
+                            # (with thresholded_average loss)
+                            utils.tensorboard_write_rank_0(writer, 'ctr_loss', controls_loss.item(),
+                                                           writer_step, dist.get_rank())
+                            # count number of predicted vox on controls (track)
+                            utils.tensorboard_write_rank_0(writer, 'ctr_num_vox',
+                                                           torch.count_nonzero(
+                                                               ctr_sigmoid_logits[ctr_sigmoid_logits > 0.5]).item(),
+                                                           writer_step, dist.get_rank())
+                            # percentage per bin in the sigmoid of the controls (track) (0-0.1, 0.1-0.2, ..., 0.9-1)
+                            if dist.get_rank() == 0:
+                                num_voxels = torch.prod(torch.tensor(ctr_sigmoid_logits.shape)).item()
+                                writer.add_scalars(
+                                    'ctr_sigmoid_bins',
+                                    {'0-0.1': len(ctr_sigmoid_logits[(0 <= ctr_sigmoid_logits) &
+                                                                     (ctr_sigmoid_logits < 0.1)]) / num_voxels,
+                                     '0.1-0.2': len(ctr_sigmoid_logits[(0.1 <= ctr_sigmoid_logits) &
+                                                                       (ctr_sigmoid_logits < 0.2)]) / num_voxels,
+                                     '0.2-0.3': len(ctr_sigmoid_logits[(0.2 <= ctr_sigmoid_logits) &
+                                                                       (ctr_sigmoid_logits < 0.3)]) / num_voxels,
+                                     '0.3-0.4': len(ctr_sigmoid_logits[(0.3 <= ctr_sigmoid_logits) &
+                                                                       (ctr_sigmoid_logits < 0.4)]) / num_voxels,
+                                     '0.4-0.5': len(ctr_sigmoid_logits[(0.4 <= ctr_sigmoid_logits) &
+                                                                       (ctr_sigmoid_logits < 0.5)]) / num_voxels,
+                                     '0.5-0.6': len(ctr_sigmoid_logits[(0.5 <= ctr_sigmoid_logits) &
+                                                                       (ctr_sigmoid_logits < 0.6)]) / num_voxels,
+                                     '0.6-0.7': len(ctr_sigmoid_logits[(0.6 <= ctr_sigmoid_logits) &
+                                                                       (ctr_sigmoid_logits < 0.7)]) / num_voxels,
+                                     '0.7-0.8': len(ctr_sigmoid_logits[(0.7 <= ctr_sigmoid_logits) &
+                                                                       (ctr_sigmoid_logits < 0.8)]) / num_voxels,
+                                     '0.8-0.9': len(ctr_sigmoid_logits[(0.8 <= ctr_sigmoid_logits) &
+                                                                       (ctr_sigmoid_logits < 0.9)]) / num_voxels,
+                                     '0.9-1': len(ctr_sigmoid_logits[(0.9 <= ctr_sigmoid_logits) &
+                                                                       (ctr_sigmoid_logits <= 1)]) / num_voxels,
+                                     },
+                                    writer_step)
+                            utils.tensorboard_write_rank_0(writer, 'ctr_sum_sigmoid',
+                                                           torch.sum(ctr_sigmoid_logits).item(),
+                                                           writer_step, dist.get_rank())
+                            utils.tensorboard_write_rank_0(writer, 'ctr_mean_sigmoid',
+                                                           torch.mean(ctr_sigmoid_logits).item(),
+                                                           writer_step, dist.get_rank())
+                            utils.tensorboard_write_rank_0(writer, 'ctr_bce', bce(ctr_logit_outputs, zero_label).item(),
+                                                           writer_step, dist.get_rank())
 
-                        utils.tensorboard_write_rank_0(writer, 'ctr_sum_logits', torch.sum(ctr_logit_outputs).item(),
-                                                       writer_step, dist.get_rank())
+                            utils.tensorboard_write_rank_0(writer, 'ctr_sum_logits',
+                                                           torch.sum(ctr_logit_outputs).item(),
+                                                           writer_step, dist.get_rank())
 
                     """
                     END DEBUG
