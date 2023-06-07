@@ -606,6 +606,7 @@ def training(img_path_list: Sequence,
                     controls_loss = None
                     if ctr_inputs is not None:
                         ctr_logit_outputs = model(ctr_inputs)
+                        ctr_logit_outputs = torch.tensor(ctr_logit_outputs, dtype=torch.float)
                         # ctr_logit_outputs = ctr_logit_outputs[:, :1, :, :, :]
                         controls_loss = ctr_loss_function(ctr_logit_outputs)
                         # controls_loss += l2_reg
@@ -650,16 +651,27 @@ def training(img_path_list: Sequence,
                             num_voxels = torch.prod(torch.tensor(ctr_sigmoid_logits.shape)).item()
                             writer.add_scalars(
                                 'ctr_sigmoid_bins',
-                                {'0-0.1': len(ctr_sigmoid_logits[0 <= ctr_sigmoid_logits < 0.1]) / num_voxels,
-                                 '0.1-0.2': len(ctr_sigmoid_logits[0.1 <= ctr_sigmoid_logits < 0.2]) / num_voxels,
-                                 '0.2-0.3': len(ctr_sigmoid_logits[0.2 <= ctr_sigmoid_logits < 0.3]) / num_voxels,
-                                 '0.3-0.4': len(ctr_sigmoid_logits[0.3 <= ctr_sigmoid_logits < 0.4]) / num_voxels,
-                                 '0.4-0.5': len(ctr_sigmoid_logits[0.4 <= ctr_sigmoid_logits < 0.5]) / num_voxels,
-                                 '0.5-0.6': len(ctr_sigmoid_logits[0.5 <= ctr_sigmoid_logits < 0.6]) / num_voxels,
-                                 '0.6-0.7': len(ctr_sigmoid_logits[0.6 <= ctr_sigmoid_logits < 0.7]) / num_voxels,
-                                 '0.7-0.8': len(ctr_sigmoid_logits[0.7 <= ctr_sigmoid_logits < 0.8]) / num_voxels,
-                                 '0.8-0.9': len(ctr_sigmoid_logits[0.8 <= ctr_sigmoid_logits < 0.9]) / num_voxels,
-                                 '0.9-1': len(ctr_sigmoid_logits[0.9 <= ctr_sigmoid_logits <= 1]) / num_voxels},
+                                {'0-0.1': len(ctr_sigmoid_logits[(0 <= ctr_sigmoid_logits) &
+                                                                 (ctr_sigmoid_logits < 0.1)]) / num_voxels,
+                                 '0.1-0.2': len(ctr_sigmoid_logits[(0.1 <= ctr_sigmoid_logits) &
+                                                                   (ctr_sigmoid_logits < 0.2)]) / num_voxels,
+                                 '0.2-0.3': len(ctr_sigmoid_logits[(0.2 <= ctr_sigmoid_logits) &
+                                                                   (ctr_sigmoid_logits < 0.3)]) / num_voxels,
+                                 '0.3-0.4': len(ctr_sigmoid_logits[(0.3 <= ctr_sigmoid_logits) &
+                                                                   (ctr_sigmoid_logits < 0.4)]) / num_voxels,
+                                 '0.4-0.5': len(ctr_sigmoid_logits[(0.4 <= ctr_sigmoid_logits) &
+                                                                   (ctr_sigmoid_logits < 0.5)]) / num_voxels,
+                                 '0.5-0.6': len(ctr_sigmoid_logits[(0.5 <= ctr_sigmoid_logits) &
+                                                                   (ctr_sigmoid_logits < 0.6)]) / num_voxels,
+                                 '0.6-0.7': len(ctr_sigmoid_logits[(0.6 <= ctr_sigmoid_logits) &
+                                                                   (ctr_sigmoid_logits < 0.7)]) / num_voxels,
+                                 '0.7-0.8': len(ctr_sigmoid_logits[(0.7 <= ctr_sigmoid_logits) &
+                                                                   (ctr_sigmoid_logits < 0.8)]) / num_voxels,
+                                 '0.8-0.9': len(ctr_sigmoid_logits[(0.8 <= ctr_sigmoid_logits) &
+                                                                   (ctr_sigmoid_logits < 0.9)]) / num_voxels,
+                                 '0.9-1': len(ctr_sigmoid_logits[(0.9 <= ctr_sigmoid_logits) &
+                                                                   (ctr_sigmoid_logits <= 1)]) / num_voxels,
+                                 },
                                 writer_step)
 
                         utils.tensorboard_write_rank_0(writer, 'sum_sigmoid', torch.sum(sigmoid_logits).item(),
