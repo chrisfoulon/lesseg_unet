@@ -606,7 +606,7 @@ def training(img_path_list: Sequence,
                     controls_loss = None
                     if ctr_inputs is not None:
                         ctr_logit_outputs = model(ctr_inputs)
-                        ctr_logit_outputs = torch.tensor(ctr_logit_outputs, dtype=torch.float)
+                        # ctr_logit_outputs = torch.tensor(ctr_logit_outputs, dtype=torch.float)
                         # ctr_logit_outputs = ctr_logit_outputs[:, :1, :, :, :]
                         controls_loss = ctr_loss_function(ctr_logit_outputs)
                         # controls_loss += l2_reg
@@ -645,7 +645,7 @@ def training(img_path_list: Sequence,
                         utils.tensorboard_write_rank_0(writer, 'bce', bce(logit_outputs, masks_only_labels).item(),
                                                        writer_step, dist.get_rank())
                         if ctr_inputs is not None:
-                            ctr_sigmoid_logits = ctr_post_trans(ctr_logit_outputs)
+                            ctr_sigmoid_logits = ctr_post_trans(ctr_logit_outputs).as_tensor()
                             # use the sigmoid values of these voxels as the penalty (track and loss)
                             # (with thresholded_average loss)
                             utils.tensorboard_write_rank_0(writer, 'ctr_loss', controls_loss.item(),

@@ -3,6 +3,7 @@ from typing import Union, Optional
 from monai.metrics import HausdorffDistanceMetric, CumulativeIterationMetric, is_binary_tensor, \
     compute_hausdorff_distance, do_metric_reduction
 from monai.utils import MetricReduction
+from monai.data import MetaTensor
 from torch.nn.modules.loss import _Loss
 import torch
 
@@ -187,18 +188,23 @@ class ThresholdedAverageLoss(_Loss):
         Args:
             input: the shape should be BNH[WD], where N is the number of classes.
         """
-        input = torch.tensor(input, dtype=torch.float)
+        # input = input.clone().detach()
+        if isinstance(input, MetaTensor):
+            input = input.as_tensor()
         if self.sigmoid:
             input = torch.sigmoid(input)
+        # thr_data = torch.where(input >= self.threshold, input, torch.nan)
+        # data = input * mask
+        # thr_data = torch.sum(mask) / torch.sum(mask)
+        thr_data = input[input >= self.threshold]
         if self.reduction.lower() == 'mean':
-            data = input[input >= self.threshold]
-
-            return torch.mean(data)  # the batch and channel average
+            out_data = torch.mean(thr_data)  # the batch and channel average
         elif self.reduction.lower() == 'sum':
-            return torch.sum(input[input >= self.threshold])  # sum over the batch and channel dims
+            out_data = torch.sum(thr_data)  # sum over the batch and channel dims
         elif self.reduction.lower() == 'max':
-            return torch.max(input[input >= self.threshold])
+            out_data = torch.max(thr_data)
         elif self.reduction.lower() == 'min':
-            return torch.min(input[input >= self.threshold])
+            out_data = torch.min(thr_data)
         else:
             raise ValueError(f'Unsupported reduction: {self.reduction}, available options are ["mean", "sum", "none"].')
+        return out_data if out_data != torch.nan else torch.tensor(0.0)
