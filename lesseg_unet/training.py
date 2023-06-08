@@ -980,9 +980,6 @@ def training(img_path_list: Sequence,
                             best_epoch_count = epoch + 1 - best_metric_dist_epoch
                         else:
                             best_epoch_count = epoch + 1 - best_metric_epoch
-                        print(f'best_epoch_count: {best_epoch_count}')
-                        print(f'best_metric_epoch: {best_metric_epoch}')
-                        print(f'epoch: {epoch}')
                         current_ctr_val_perf_str = ''
                         if ctr_val_epoch_str != '':
                             current_ctr_val_perf_str = f' current control perf: {ctr_val_epoch_str}'
