@@ -999,6 +999,16 @@ def training(img_path_list: Sequence,
                         epoch_time_list.append(epoch_time)
                         print(f'First epoch time: '
                               f'{epoch_time_list[0]} and average epoch time {np.mean(epoch_time_list)}')
+                        """
+                        use_controls has to be shared with the other GPUs
+                        """
+                        if dist.get_rank() == 0:
+                            use_controls_to_share = [use_controls]
+                        else:
+                            use_controls_to_share = [None]
+                        torch.distributed.broadcast_object_list(use_controls_to_share, src=0)
+                        use_controls = use_controls_to_share[0]
+
                         if stop_best_epoch != -1:
                             if best_epoch_count > stop_best_epoch:
                                 stop_epoch = True
