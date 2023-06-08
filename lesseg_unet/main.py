@@ -72,6 +72,9 @@ def main():
     # Parameters for control data
     parser.add_argument('-ctr_pref', '--ctrl_image_prefix', type=str,
                         help='Define a prefix to filter the control images')
+    # add delayed_control_training
+    parser.add_argument('-dct', '--delayed_control_training', action="store_true",
+                        help='Train on controls after the the model converged on the lesioned set')
     # Segmentation parameters
     parser.add_argument('-pt', '--checkpoint', type=str, help='file path to a torch checkpoint file'
                                                               ' or directory (in that case, the most recent '
@@ -379,6 +382,7 @@ def main_worker(local_rank, args, kwargs):
                           rank=local_rank,
                           cache_num=args.cache_num,
                           enable_amp=not args.disable_mixed_precision,
+                          delayed_control_training=args.delayed_control_training,
                           use_ema=args.ema,
                           track_ema=args.track_ema,
                           no_backward_on_controls=args.no_backward_on_controls,

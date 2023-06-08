@@ -136,6 +136,7 @@ def training(img_path_list: Sequence,
              world_size=1,
              cache_num=None,
              enable_amp=True,
+             delayed_control_training=False,
              use_ema=False,
              track_ema=False,
              no_backward_on_controls=False,
@@ -471,11 +472,16 @@ def training(img_path_list: Sequence,
                 os.makedirs(img_dir, exist_ok=True)
             dist.barrier()
         stop_epoch = False
+        # TODO implementing delayed use of controls
+        use_controls = not delayed_control_training
+        best_dice_list = []
+        number_of_best_dice_intervals_to_assume_convergence = 2
+        best_dice_interval_difference = 0.005
         for epoch in range(epoch_num):
             utils.print_rank_0('-' * 10, dist.get_rank())
             utils.print_rank_0(f'epoch {epoch + 1}/{epoch_num}', dist.get_rank())
             # If ctr_split_lists is not None we need to create a new training loader with the controls
-            if ctr_split_lists is not None:
+            if ctr_split_lists is not None and use_controls:
                 # We need to add the same number of controls as the abnormal images in each fold after shuffling them
                 # The new split_list has to be shared between all the ranks
                 if dist.get_rank() == 0:
@@ -506,8 +512,7 @@ def training(img_path_list: Sequence,
                 # )
             # This is required with multi-gpu
             batches_per_epoch = len(train_loader)
-            if world_size > 1:
-                train_loader.sampler.set_epoch(epoch)
+            train_loader.sampler.set_epoch(epoch)
 
             model.train()
             epoch_loss = 0
@@ -906,6 +911,20 @@ def training(img_path_list: Sequence,
                     BEST EPOCH CONDITION AND SAVE CHECKPOINT
                     """
                     if rank == 0 and best_dice < mean_dice_val:
+                        if delayed_control_training:
+                            best_dice_list.append(mean_dice_val)
+                            if len(best_dice_list) >= number_of_best_dice_intervals_to_assume_convergence:
+                                # if the last number_of_best_dice_intervals_to_assume_convergence values in the list
+                                # are not separated by more than best_dice_interval_difference then change use_controls
+                                # to True
+                                if best_dice_list[-2] - best_dice_list[-3] < best_dice_interval_difference and \
+                                        best_dice_list[-1] - best_dice_list[-2] < best_dice_interval_difference:
+                                    print(f'The difference between the last '
+                                          f'{number_of_best_dice_intervals_to_assume_convergence} '
+                                          f'best dice values is less than {best_dice_interval_difference} '
+                                          f' so we now start using the controls to train the model. ')
+                                    use_controls = True
+
                         best_epoch_pref_str = 'Best dice epoch'
                         best_metric_epoch = epoch + 1
                         best_dice = mean_dice_val
