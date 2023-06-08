@@ -935,7 +935,7 @@ def image_only_transformd(hyper_param_dict=None, training=True, clamping=None, d
         return seg_transd
 
 
-def add_control_key(transform_dict):
+def add_control_key(transform_dict, add_allow_missing_keys=True):
     """
     Add the control key to the transform dict in every transform that has an 'image' key
     Parameters
@@ -956,5 +956,7 @@ def add_control_key(transform_dict):
                 if 'image' in tr_dict[tr][keys_or_include]:
                     if 'control' not in tr_dict[tr][keys_or_include]:
                         tr_dict[tr][keys_or_include].append('control')
+                if add_allow_missing_keys:
+                    tr_dict[tr]['allow_missing_keys'] = True
 
     return transform_dict

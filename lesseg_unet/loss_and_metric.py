@@ -207,4 +207,4 @@ class ThresholdedAverageLoss(_Loss):
             out_data = torch.min(thr_data)
         else:
             raise ValueError(f'Unsupported reduction: {self.reduction}, available options are ["mean", "sum", "none"].')
-        return out_data if out_data != torch.nan else torch.tensor(0.0)
+        return torch.nan_to_num(out_data, nan=0.0)

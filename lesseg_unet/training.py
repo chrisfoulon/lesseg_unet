@@ -438,7 +438,7 @@ def training(img_path_list: Sequence,
         utils.print_rank_0('Tensorboard SummaryWriter created', dist.get_rank())
         # Creates both the training and validation loaders based on the fold number
         # (e.g. fold 0 means the first sublist of split_lists will be the validation set for this fold)
-        if ctr_split_lists is None:
+        if ctr_split_lists is None or delayed_control_training:
             train_loader, val_loader = data_loading.create_fold_dataloaders(
                 split_lists, fold, train_img_transforms,
                 val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
