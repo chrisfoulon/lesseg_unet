@@ -556,7 +556,7 @@ def training(img_path_list: Sequence,
                 inputs, labels = batch_data['image'].to(device, non_blocking=non_blocking), batch_data['label'].to(
                     device, non_blocking=non_blocking)
                 ctr_inputs = None
-                if ctr_split_lists is not None:
+                if ctr_split_lists is not None and use_controls:
                     ctr_inputs = batch_data['control'].to(device, non_blocking=non_blocking)
                 """
                 DEBUG AND IMAGE DISPLAY BLOCK
@@ -750,12 +750,12 @@ def training(img_path_list: Sequence,
             if world_size > 1:
                 dist.all_reduce(epoch_loss, op=dist.ReduceOp.SUM)
                 epoch_loss /= world_size
-                if ctr_split_lists is not None:
+                if ctr_split_lists is not None and use_controls:
                     dist.all_reduce(ctr_epoch_loss, op=dist.ReduceOp.SUM)
                     ctr_epoch_loss /= world_size
             mean_epoch_loss = epoch_loss.item() / step
             ctr_mean_epoch_loss = None
-            if ctr_split_lists is not None:
+            if ctr_split_lists is not None and use_controls:
                 ctr_mean_epoch_loss = ctr_epoch_loss.item() / step
             if dist.get_rank() == 0:
                 utils.logging_rank_0(f"Epoch {epoch + 1}, average loss: {mean_epoch_loss:.4f}", dist.get_rank())
@@ -794,7 +794,7 @@ def training(img_path_list: Sequence,
                             device, non_blocking=non_blocking), val_data['label'].to(
                             device, non_blocking=non_blocking)
                         ctr_val_inputs = None
-                        if ctr_split_lists is not None:
+                        if ctr_split_lists is not None and use_controls:
                             ctr_val_inputs = val_data['control'].to(device, non_blocking=non_blocking)
                         # In case CoordConv is used
                         with torch.cuda.amp.autocast():
@@ -917,8 +917,11 @@ def training(img_path_list: Sequence,
                                 # if the last number_of_best_dice_intervals_to_assume_convergence values in the list
                                 # are not separated by more than best_dice_interval_difference then change use_controls
                                 # to True
-                                if best_dice_list[-2] - best_dice_list[-3] < best_dice_interval_difference and \
-                                        best_dice_list[-1] - best_dice_list[-2] < best_dice_interval_difference:
+                                converged = True
+                                for i in range(1, number_of_best_dice_intervals_to_assume_convergence):
+                                    if abs(best_dice_list[-i] - best_dice_list[-i - 1]) > best_dice_interval_difference:
+                                        converged = False
+                                if converged:
                                     print(f'The difference between the last '
                                           f'{number_of_best_dice_intervals_to_assume_convergence} '
                                           f'best dice values is less than {best_dice_interval_difference} '
@@ -980,7 +983,9 @@ def training(img_path_list: Sequence,
                         print(f'best_epoch_count: {best_epoch_count}')
                         print(f'best_metric_epoch: {best_metric_epoch}')
                         print(f'epoch: {epoch}')
-                        current_ctr_val_perf_str = f' current control perf: {ctr_val_epoch_str}'
+                        current_ctr_val_perf_str = ''
+                        if ctr_val_epoch_str != '':
+                            current_ctr_val_perf_str = f' current control perf: {ctr_val_epoch_str}'
                         str_current_epoch = (
                                 f'[Fold: {fold}]Current epoch: {epoch + 1} current mean loss: '
                                 f'{mean_loss_val.item():.4f}'
