@@ -1215,16 +1215,16 @@ unetr_cc_patches['patches'] = [
     #     'pos': 1,
     #     'neg': 1,
     #     'num_samples': 4}},
-    {'RandFlipd': {
-        'keys': ["image", "label"],
-        'spatial_axis': [1],
-        'prob': low_prob}
-     },
-    {'RandFlipd': {
-        'keys': ["image", "label"],
-        'spatial_axis': [2],
-        'prob': low_prob}
-     },
+    # {'RandFlipd': {
+    #     'keys': ["image", "label"],
+    #     'spatial_axis': [1],
+    #     'prob': low_prob}
+    #  },
+    # {'RandFlipd': {
+    #     'keys': ["image", "label"],
+    #     'spatial_axis': [2],
+    #     'prob': low_prob}
+    #  },
 ]
 
 
