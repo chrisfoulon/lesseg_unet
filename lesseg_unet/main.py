@@ -110,6 +110,10 @@ def main():
     # Files split and matching options
     parser.add_argument('-tv', '--train_val', type=int, help='Training / validation percentage cut')
     parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
+    # add image_cut_prefix
+    parser.add_argument('-icp', '--image_cut_prefix', type=str,
+                        help='Prefix to cut the lesion file name (keep right part) in case the filename without the '
+                             '.nii extension cannot be found')
     parser.add_argument('-ics', '--image_cut_suffix', type=str,
                         help='Suffix to cut the lesion file name (keep left part) in case the filename without the '
                              '.nii extension cannot be found')
@@ -457,6 +461,7 @@ def main_worker(local_rank, args, kwargs):
                                          output_root,
                                          checkpoint,
                                          b1000_pref,
+                                         image_cut_prefix=args.image_cut_prefix,
                                          image_cut_suffix=args.image_cut_suffix,
                                          transform_dict=transform_dict,
                                          device=args.torch_device,

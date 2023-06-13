@@ -272,7 +272,6 @@ def segmentation_loop(img_path_list: Sequence,
                       output_dir: Union[str, bytes, os.PathLike],
                       checkpoint_path: Union[str, bytes, os.PathLike],
                       img_pref: str = None,
-                      image_cut_suffix=None,
                       transform_dict: dict = None,
                       output_mode='segmentation',
                       device: str = None,
@@ -294,7 +293,8 @@ def segmentation_loop(img_path_list: Sequence,
         transform_dict = checkpoint['transform_dict']
     logging.info(f'Torch device used for this segmentation: {str(device)}')
     val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
-    val_ds = data_loading.init_segmentation(img_path_list, img_pref, transform_dict, clamping=clamping)
+    val_ds = data_loading.init_segmentation(img_path_list, img_pref,
+                                            transform_dict, clamping=clamping)
     val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
                                                             dataloader_workers=dataloader_workers)
     training_img_size = transformations.find_param_from_hyper_dict(
@@ -431,6 +431,7 @@ def validation_loop(img_path_list: Sequence,
                     output_dir: Union[str, bytes, os.PathLike],
                     checkpoint_path: Union[str, bytes, os.PathLike],
                     img_pref: str = None,
+                    image_cut_prefix=None,
                     image_cut_suffix=None,
                     transform_dict: dict = None,
                     device: str = None,
@@ -452,6 +453,7 @@ def validation_loop(img_path_list: Sequence,
     if transform_dict is None:
         transform_dict = checkpoint['transform_dict']
     _, val_ds = data_loading.init_training_data(img_path_list, seg_path_list, img_pref,
+                                                image_cut_prefix=image_cut_prefix,
                                                 image_cut_suffix=image_cut_suffix,
                                                 transform_dict=transform_dict,
                                                 train_val_percentage=0, clamping=clamping)

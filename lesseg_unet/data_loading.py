@@ -14,7 +14,7 @@ from lesseg_unet.utils import get_str_path_list
 
 
 def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
-                           img_pref: str = None, image_cut_pref: str = None,
+                           img_pref: str = None, image_cut_prefix: str = None,
                            image_cut_suffix: str = None, check_inputs=True) -> (dict, dict):
     unmatched_images = []
     img_dict = {}
@@ -29,13 +29,13 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
                 if matched:
                     return True
                 else:
-                    if image_cut_suffix is not None and image_cut_pref is not None:
+                    if image_cut_suffix is not None and image_cut_prefix is not None:
                         return Path(img).name.split(
-                            image_cut_pref)[-1].split(image_cut_suffix)[0] in Path(les).name.split('.nii')[0]
+                            image_cut_prefix)[-1].split(image_cut_suffix)[0] in Path(les).name.split('.nii')[0]
                     if image_cut_suffix is not None:
                         return Path(img).name.split(image_cut_suffix)[0] in Path(les).name.split('.nii')[0]
-                    if image_cut_pref is not None:
-                        return Path(img).name.split(image_cut_pref)[-1] in Path(les).name.split('.nii')[0]
+                    if image_cut_prefix is not None:
+                        return Path(img).name.split(image_cut_prefix)[-1] in Path(les).name.split('.nii')[0]
             # TODO make it work with both prefix and suffix
             matching_les_list = [str(les) for les in seg_path_list if condition(les)]
         if len(matching_les_list) == 0:
@@ -60,9 +60,11 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
 
 
 def create_file_dict_lists(raw_img_path_list: Sequence, raw_seg_path_list: Sequence,
-                           img_pref: str = None, image_cut_suffix: str = None,
+                           img_pref: str = None, image_cut_prefix: str = None,
+                           image_cut_suffix: str = None,
                            train_val_percentage: float = 75) -> Tuple[list, list]:
     img_dict, _ = match_img_seg_by_names(raw_img_path_list, raw_seg_path_list, img_pref,
+                                         image_cut_prefix=image_cut_prefix,
                                          image_cut_suffix=image_cut_suffix)
     training_end_index = math.ceil(train_val_percentage / 100 * len(img_dict))
     full_file_list = [{'image': str(img), 'label': str(img_dict[img])} for img in img_dict]
@@ -127,12 +129,14 @@ def init_training_data(
         img_path_list: Sequence,
         seg_path_list: Sequence,
         img_pref: str = None,
+        image_cut_prefix: str = None,
         image_cut_suffix: str = None,
         transform_dict: dict = None,
         train_val_percentage: float = 75,
         clamping=None) -> Tuple[monai.data.Dataset, monai.data.Dataset]:
     print('Listing input files to be loaded')
     train_files, val_files = create_file_dict_lists(img_path_list, seg_path_list, img_pref,
+                                                    image_cut_prefix,
                                                     image_cut_suffix,
                                                     train_val_percentage)
     print('Create transformations')
