@@ -608,7 +608,8 @@ def training(img_path_list: Sequence,
                         utils.tensorboard_write_rank_0(writer, 'ema_abnormals',
                                                        ema_magnitude_abnormals,
                                                        writer_step, dist.get_rank())
-
+                    if not debug:
+                        del inputs, labels
                     controls_loss = None
                     if ctr_inputs is not None:
                         ctr_logit_outputs = model(ctr_inputs)
@@ -628,6 +629,9 @@ def training(img_path_list: Sequence,
                             controls_loss /= ema_magnitude_controls
                             controls_loss *= ema_magnitude_abnormals
                             controls_loss /= 10
+
+                        if not debug:
+                            del ctr_inputs
 
                     # Regularisation
                     l2_reg = utils.sum_non_bias_l2_norms(params, 1e-4)
@@ -651,7 +655,7 @@ def training(img_path_list: Sequence,
 
                             utils.tensorboard_write_rank_0(writer, 'bce', bce(logit_outputs, masks_only_labels).item(),
                                                            writer_step, dist.get_rank())
-                            if ctr_inputs is not None:
+                            if controls_loss is not None:
                                 ctr_sigmoid_logits = ctr_post_trans(ctr_logit_outputs).as_tensor()
                                 # use the sigmoid values of these voxels as the penalty (track and loss)
                                 # (with thresholded_average loss)
@@ -744,6 +748,9 @@ def training(img_path_list: Sequence,
                         train_iter.set_description(
                             f'Training[{epoch + 1}] '
                             f'batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss.item() / step:.4f}]' + ctr_desc)
+
+            del ctr_sigmoid_logits, ctr_logit_outputs, loss, controls_loss
+            torch.cuda.empty_cache()
 
             if one_loop:
                 exit()
