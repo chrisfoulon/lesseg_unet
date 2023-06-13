@@ -488,6 +488,7 @@ def training(img_path_list: Sequence,
                     split_lists_with_ctr = []
                     for i in range(len(split_lists)):
                         ctr_fold_list = deepcopy(ctr_split_lists[i])
+                        # Might be unnecessary but I don't think it makes much a difference
                         random.shuffle(ctr_fold_list)
                         split_lists_with_ctr.append(deepcopy(split_lists[i]))
                         for img_dict in split_lists_with_ctr[i]:
