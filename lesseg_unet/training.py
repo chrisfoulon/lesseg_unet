@@ -651,6 +651,7 @@ def training(img_path_list: Sequence,
 
                             utils.tensorboard_write_rank_0(writer, 'bce', bce(logit_outputs, masks_only_labels).item(),
                                                            writer_step, dist.get_rank())
+
                             if ctr_inputs is not None:
                                 ctr_sigmoid_logits = ctr_post_trans(ctr_logit_outputs).as_tensor()
                                 # use the sigmoid values of these voxels as the penalty (track and loss)
@@ -697,6 +698,11 @@ def training(img_path_list: Sequence,
                                                                writer_step, dist.get_rank())
                                 utils.tensorboard_write_rank_0(writer, 'ctr_bce',
                                                                bce(ctr_logit_outputs, zero_label).item(),
+                                                               writer_step, dist.get_rank())
+                                masked_ctr = ctr_sigmoid_logits[ctr_sigmoid_logits > 0.5]
+                                masked_zero_label = torch.zeros_like(masked_ctr)
+                                utils.tensorboard_write_rank_0(writer, 'ctr_masked_bce',
+                                                               bce(masked_ctr, masked_zero_label).item(),
                                                                writer_step, dist.get_rank())
 
                                 utils.tensorboard_write_rank_0(writer, 'ctr_sum_logits',
