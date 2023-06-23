@@ -291,7 +291,7 @@ def main_worker(local_rank, args, kwargs):
         ctr_list = file_to_list(args.controls_list)
         ctr_list = utils.get_str_path_list(ctr_list, pref=args.ctrl_image_prefix)
     elif args.controls_pretrained_split_list is not None:
-        ctr_list = utils.open_json(args.controls_list)
+        ctr_list = utils.open_json(args.controls_pretrained_split_list)
     else:
         ctr_list = None
     if args.image_prefix is not None:
