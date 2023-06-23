@@ -45,6 +45,8 @@ def main():
                                      help='folder containing the control images (image_prefix not applied)')
     control_paths_group.add_argument('-lctr', '--controls_list', type=str,
                                      help='file path of the list of control images (image_prefix not applied)')
+    control_paths_group.add_argument('-ctr_psl', '--controls_pretrained_split_list', type=str,
+                                   help='File containing split paths lists of the k-fold for the controls')
     # Tranformation
     parser.add_argument('-trs', '--transform_dict', type=str,
                         help='file path to a json dictionary of transformations')
@@ -288,6 +290,8 @@ def main_worker(local_rank, args, kwargs):
     elif args.controls_list is not None:
         ctr_list = file_to_list(args.controls_list)
         ctr_list = utils.get_str_path_list(ctr_list, pref=args.ctrl_image_prefix)
+    elif args.controls_pretrained_split_list is not None:
+        ctr_list = utils.open_json(args.controls_list)
     else:
         ctr_list = None
     if args.image_prefix is not None:

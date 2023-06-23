@@ -1205,7 +1205,7 @@ unetr_cc_patches['patches'] = [
     {'RandSpatialCropSamplesd': {
         'keys': ['image', 'label'],
         'roi_size': [64, 64, 64],
-        'num_samples': 4,
+        'num_samples': 2,
         'random_center': True,
         'random_size': False}},
     # {'RandCropByPosNegLabeld': {

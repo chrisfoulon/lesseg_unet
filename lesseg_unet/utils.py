@@ -621,6 +621,20 @@ def repeat_array_to_dim(arr, dim):
 
 
 def get_fold_splits(split_list_file_path, output_dir, replace_root='', by_this_root='', pref=''):
+    """
+    Get the split lists from the split_list_file_path and save them in output_dir
+    Parameters
+    ----------
+    split_list_file_path
+    output_dir
+    replace_root
+    by_this_root
+    pref
+
+    Returns
+    -------
+
+    """
     if Path(split_list_file_path).is_dir():
         split_data_list = open_json(Path(split_list_file_path, 'split_lists.json'))
     else:

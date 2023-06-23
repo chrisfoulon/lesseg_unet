@@ -276,9 +276,23 @@ def training(img_path_list: Sequence,
     ctr_split_lists = None
     if ctr_path_list is not None:
         if dist.get_rank() == 0:
-            utils.logging_rank_0(f'##### Number of control images for training: {len(ctr_path_list)}', dist.get_rank())
-            split_lists_to_share = [utils.split_lists_in_folds(
-                ctr_path_list, folds_number, train_val_percentage, shuffle=True, image_key='control')]
+            try:
+                if len(ctr_path_list) == folds_number and isinstance(ctr_path_list[0], list):
+                    utils.logging_rank_0(
+                        f'##### Loading pre-split control lists for training',
+                        dist.get_rank())
+                    utils.logging_rank_0(
+                        f'##### Number of control images for training: {np.sum([len(l) for l in ctr_path_list])}',
+                        dist.get_rank())
+                    split_lists_to_share = [ctr_path_list]
+                else:
+                    utils.logging_rank_0(f'##### Number of control images for training: {len(ctr_path_list)}',
+                                         dist.get_rank())
+                    split_lists_to_share = [utils.split_lists_in_folds(
+                        ctr_path_list, folds_number, train_val_percentage, shuffle=True, image_key='control')]
+            except IndexError as e:
+                print('ERROR: The number of controls equals the number of folds! It is weird!')
+                raise e
         else:
             split_lists_to_share = [None]
         torch.distributed.broadcast_object_list(split_lists_to_share, src=0)
@@ -696,14 +710,20 @@ def training(img_path_list: Sequence,
                                 utils.tensorboard_write_rank_0(writer, 'ctr_mean_sigmoid',
                                                                torch.mean(ctr_sigmoid_logits).item(),
                                                                writer_step, dist.get_rank())
+                                tmp_zero_label = torch.zeros_like(ctr_logit_outputs)
                                 utils.tensorboard_write_rank_0(writer, 'ctr_bce',
-                                                               bce(ctr_logit_outputs, zero_label).item(),
+                                                               bce(ctr_logit_outputs, tmp_zero_label).item(),
                                                                writer_step, dist.get_rank())
                                 masked_ctr = ctr_sigmoid_logits[ctr_sigmoid_logits > 0.5]
                                 masked_zero_label = torch.zeros_like(masked_ctr)
-                                utils.tensorboard_write_rank_0(writer, 'ctr_masked_bce',
-                                                               bce(masked_ctr, masked_zero_label).item(),
-                                                               writer_step, dist.get_rank())
+                                if len(masked_ctr) > 0:
+                                    utils.tensorboard_write_rank_0(writer, 'ctr_masked_bce',
+                                                                   bce(masked_ctr, masked_zero_label).item(),
+                                                                   writer_step, dist.get_rank())
+                                else:
+                                    utils.tensorboard_write_rank_0(writer, 'ctr_masked_bce',
+                                                                   0,
+                                                                   writer_step, dist.get_rank())
 
                                 utils.tensorboard_write_rank_0(writer, 'ctr_sum_logits',
                                                                torch.sum(ctr_logit_outputs).item(),
