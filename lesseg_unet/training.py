@@ -755,7 +755,7 @@ def training(img_path_list: Sequence,
                 Progress and other str formatting
                 """
                 epoch_loss += loss
-                if ctr_inputs is not None:
+                if controls_loss is not None:
                     ctr_epoch_loss += controls_loss
                 if dist.get_rank() == 0:
                     if no_progressbar_training or dist.get_rank() != 0:
@@ -763,7 +763,7 @@ def training(img_path_list: Sequence,
                                            dist.get_rank())
                     else:
                         ctr_desc = ''
-                        if ctr_inputs is not None:
+                        if controls_loss is not None:
                             ctr_loss_str_tmp = controls_loss.item() if isinstance(controls_loss, torch.Tensor) \
                                 else controls_loss
                             ctr_epoch_loss_tmp = ctr_epoch_loss.item() if isinstance(ctr_epoch_loss, torch.Tensor) \
