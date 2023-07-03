@@ -13,6 +13,7 @@ import multiprocessing
 
 from nilearn.regions import connected_regions
 from scipy.stats import entropy
+import pandas as pd
 
 import monai.transforms
 from monai.metrics import HausdorffDistanceMetric, DiceMetric
@@ -733,4 +734,53 @@ def get_seg_dict(seg_folder, keys_struct=None, key_to_match='b1000', relative_pa
                     if name in Path(img_dict['b1000']).name:
                         seg_dict[names_to_keys[name]] = img_dict
                         break
+    return seg_dict
+
+
+def get_perf_seg_dict(seg_folder, keys_struct=None, key_to_match='b1000', relative_output_paths=True):
+    validation_perf = None
+    output_volume_dict = open_json(Path(seg_folder) / '__output_image_volumes.json')
+    if 'val_perf_global_measures.csv' in Path(seg_folder).iterdir():
+        validation_perf = pd.read_csv(Path(seg_folder) / 'val_perf_global_measures.csv', header=0)
+    input_output_paths_dict = open_json(Path(seg_folder) / '__input_output_paths_dict.json')
+    seg_dict = {}
+    for input_path in tqdm(input_output_paths_dict):
+        output_key = None
+        if keys_struct is None:
+            output_key = Path(input_path).name
+        else:
+            found = False
+            for k in keys_struct:
+                if keys_struct[k][key_to_match] == input_path:
+                    output_key = k
+                    found = True
+                    break
+            if not found:
+                raise ValueError(f'No key found for {input_path}')
+        segmentation_full_path = input_output_paths_dict[input_path].replace('input', 'output', 1)
+        if relative_output_paths:
+            input_path = input_path
+            segmentation_path = str(Path(segmentation_full_path).relative_to(Path(seg_folder)))
+        else:
+            segmentation_path = segmentation_full_path
+        if validation_perf is None:
+            seg_dict[output_key] = {'b1000': input_path, 'segmentation': segmentation_path, 'volume': output_volume_dict[segmentation_full_path]}
+        else:
+            seg_dict[output_key] = {'b1000': input_path, 'segmentation': segmentation_path}
+            # find the 'core_filename' contained in p in val_perf_df
+            for row in validation_perf.iloc:
+                if row['core_filename'] in Path(input_path).name:
+                    seg_dict[output_key].update(row.to_dict())
+
+    return seg_dict
+
+
+def get_perf_seg_dict_from_folders(seg_folders, keys_struct=None, key_to_match='b1000', relative_output_paths=True):
+    # if segfolders is a string or a path, list all the subfolders into seg_folders
+    if isinstance(seg_folders, (str, os.PathLike)):
+        seg_folders = [str(p) for p in Path(seg_folders).iterdir() if p.is_dir()]
+    seg_dict = {}
+    for seg_folder in seg_folders:
+        seg_dict.update(get_perf_seg_dict(seg_folder, keys_struct=keys_struct, key_to_match=key_to_match,
+                                          relative_output_paths=relative_output_paths))
     return seg_dict

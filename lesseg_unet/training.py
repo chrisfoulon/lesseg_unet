@@ -731,6 +731,7 @@ def training(img_path_list: Sequence,
                                 utils.tensorboard_write_rank_0(writer, 'ctr_sum_logits',
                                                                torch.sum(ctr_logit_outputs).item(),
                                                                writer_step, dist.get_rank())
+                                del ctr_sigmoid_logits
 
                     """
                     END DEBUG
@@ -774,7 +775,7 @@ def training(img_path_list: Sequence,
                             f'Training[{epoch + 1}] '
                             f'batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss.item() / step:.4f}]' + ctr_desc)
 
-            del ctr_sigmoid_logits, ctr_logit_outputs, loss, controls_loss
+            del ctr_logit_outputs, loss, controls_loss
             torch.cuda.empty_cache()
 
             if one_loop:
@@ -856,7 +857,7 @@ def training(img_path_list: Sequence,
                             if ctr_val_inputs is not None:
                                 ctr_val_outputs = model(ctr_val_inputs)
                                 # ctr_val_outputs = ctr_val_outputs[:, :1, :, :, :]
-                                ctr_val_loss = ctr_loss_function(ctr_logit_outputs)
+                                ctr_val_loss = ctr_loss_function(ctr_val_outputs)
                                 # * weight_factor
                                 ctr_val_outputs_list = decollate_batch(ctr_val_outputs)
                                 ctr_val_convert = [
