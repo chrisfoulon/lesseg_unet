@@ -507,3 +507,41 @@ def perf_dataset_overlap(input_images, spreadsheet, filename_col='core_filename'
         temp_overlap_data = da.nanstd(temp_overlap_data, axis=0).compute()
     temp_overlap = nib.Nifti1Image(temp_overlap_data, temp_overlap.affine)
     return temp_overlap
+
+
+def perf_dataset_overlap_from_json(json_dict, filename_key='segmentation', perf_key='dice_metric',
+                                   operation='mean', non_zero_only=False):
+    if isinstance(json_dict, str):
+        json_dict = open_json(json_dict)
+    temp_overlap = None
+    temp_overlap_data = None
+    for k in tqdm(json_dict):
+        nii = nib.load(json_dict[k][filename_key])
+        nii_data = nii.get_fdata() * json_dict[k][perf_key]
+        if non_zero_only:
+            nii_data[nii_data == 0] = np.nan
+        if temp_overlap_data is None:
+            temp_overlap_data = da.from_array(nii_data)
+            temp_overlap = nii
+            temp_overlap_data = da.stack([temp_overlap_data], axis=0)
+        else:
+            temp_overlap_data = da.concatenate([temp_overlap_data, [da.from_array(nii_data)]])
+    #     else:
+    #         if operation in ['mean', 'std']:
+    #             temp_overlap_data.append(nii)
+    #             # temp_overlap_data = np.std(stack, axis=0)
+    #         else:
+    #             raise ValueError(f'{operation} not implemented yet')
+    #     chunk_length += 1
+    #     # if chunk_length == window_size:
+    # temp_overlap_data_stack = np.stack(temp_overlap_data)
+    #         # if operation == 'mean':
+    #         #     temp_overlap_data = np.nanmean(temp_overlap_data, axis=0)
+    if operation == 'mean':
+        # temp_overlap_data = np.nanmean(temp_overlap_data, axis=0)
+        temp_overlap_data = da.nanmean(temp_overlap_data, axis=0).compute()
+    if operation == 'std':
+        # temp_overlap_data = np.nanstd(temp_overlap_data, axis=0)
+        temp_overlap_data = da.nanstd(temp_overlap_data, axis=0).compute()
+    temp_overlap = nib.Nifti1Image(temp_overlap_data, temp_overlap.affine)
+    return temp_overlap

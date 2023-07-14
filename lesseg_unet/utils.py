@@ -740,8 +740,9 @@ def get_seg_dict(seg_folder, keys_struct=None, key_to_match='b1000', relative_pa
 def get_perf_seg_dict(seg_folder, keys_struct=None, key_to_match='b1000', relative_output_paths=True):
     validation_perf = None
     output_volume_dict = open_json(Path(seg_folder) / '__output_image_volumes.json')
-    if 'val_perf_global_measures.csv' in Path(seg_folder).iterdir():
-        validation_perf = pd.read_csv(Path(seg_folder) / 'val_perf_global_measures.csv', header=0)
+    val_perf_path = Path(seg_folder) / 'val_perf_individual_measures.csv'
+    if val_perf_path.is_file():
+        validation_perf = pd.read_csv(val_perf_path, header=0)
     input_output_paths_dict = open_json(Path(seg_folder) / '__input_output_paths_dict.json')
     seg_dict = {}
     for input_path in tqdm(input_output_paths_dict):
@@ -764,12 +765,14 @@ def get_perf_seg_dict(seg_folder, keys_struct=None, key_to_match='b1000', relati
         else:
             segmentation_path = segmentation_full_path
         if validation_perf is None:
-            seg_dict[output_key] = {'b1000': input_path, 'segmentation': segmentation_path, 'volume': output_volume_dict[segmentation_full_path]}
+            seg_dict[output_key] = {'b1000': input_path, 'segmentation': segmentation_path,
+                                    'volume': output_volume_dict[segmentation_full_path]}
         else:
-            seg_dict[output_key] = {'b1000': input_path, 'segmentation': segmentation_path}
+            label_full_path = input_output_paths_dict[input_path].replace('input', 'label', 1)
+            seg_dict[output_key] = {'b1000': input_path, 'segmentation': segmentation_path, 'label': label_full_path}
             # find the 'core_filename' contained in p in val_perf_df
             for row in validation_perf.iloc:
-                if row['core_filename'] in Path(input_path).name:
+                if row['core_filename'] in Path(input_output_paths_dict[input_path]).name:
                     seg_dict[output_key].update(row.to_dict())
 
     return seg_dict
@@ -784,3 +787,31 @@ def get_perf_seg_dict_from_folders(seg_folders, keys_struct=None, key_to_match='
         seg_dict.update(get_perf_seg_dict(seg_folder, keys_struct=keys_struct, key_to_match=key_to_match,
                                           relative_output_paths=relative_output_paths))
     return seg_dict
+
+
+def get_age_years_str(age):
+    if isinstance(age, str):
+        return age
+    elif isinstance(age, (int, float)):
+        return str(int(age)).zfill(3) + 'Y'
+
+
+def get_age_int(age):
+    if isinstance(age, str):
+        return int(age.split('Y')[0])
+    elif isinstance(age, (int, float)):
+        return int(age)
+
+
+def get_sex_str(sex):
+    if isinstance(sex, str):
+        return sex
+    else:
+        return 'F' if sex == 0 else 'M'
+
+
+def get_sex_int(sex):
+    if isinstance(sex, str):
+        return 0 if sex == 'F' else 1
+    else:
+        return sex
