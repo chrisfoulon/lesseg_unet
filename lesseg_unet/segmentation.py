@@ -515,7 +515,7 @@ def validation_loop(img_path_list: Sequence,
                           'trash_img_nb',
                           'val_min_dice',
                           'val_max_dice']
-    loop_dicts_list = {}
+    loop_dicts_list = []
     img_vol_dict = {}
     model.eval()
     with torch.no_grad():
@@ -559,10 +559,10 @@ def validation_loop(img_path_list: Sequence,
             # del output_dict_data['image']
             output_dict_data['label'] = deepcopy(val_output_convert[0])
             # Loop dataframe filling
-            loop_dicts_list = loop_df.append({'core_filename': input_filename.split('input_')[-1],
+            loop_dicts_list.append({'core_filename': input_filename.split('input_')[-1],
                                       'dice_metric': dice,
                                       'volume': vol_output,
-                                      'distance': dist}, ignore_index=True)
+                                      'distance': dist})
 
             # Maybe not necessary but I prefer it there
             dice_metric.reset()
