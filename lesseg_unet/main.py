@@ -65,7 +65,7 @@ def main():
                         help='Loss function used for training on controls')
     parser.add_argument('-vlfct', '--val_loss_function', type=str, default='dice',
                         help='Loss function used for validation')
-    parser.add_argument('-wf', '--weight_factor', type=float, default=1,
+    parser.add_argument('-wf', '--weight_factor', type=float, default=1.,
                         help='Multiply the control loss by this factor')
     parser.add_argument('-ema', action="store_true", help='Use EMA')
     parser.add_argument('-tema', '--track_ema', action="store_true", help='Track EMA')

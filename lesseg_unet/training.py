@@ -145,7 +145,8 @@ def training(img_path_list: Sequence,
              ):
     rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
     print("LIMIT before: {}".format(rlimit))
-    resource.setrlimit(resource.RLIMIT_NOFILE, (40000, rlimit[1]))
+    resource.setrlimit(resource.RLIMIT_NOFILE, (2048, rlimit[1]))
+    # resource.setrlimit(resource.RLIMIT_NOFILE, (40000, rlimit[1]))
     rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
     print("LIMIT after: {}".format(rlimit))
     shuffle_training = True
@@ -629,7 +630,7 @@ def training(img_path_list: Sequence,
                         ctr_logit_outputs = model(ctr_inputs)
                         # ctr_logit_outputs = torch.tensor(ctr_logit_outputs, dtype=torch.float)
                         # ctr_logit_outputs = ctr_logit_outputs[:, :1, :, :, :]
-                        controls_loss = ctr_loss_function(ctr_logit_outputs)
+                        controls_loss = ctr_loss_function(ctr_logit_outputs) * weight_factor
                         # controls_loss += l2_reg
 
                         if monitor_emas:

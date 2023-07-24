@@ -25,6 +25,7 @@ import nibabel as nib
 import torch
 import numpy as np
 from bcblib.tools.nifti_utils import load_nifti
+from bcblib.tools.spreadsheet_io_utils import import_spreadsheet
 
 
 validation_input_pref = 'nib_input_'
@@ -815,3 +816,27 @@ def get_sex_int(sex):
         return 0 if sex == 'F' else 1
     else:
         return sex
+
+
+def weight_lesion_dataset(dataframe, filepath_column, weight_column, output_folder, keys_column=None):
+    dataframe = import_spreadsheet(str(dataframe))
+    os.makedirs(output_folder, exist_ok=True)
+    output_dict = {}
+    # for each filepath, we load the image, multiply the data of the image by the weight and save it in the out folder
+    weighted_paths_column = []
+    for row in tqdm(dataframe.iterrows()):
+        filepath = row[1][filepath_column]
+        weight = row[1][weight_column]
+        output_file_path = Path(output_folder) / Path(filepath).name
+        # add the weighted path to a new column in the dataframe
+        weighted_paths_column.append(str(output_file_path))
+        nii = load_nifti(filepath)
+        new_nii = nib.Nifti1Image(nii.get_fdata() * weight, nii.affine)
+        nib.save(new_nii, output_file_path)
+        if keys_column is not None:
+            key = row[1][keys_column]
+            output_dict[key] = {}
+            output_dict[key]['weighted_path'] = str(output_file_path)
+    dataframe['weighted_path'] = weighted_paths_column
+    return output_dict, dataframe
+

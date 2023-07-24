@@ -607,7 +607,6 @@ def validation_loop(img_path_list: Sequence,
                     inputs_np, labels_np, outputs_np, output_subdir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(trash_count)))
             else:
-                img_count += 1
                 # print('Saving good image #{}'.format(img_count))
                 # TODO This is slow AF because of the imshow, maybe resetting the plot would work
                 # utils.save_img_lbl_seg_to_png(
@@ -625,6 +624,8 @@ def validation_loop(img_path_list: Sequence,
                 output_path_list = utils.save_img_lbl_seg_to_nifti(
                     inputs_np, labels_np, outputs_np, output_subdir, val_output_affine,
                     '{}_{}'.format(str(input_filename), str(img_count)))
+                # It's just easier to start at 0 for EVERYTHING
+                img_count += 1
             img_vol_dict[output_path_list[-1]] = vol_output
             for i, input_image_path in enumerate(val_data['image_meta_dict']['filename_or_obj']):
                 input_output_paths_dict[input_image_path] = output_path_list[i]
