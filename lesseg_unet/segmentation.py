@@ -643,11 +643,11 @@ def validation_loop(img_path_list: Sequence,
             'val_min_dice': min_score,
             'val_max_dice': max_score,
             'val_best_mean_dice': 0
-        }, columns=perf_measure_names)
+        }, orient='index')
     with open(Path(output_dir, f'__output_image_volumes.json'), 'w+') as j:
         json.dump(img_vol_dict, j, indent=4)
     pd.DataFrame().from_dict(img_vol_dict, orient='index').to_csv(Path(output_dir, f'__output_image_volumes.csv'))
-    df.to_csv(Path(output_dir, 'val_perf_global_measures.csv'), columns=perf_measure_names)
+    df.to_csv(Path(output_dir, 'val_perf_global_measures.csv'))  # , columns=perf_measure_names)
     loop_df_columns = ['core_filename', 'dice_metric', 'volume', 'distance']
-    loop_df = pd.DataFrame(columns=loop_df_columns).from_records(loop_dicts_list)
-    loop_df.to_csv(Path(output_dir, 'val_perf_individual_measures.csv'), columns=loop_df_columns)
+    loop_df = pd.DataFrame().from_records(loop_dicts_list)
+    loop_df.to_csv(Path(output_dir, 'val_perf_individual_measures.csv'))  # , columns=loop_df_columns)
