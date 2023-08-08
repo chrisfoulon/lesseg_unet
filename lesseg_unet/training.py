@@ -143,12 +143,61 @@ def training(img_path_list: Sequence,
              debug=False,
              **kwargs
              ):
-    rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-    print("LIMIT before: {}".format(rlimit))
-    resource.setrlimit(resource.RLIMIT_NOFILE, (2048, rlimit[1]))
-    # resource.setrlimit(resource.RLIMIT_NOFILE, (40000, rlimit[1]))
-    rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-    print("LIMIT after: {}".format(rlimit))
+    """
+    Main training function for the UNETR and UNET models
+    Parameters
+    ----------
+    img_path_list
+    lbl_path_list
+    output_dir
+    ctr_path_list
+    img_pref
+    image_cut_suffix
+    transform_dict
+    pretrained_point
+    model_type
+    device
+    batch_size
+    val_batch_size
+    epoch_num
+    gradient_accumulation_steps
+    dataloader_workers
+    train_val_percentage
+    lesion_set_clamp
+    resize
+    stop_best_epoch
+    training_loss_fct
+    ctr_loss_fct
+    val_loss_fct
+    weight_factor
+    folds_number
+    dropout
+    cache_dir
+    save_every_decent_best_epoch
+    rank
+    world_size
+    cache_num
+    enable_amp
+    delayed_control_training
+    use_ema
+    track_ema
+    no_backward_on_controls
+    debug
+    kwargs
+
+    Returns
+    -------
+    Notes:
+    https://mmcv.readthedocs.io/en/v1.5.2_a/_modules/torch/utils/data/dataloader.html explains
+    "RuntimeError: received 0 items of ancdata" error
+    """
+    # TODO Add an option to change the lower limit of the number of open files
+    # rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    # print("LIMIT before: {}".format(rlimit))
+    # # resource.setrlimit(resource.RLIMIT_NOFILE, (4096, rlimit[1]))
+    # # resource.setrlimit(resource.RLIMIT_NOFILE, (40000, rlimit[1]))
+    # # rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    # print("LIMIT after: {}".format(rlimit))
     shuffle_training = True
     display_training = False
     if 'display_training' in kwargs:
@@ -220,10 +269,10 @@ def training(img_path_list: Sequence,
     DEBUG LOSSES
     """
     bce = BCEWithLogitsLoss(reduction='mean')
-    if resize is not None:
-        zero_label = torch.zeros((batch_size, 1, resize[0], resize[1], resize[2])).to(device)
-    else:
-        zero_label = torch.zeros((batch_size, 1, 96, 128, 96)).to(device)
+    # if resize is not None:
+    #     zero_label = torch.zeros((batch_size, 1, resize[0], resize[1], resize[2])).to(device)
+    # else:
+    #     zero_label = torch.zeros((batch_size, 1, 96, 128, 96)).to(device)
     """
     END DEBUG LOSSES
     """
@@ -775,8 +824,13 @@ def training(img_path_list: Sequence,
                         train_iter.set_description(
                             f'Training[{epoch + 1}] '
                             f'batch_loss/mean_loss:[{loss.item():.4f}/{epoch_loss.item() / step:.4f}]' + ctr_desc)
+            if controls_loss is not None:
+                # When the controls are used, we recreate the dataloader every epoch to shuffle the controls so
+                # we can delete it here
+                del ctr_logit_outputs, train_loader
 
-            del ctr_logit_outputs, loss, controls_loss
+
+            del loss, controls_loss
             torch.cuda.empty_cache()
 
             if one_loop:

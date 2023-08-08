@@ -184,22 +184,25 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
         else:
             train_data_list = np.concatenate([train_data_list, chunk])
     utils.print_rank_0(f'Creating training monai dataset for fold {fold}', rank)
-    if cache_dir is not None:
-        train_ds = PersistentDataset(train_data_list, transform=train_img_transforms, cache_dir=cache_dir)
-    else:
-        if cache_num is None:
-            cache_num = len(train_data_list)
-        train_ds = CacheDataset(train_data_list, transform=train_img_transforms, cache_num=cache_num,
-                                cache_rate=cache_rate)
-    # train_ds = Dataset(train_data_list, transform=train_img_transforms)
+    # if cache_dir is not None:
+    #     train_ds = PersistentDataset(train_data_list, transform=train_img_transforms, cache_dir=cache_dir)
+    # else:
+    #     if cache_num is None:
+    #         cache_num = len(train_data_list)
+    #     train_ds = CacheDataset(train_data_list, transform=train_img_transforms, cache_num=cache_num,
+    #                             cache_rate=cache_rate)
+    train_ds = Dataset(train_data_list, transform=train_img_transforms)
     # data_loader_checker_first(train_ds, 'training')
     # define dataset, data loader
     utils.print_rank_0(f'Creating validation monai dataset', rank)
-    if cache_dir is not None:
-        val_ds = PersistentDataset(val_data_list, transform=val_img_transforms, cache_dir=cache_dir)
-    else:
-        # val_ds = CacheDataset(val_data_list, transform=val_img_transforms, cache_num=cache_num,
-        val_ds = CacheDataset(val_data_list, transform=val_img_transforms, cache_rate=cache_rate)
+    # if cache_dir is not None:
+    #     val_ds = PersistentDataset(val_data_list, transform=val_img_transforms, cache_dir=cache_dir)
+    # else:
+    #     # val_ds = CacheDataset(val_data_list, transform=val_img_transforms, cache_num=cache_num,
+    val_ds = CacheDataset(val_data_list, transform=val_img_transforms, cache_rate=cache_rate)
+    print('##############################DEBUG##############################')
+    print(type(train_ds))
+    print('##############################DEBUG##############################')
     if world_size > 0:
         # if dataloader_workers > 1:
         #     dataloader_workers = 1
@@ -211,7 +214,7 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
     else:
         train_sampler = None
         val_sampler = None
-    # val_ds = Dataset(val_data_list, transform=val_img_transforms)
+    val_ds = Dataset(val_data_list, transform=val_img_transforms)
     # data_loader_checker_first(train_ds, 'validation')
     train_loader = create_training_data_loader(train_ds, batch_size, dataloader_workers,
                                                sampler=train_sampler, shuffle=shuffle_training,
