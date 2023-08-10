@@ -5,7 +5,7 @@ import shutil
 import logging
 from copy import deepcopy
 from pathlib import Path
-from typing import Sequence, Union
+from typing import Sequence, Union, Iterable
 import time
 import signal
 import sys
@@ -140,6 +140,7 @@ def training(img_path_list: Sequence,
              use_ema=False,
              track_ema=False,
              no_backward_on_controls=False,
+             limit_of_open_files=None,
              debug=False,
              **kwargs
              ):
@@ -182,6 +183,7 @@ def training(img_path_list: Sequence,
     use_ema
     track_ema
     no_backward_on_controls
+    limit_of_open_files
     debug
     kwargs
 
@@ -191,7 +193,12 @@ def training(img_path_list: Sequence,
     https://mmcv.readthedocs.io/en/v1.5.2_a/_modules/torch/utils/data/dataloader.html explains
     "RuntimeError: received 0 items of ancdata" error
     """
-    # TODO Add an option to change the lower limit of the number of open files
+    if limit_of_open_files is not None:
+        rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+        print("LIMIT before: {}".format(rlimit))
+        resource.setrlimit(resource.RLIMIT_NOFILE, (limit_of_open_files, rlimit[1]))
+        rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+        print("LIMIT after: {}".format(rlimit))
     # rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
     # print("LIMIT before: {}".format(rlimit))
     # # resource.setrlimit(resource.RLIMIT_NOFILE, (4096, rlimit[1]))
@@ -442,10 +449,14 @@ def training(img_path_list: Sequence,
         """
         utils.logging_rank_0(f'Creating monai {model_type}', dist.get_rank())
         scaler = torch.cuda.amp.GradScaler()
+        starting_epoch = 0
         if checkpoint_to_share is not None:
+            starting_epoch = checkpoint_to_share[0]['epoch']
             checkpoint = checkpoint_to_share[0]
             hyper_params = checkpoint['hyper_params']
             model = utils.load_model_from_checkpoint(checkpoint, device, hyper_params, model_name=model_type)
+            if torch.cuda.is_available():
+                model.to(dist.get_rank())
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
             optimizer.load_state_dict(checkpoint['optim_dict'])
             scaler.load_state_dict(checkpoint['scaler_dict'])
@@ -536,12 +547,11 @@ def training(img_path_list: Sequence,
                 os.makedirs(img_dir, exist_ok=True)
             dist.barrier()
         stop_epoch = False
-        # TODO implementing delayed use of controls
         use_controls = not delayed_control_training
         best_dice_list = []
         number_of_best_dice_intervals_to_assume_convergence = 2
         best_dice_interval_difference = 0.005
-        for epoch in range(epoch_num):
+        for epoch in range(starting_epoch, epoch_num):
             utils.print_rank_0('-' * 10, dist.get_rank())
             utils.print_rank_0(f'epoch {epoch + 1}/{epoch_num}', dist.get_rank())
             # If ctr_split_lists is not None we need to create a new training loader with the controls
@@ -552,7 +562,7 @@ def training(img_path_list: Sequence,
                     split_lists_with_ctr = []
                     for i in range(len(split_lists)):
                         ctr_fold_list = deepcopy(ctr_split_lists[i])
-                        # Might be unnecessary but I don't think it makes much a difference
+                        # Might be unnecessary, but I don't think it makes much a difference
                         random.shuffle(ctr_fold_list)
                         split_lists_with_ctr.append(deepcopy(split_lists[i]))
                         for img_dict in split_lists_with_ctr[i]:
@@ -668,7 +678,7 @@ def training(img_path_list: Sequence,
                     writer_step = len(train_loader) * epoch + step
                     if monitor_emas:
                         ema_magnitude_abnormals = ema_decay_rate * ema_magnitude_abnormals + \
-                                                           (1 - ema_decay_rate) * loss.detach()
+                                                  (1 - ema_decay_rate) * loss.detach()
                         utils.tensorboard_write_rank_0(writer, 'ema_abnormals',
                                                        ema_magnitude_abnormals,
                                                        writer_step, dist.get_rank())
@@ -684,7 +694,7 @@ def training(img_path_list: Sequence,
 
                         if monitor_emas:
                             ema_magnitude_controls = ema_decay_rate * ema_magnitude_controls + \
-                                                              (1-ema_decay_rate) * controls_loss.detach()
+                                                     (1-ema_decay_rate) * controls_loss.detach()
                             utils.tensorboard_write_rank_0(writer, 'ema_controls',
                                                            ema_magnitude_controls,
                                                            writer_step, dist.get_rank())
@@ -754,7 +764,7 @@ def training(img_path_list: Sequence,
                                          '0.8-0.9': len(ctr_sigmoid_logits[(0.8 <= ctr_sigmoid_logits) &
                                                                            (ctr_sigmoid_logits < 0.9)]) / num_voxels,
                                          '0.9-1': len(ctr_sigmoid_logits[(0.9 <= ctr_sigmoid_logits) &
-                                                                           (ctr_sigmoid_logits <= 1)]) / num_voxels,
+                                                                         (ctr_sigmoid_logits <= 1)]) / num_voxels,
                                          },
                                         writer_step)
                                 utils.tensorboard_write_rank_0(writer, 'ctr_sum_sigmoid',
@@ -797,6 +807,23 @@ def training(img_path_list: Sequence,
                 """
                 The different ranks are coming together here
                 """
+                # print('############ CHECKING PARAMETERS ###########################')
+                # for name, param in model.named_parameters():
+                #     print(name, param.device)
+                #     if 'cpu' in str(param.device):
+                #         print(name, param.device)
+                # print('############ CHECKING PARAMETERS ###########################')
+                # # print on which device all the variables are
+                # print('############ CHECKING VARIABLES ###########################')
+                # for name, var in locals().items():
+                #     if hasattr(var, 'device'):
+                #         print(name, var.device)
+                # print('############ CHECKING VARIABLES ###########################')
+                # print('############ CHECKING IS CUDA ###########################')
+                # for name, var in locals().items():
+                #     if hasattr(var, 'is_cuda'):
+                #         print(name, var.is_cuda)
+                # print('############ CHECKING IS CUDA ###########################')
                 if step % gradient_accumulation_steps == 0:
                     # optimizer.step()
                     scaler.step(optimizer)

@@ -139,6 +139,9 @@ def main():
     parser.add_argument("--world_size", default=1, type=int, help="number of nodes for distributed training")
     parser.add_argument("--local_rank", type=int, help="node rank for distributed training")
     parser.add_argument("-cvd", "--cuda_visible_devices", type=str, help="List of visible devices for cuda")
+    # add a parameter to increase the number of open files
+    parser.add_argument('-loof', '--limit_of_open_files', type=int,
+                        help='Limit of open files allowed (ulimit)')
     # DEBUG options
     parser.add_argument('--debug', action='store_true', help='debug mode')
     parser.add_argument('-din', '--debug_img_num', type=int, help='Number of images from the input list')
@@ -394,6 +397,7 @@ def main_worker(local_rank, args, kwargs):
                           use_ema=args.ema,
                           track_ema=args.track_ema,
                           no_backward_on_controls=args.no_backward_on_controls,
+                          limit_of_open_files=args.limit_of_open_files,
                           debug=args.debug,
                           **kwargs)
     else:
