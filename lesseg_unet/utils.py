@@ -840,3 +840,18 @@ def weight_lesion_dataset(dataframe, filepath_column, weight_column, output_fold
     dataframe['weighted_path'] = weighted_paths_column
     return output_dict, dataframe
 
+
+def keep_only_latest_checkpoints(checkpoint_folder_root, number_to_keep=4, keep_only_best_dice=False, keep_only_best_dice_dist=False):
+    for checkpoint_folder in [d for d in Path(checkpoint_folder_root).iterdir() if d.is_dir()]:
+        list_of_dice = sorted([str(p) for p in Path(checkpoint_folder).iterdir()
+                               if p.name.endswith('.pth') and p.name.startswith('best_dice_model_')],
+                              key=os.path.getmtime)
+        list_of_dice_dist = sorted([str(p) for p in Path(checkpoint_folder).iterdir()
+                                    if p.name.endswith('.pth') and p.name.startswith('best_dice_and_dist_model_')],
+                                   key=os.path.getmtime)
+        if not keep_only_best_dice:
+            for p in list_of_dice_dist[:-number_to_keep]:
+                os.remove(p)
+        if not keep_only_best_dice_dist:
+            for p in list_of_dice[:-number_to_keep]:
+                os.remove(p)

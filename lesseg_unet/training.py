@@ -440,10 +440,10 @@ def training(img_path_list: Sequence,
         starting_fold = checkpoint_to_share[0]['fold']
     if stop_best_epoch != -1:
         utils.logging_rank_0(f'Will stop after {stop_best_epoch} epochs without improvement', dist.get_rank())
-    for fold in range(folds_number):
-        if fold < starting_fold:
-            utils.logging_rank_0(f'Skipping fold {fold}', dist.get_rank())
-            continue
+    for fold in range(starting_fold, folds_number):
+        # if fold < starting_fold:
+        #     utils.logging_rank_0(f'Skipping fold {fold}', dist.get_rank())
+        #     continue
         """
         SET MODEL PARAM AND CREATE / LOAD MODEL OBJECT
         """
