@@ -242,6 +242,6 @@ def distance_ratio(label, prediction):
     hausdorff_distance = HausdorffDistanceMetric(include_background=True, reduction="mean")
     label_tensor = torch.from_numpy(label_data).unsqueeze(0).unsqueeze(0)
     pred_tensor = torch.from_numpy(pred_data).unsqueeze(0).unsqueeze(0)
-    distance = hausdorff_distance(y_pred=pred_tensor, y=label_tensor)
+    distance = hausdorff_distance(y_pred=pred_tensor, y=label_tensor).item()
 
     return 1 - (distance / max_distance)
