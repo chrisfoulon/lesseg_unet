@@ -1,10 +1,12 @@
 from typing import Union, Optional
 
+from bcblib.tools.nifti_utils import load_nifti
 from monai.metrics import HausdorffDistanceMetric, CumulativeIterationMetric, is_binary_tensor, \
     compute_hausdorff_distance, do_metric_reduction
 from monai.utils import MetricReduction
 from monai.data import MetaTensor
 from torch.nn.modules.loss import _Loss
+import numpy as np
 import torch
 
 
@@ -208,3 +210,38 @@ class ThresholdedAverageLoss(_Loss):
         else:
             raise ValueError(f'Unsupported reduction: {self.reduction}, available options are ["mean", "sum", "none"].')
         return torch.nan_to_num(out_data, nan=0.0)
+
+
+def distance_ratio(label, prediction):
+    """
+    Compute the distance ratio between the prediction and the label.
+    The distance ratio is defined as 1 - (Hausdorff distance / max distance).
+    The max distance is the distance between the two opposite corners of the label.
+    The Hausdorff distance is computed using the HausdorffDistanceMetric from MONAI.
+    Parameters
+    ----------
+    label
+    prediction
+
+    Returns
+    -------
+    distance_ratio: float
+        The distance ratio between the prediction and the label.
+
+    """
+    label_hdr = load_nifti(label)
+    label_data = label_hdr.get_fdata()
+    pred_hdr = load_nifti(prediction)
+    pred_data = pred_hdr.get_fdata()
+
+    if np.count_nonzero(label_data) == 0 or np.count_nonzero(pred_data) == 0:
+        return 0
+    max_coord = np.sum([axis - 1 for axis in label_hdr.shape])
+    max_distance = np.sqrt(np.sum((np.array([0, 0, 0]) - max_coord) ** 2))
+
+    hausdorff_distance = HausdorffDistanceMetric(include_background=True, reduction="mean")
+    label_tensor = torch.from_numpy(label_data).unsqueeze(0).unsqueeze(0)
+    pred_tensor = torch.from_numpy(pred_data).unsqueeze(0).unsqueeze(0)
+    distance = hausdorff_distance(y_pred=pred_tensor, y=label_tensor)
+
+    return 1 - (distance / max_distance)
