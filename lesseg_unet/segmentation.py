@@ -27,7 +27,7 @@ from monai.transforms import (
     SaveImaged
 )
 
-from lesseg_unet.loss_and_metric import distance_ratio
+from lesseg_unet.loss_and_metric import distance_ratio, DistanceRatioMetric
 
 
 def get_images_np_on_cpu(batch_data, batch_images, compute_device, dataset_obj, output_size=None):
@@ -484,6 +484,7 @@ def validation_loop(img_path_list: Sequence,
     model.to(device)
     dice_metric = DiceMetric(include_background=True, reduction="mean")
     hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean", percentile=95)
+    dist_ratio = DistanceRatioMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
 
     les_area_finder = None
@@ -546,7 +547,7 @@ def validation_loop(img_path_list: Sequence,
                 dice = dice_metric.aggregate().item()
                 hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
                 dist = hausdorff_metric.aggregate().item()
-                dist_ratio = distance_ratio(prediction=val_output_convert[0], label=masks_only_val_labels[0])
+                distance_ratio = dist_ratio(y_pred=val_output_convert, y=masks_only_val_labels).item()
 
             vol_output = utils.volume_metric(val_output_convert[0], False, False)
             input_filename += f'_v{vol_output}v'
@@ -563,10 +564,10 @@ def validation_loop(img_path_list: Sequence,
             output_dict_data['label'] = deepcopy(val_output_convert[0])
             # Loop dataframe filling
             loop_dicts_list.append({'core_filename': input_filename.split('input_')[-1],
-                                      'dice_metric': dice,
-                                      'volume': vol_output,
-                                      'distance': dist,
-                                      'distance_ratio': dist_ratio})
+                                   'dice_metric': dice,
+                                   'volume': vol_output,
+                                   'distance': dist,
+                                   'distance_ratio': distance_ratio})
 
             # Maybe not necessary but I prefer it there
             dice_metric.reset()
@@ -640,6 +641,7 @@ def validation_loop(img_path_list: Sequence,
         df = pd.DataFrame.from_dict({
             'val_mean_dice': mean_metric,
             'val_mean_dist': np.mean(val_dist_list),
+            'val_mean_dist_ratio': np.mean([d['distance_ratio'] for d in loop_dicts_list]),
             'pred_volume': vol_output,
             'val_median_dice': median,
             'val_std_dice': std,
@@ -652,6 +654,6 @@ def validation_loop(img_path_list: Sequence,
         json.dump(img_vol_dict, j, indent=4)
     pd.DataFrame().from_dict(img_vol_dict, orient='index').to_csv(Path(output_dir, f'__output_image_volumes.csv'))
     df.to_csv(Path(output_dir, 'val_perf_global_measures.csv'))  # , columns=perf_measure_names)
-    loop_df_columns = ['core_filename', 'dice_metric', 'volume', 'distance']
+    # loop_df_columns = ['core_filename', 'dice_metric', 'volume', 'distance', 'distance_ratio']
     loop_df = pd.DataFrame().from_records(loop_dicts_list)
     loop_df.to_csv(Path(output_dir, 'val_perf_individual_measures.csv'))  # , columns=loop_df_columns)

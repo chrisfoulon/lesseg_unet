@@ -212,7 +212,7 @@ class ThresholdedAverageLoss(_Loss):
         return torch.nan_to_num(out_data, nan=0.0)
 
 
-def distance_ratio(label, prediction):
+def distance_ratio_nifti(label, prediction):
     """
     Compute the distance ratio between the prediction and the label.
     The distance ratio is defined as 1 - (Hausdorff distance / max distance).
@@ -239,7 +239,7 @@ def distance_ratio(label, prediction):
     max_coord = np.sum([axis - 1 for axis in label_hdr.shape])
     max_distance = np.sqrt(np.sum((np.array([0, 0, 0]) - max_coord) ** 2))
 
-    hausdorff_distance = HausdorffDistanceMetric(include_background=True, reduction="mean")
+    hausdorff_distance = HausdorffDistanceMetric(include_background=True, reduction="mean", percentile=95)
     label_tensor = torch.from_numpy(label_data).unsqueeze(0).unsqueeze(0)
     pred_tensor = torch.from_numpy(pred_data).unsqueeze(0).unsqueeze(0)
     distance = hausdorff_distance(y_pred=pred_tensor, y=label_tensor).item()
@@ -247,17 +247,12 @@ def distance_ratio(label, prediction):
     return 1 - (distance / max_distance)
 
 
-
-# Use the same structure as for HausdorffDistanceMetric to create a DistanceRatioMetric using a function similar to
-# distance_ratio (without taking images as input but tensors)
-
-
 def compute_distance_ratio(
         y_pred: torch.Tensor,
         y: torch.Tensor,
         include_background: bool = False,
         distance_metric: str = "euclidean",
-        percentile: float | None = None,
+        percentile: float | None = 95,
         directed: bool = False,
         spacing: int | float | np.ndarray | Sequence[int | float | np.ndarray | Sequence[int | float]] | None = None,
         ) -> torch.Tensor:
@@ -334,7 +329,8 @@ def compute_distance_ratio(
     max_coord = np.sum([axis - 1 for axis in y.shape])
     max_distance = np.sqrt(np.sum((np.array([0, 0, 0]) - max_coord) ** 2))
     # Compute the Hausdorff distance
-    hausdorff_distance = HausdorffDistanceMetric(include_background=include_background, reduction="mean")
+    hausdorff_distance = HausdorffDistanceMetric(include_background=include_background, reduction="mean",
+                                                 percentile=95)
     distance = hausdorff_distance(y_pred=y_pred, y=y).item()
     # Compute the distance ratio
     dist_ratio = 1 - (distance / max_distance)
@@ -370,7 +366,7 @@ class DistanceRatioMetric(CumulativeIterationMetric):
     def __init__(self,
                  include_background: bool = False,
                  distance_metric: str = "euclidean",
-                 percentile: Optional[float] = None,
+                 percentile: Optional[float] = 95,
                  directed: bool = False,
                  reduction: Union[MetricReduction, str] = MetricReduction.MEAN,
                  get_not_nans: bool = False,
