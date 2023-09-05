@@ -1,3 +1,4 @@
+import os
 from typing import Union, Optional, Sequence, Any
 
 from bcblib.tools.nifti_utils import load_nifti
@@ -212,7 +213,7 @@ class ThresholdedAverageLoss(_Loss):
         return torch.nan_to_num(out_data, nan=0.0)
 
 
-def distance_ratio_nifti(label, prediction):
+def distance_ratio_volume(label, prediction):
     """
     Compute the distance ratio between the prediction and the label.
     The distance ratio is defined as 1 - (Hausdorff distance / max distance).
@@ -229,20 +230,38 @@ def distance_ratio_nifti(label, prediction):
         The distance ratio between the prediction and the label.
 
     """
-    label_hdr = load_nifti(label)
-    label_data = label_hdr.get_fdata()
-    pred_hdr = load_nifti(prediction)
-    pred_data = pred_hdr.get_fdata()
+    # If label or prediction are str or pathlike, load the nifti and extract the data otherwise test if ndarray
+    if isinstance(label, (str, os.PathLike)):
+        label_hdr = load_nifti(label)
+        label_data = label_hdr.get_fdata()
+    elif isinstance(label, np.ndarray):
+        label_data = label
+    else:
+        raise ValueError(f'label must be a str, os.PathLike or np.ndarray, got {type(label)}')
 
+    if isinstance(prediction, (str, os.PathLike)):
+        pred_hdr = load_nifti(prediction)
+        pred_data = pred_hdr.get_fdata()
+    elif isinstance(prediction, np.ndarray):
+        pred_data = prediction
+    else:
+        raise ValueError(f'prediction must be a str, os.PathLike or np.ndarray, got {type(prediction)}')
+
+    # If either label or prediction is empty, the distance ratio is 0 (lowest possible value)
     if np.count_nonzero(label_data) == 0 ^ np.count_nonzero(pred_data) == 0:
         return 0
-    max_coord = np.sum([axis - 1 for axis in label_hdr.shape])
+    max_coord = [axis - 1 for axis in label_data.shape]
     max_distance = np.sqrt(np.sum((np.array([0, 0, 0]) - max_coord) ** 2))
 
-    hausdorff_distance = HausdorffDistanceMetric(include_background=True, reduction="mean", percentile=95)
+    hausdorff_distance = HausdorffDistanceMetric(include_background=True, reduction="mean", percentile=95.0)
     label_tensor = torch.from_numpy(label_data).unsqueeze(0).unsqueeze(0)
     pred_tensor = torch.from_numpy(pred_data).unsqueeze(0).unsqueeze(0)
     distance = hausdorff_distance(y_pred=pred_tensor, y=label_tensor).item()
+    print(f'label_hdr.shape: {label_data.shape}')
+    print(f'max_coord: {max_coord}')
+    print(f'distance: {distance}')
+    print(f'max_distance: {max_distance}')
+    print(f'distance_ratio: {(distance / max_distance)}')
 
     return 1 - (distance / max_distance)
 
@@ -252,7 +271,7 @@ def compute_distance_ratio(
         y: torch.Tensor,
         include_background: bool = False,
         distance_metric: str = "euclidean",
-        percentile: float | None = 95,
+        percentile: float | None = 95.0,
         directed: bool = False,
         spacing: int | float | np.ndarray | Sequence[int | float | np.ndarray | Sequence[int | float]] | None = None,
         ) -> torch.Tensor:
@@ -321,20 +340,29 @@ def compute_distance_ratio(
                 if not isinstance(i, (int, float)):
                     raise ValueError("spacing must be an int, float, np.ndarray or Sequence")
 
-    # Compute the distance ratio
-    # If either y_pred or y is empty, the distance ratio is 0 (lowest possible value)
-    if torch.count_nonzero(y_pred) == 0 ^ torch.count_nonzero(y) == 0:
-        return torch.tensor(0.0)
     # Compute the max distance
-    max_coord = np.sum([axis - 1 for axis in y.shape])
+    max_coord = [axis - 1 for axis in y.shape[-3:]]
     max_distance = np.sqrt(np.sum((np.array([0, 0, 0]) - max_coord) ** 2))
+    max_distance = torch.tensor(max_distance)
     # Compute the Hausdorff distance
     hausdorff_distance = HausdorffDistanceMetric(include_background=include_background, reduction="mean",
-                                                 percentile=95)
-    distance = hausdorff_distance(y_pred=y_pred, y=y).item()
+                                                 percentile=95.0)
+    distance = hausdorff_distance(y_pred=y_pred, y=y)
+    # if distance is inf or nan set it to max_distance
+    distance[torch.isinf(distance)] = max_distance
+    distance[torch.isnan(distance)] = max_distance
+    # y_pred and y can be a list of channel-first Tensor (CHW[D]) or a batch-first Tensor (BCHW[D]) and have multiple
+    # volumes. Then, the ratio must be calculated with each volume separately into a Tensor of shape (B, 1).
     # Compute the distance ratio
-    dist_ratio = 1 - (distance / max_distance)
-    return torch.tensor(dist_ratio)
+    # dist_ratio = 1 - (distance / max_distance)
+    if len(y_pred.shape) > 4:
+        # distance is [batch, channel, 1] and max_distance is [1] for each batch and each channel divide by max_distance
+        dist_ratio = torch.tensor([1 - (distance[i] / max_distance) for i in range(len(y_pred))])
+        dist_ratio = dist_ratio.unsqueeze(0).unsqueeze(0)
+        # dist_ratio = torch.tensor([1 - (distance[i] / max_distance) for i in range(len(y_pred))])
+    else:
+        dist_ratio = torch.tensor(1 - (distance / max_distance)).unsqueeze(0).unsqueeze(0)
+    return dist_ratio
 
 
 class DistanceRatioMetric(CumulativeIterationMetric):
@@ -366,7 +394,7 @@ class DistanceRatioMetric(CumulativeIterationMetric):
     def __init__(self,
                  include_background: bool = False,
                  distance_metric: str = "euclidean",
-                 percentile: Optional[float] = 95,
+                 percentile: Optional[float] = 95.0,
                  directed: bool = False,
                  reduction: Union[MetricReduction, str] = MetricReduction.MEAN,
                  get_not_nans: bool = False,
@@ -410,7 +438,7 @@ class DistanceRatioMetric(CumulativeIterationMetric):
 
     def aggregate(self, reduction: Union[MetricReduction, str, None] = None):
         """
-        Execute reduction logic for the output of `compute_hausdorff_distance`.
+        Execute reduction logic for the output of `compute_distance_ratio`.
 
         Args:
             reduction: define mode of reduction to the metrics, will only apply reduction on `not-nan` values,

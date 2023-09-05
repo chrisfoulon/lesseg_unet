@@ -27,7 +27,7 @@ from monai.transforms import (
     SaveImaged
 )
 
-from lesseg_unet.loss_and_metric import distance_ratio, DistanceRatioMetric
+from lesseg_unet.loss_and_metric import DistanceRatioMetric
 
 
 def get_images_np_on_cpu(batch_data, batch_images, compute_device, dataset_obj, output_size=None):
@@ -547,7 +547,8 @@ def validation_loop(img_path_list: Sequence,
                 dice = dice_metric.aggregate().item()
                 hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
                 dist = hausdorff_metric.aggregate().item()
-                distance_ratio = dist_ratio(y_pred=val_output_convert, y=masks_only_val_labels).item()
+                dist_ratio(y_pred=val_output_convert, y=masks_only_val_labels)
+                distance_ratio = dist_ratio.aggregate().item()
 
             vol_output = utils.volume_metric(val_output_convert[0], False, False)
             input_filename += f'_v{vol_output}v'
