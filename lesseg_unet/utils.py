@@ -855,3 +855,13 @@ def keep_only_latest_checkpoints(checkpoint_folder_root, number_to_keep=4, keep_
         if not keep_only_best_dice_dist:
             for p in list_of_dice[:-number_to_keep]:
                 os.remove(p)
+
+
+def compute_distance_ratio_from_spreadsheet(spreadsheet, images_shape=None):
+    # import csv if it's not already a pandas dataframe
+    if not isinstance(spreadsheet, pd.DataFrame):
+        spreadsheet = import_spreadsheet(spreadsheet)
+
+    # TODO
+
+

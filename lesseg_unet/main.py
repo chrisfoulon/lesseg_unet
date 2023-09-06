@@ -305,13 +305,21 @@ def main_worker(local_rank, args, kwargs):
     if args.transform_dict is not None:
         td = args.transform_dict
         if Path(td).is_file():
-            transform_dict = utils.load_json_transform_dict(args.transform_dict)
+            transform_dict = utils.load_json_transform_dict(td)
         else:
             if td in dir(tr_dicts):
                 transform_dict = getattr(tr_dicts, td)
             else:
-                raise ValueError('{} is not an existing dict file or is not '
-                                 'in lesseg_unet/data/transform_dicts.py'.format(args.transform_dict))
+                tr_function_params = td.split('_')[1:]
+                transform_dict = None
+                for d in dir(tr_dicts):
+                    if d in td.lower():
+                        transform_dict_fct = getattr(tr_dicts, d)
+                        transform_dict = transform_dict_fct(*tr_function_params)
+                        break
+                if transform_dict is None:
+                    raise ValueError('{} is not an existing dict file or is not '
+                                     'in lesseg_unet/data/transform_dicts.py'.format(args.transform_dict))
     else:
         print('Using default transformation dictionary')
         transform_dict = None
