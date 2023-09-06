@@ -1199,6 +1199,7 @@ unetr_cc_resize['first_transform'][2] = {'Resized': {
             'spatial_size': def_spatial_size}
          }
 
+
 unetr_cc_patches = deepcopy(unetr_cc)
 del unetr_cc_patches['first_transform'][2]
 unetr_cc_patches['patches'] = [
@@ -1452,3 +1453,33 @@ unetr_shift['mid_transform'].append(
             'prob': high_prob}
      },
 )
+
+
+def destructive_seg(noise_value):
+    # noise_value is a percentage of the max value of the transformations (e.g. 0.1 for 10%)
+    # adding transformation that will be kept during segmentation (add it to last_transform)
+    tr_dict = deepcopy(unetr_cc)
+    to_add_list = [
+        {'RandGibbsNoised': {'keys': ['image'],
+                             'prob': high_prob,
+                             'alpha': (0.5, 0.7)
+                             },
+         },
+        {'RandRicianNoised': {'keys': ['image'],
+                              'prob': 1,
+                              'mean': 0.1,
+                              'std': 0.025
+                              },
+         },
+        {'RandKSpaceSpikeNoised': {'keys': ['image'],
+                                   'prob': 1,
+                                   'intensity_range': (8, 10),
+                                   },
+         },
+        {'RandBiasFieldd': {
+            'keys': ['image'],
+            'prob': 1,
+            'coeff_range': (0.1, 0.1)}
+         }
+    ]
+
