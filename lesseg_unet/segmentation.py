@@ -547,8 +547,10 @@ def validation_loop(img_path_list: Sequence,
                 dice = dice_metric.aggregate().item()
                 hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
                 dist = hausdorff_metric.aggregate().item()
-                dist_ratio(y_pred=val_output_convert, y=masks_only_val_labels)
-                distance_ratio = dist_ratio.aggregate().item()
+                # dist_ratio(y_pred=val_output_convert, y=masks_only_val_labels)
+                # distance_ratio = dist_ratio.aggregate().item()
+                # TODO make it work ...
+                distance_ratio = np.NAN
 
             vol_output = utils.volume_metric(val_output_convert[0], False, False)
             input_filename += f'_v{vol_output}v'
