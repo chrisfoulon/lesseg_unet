@@ -1461,9 +1461,9 @@ def destructive_all_noises(noise_value):
     # adding transformation that will be kept during segmentation (add it to last_transform)
     tr_dict = deepcopy(unetr_cc)
     # The image is extremely blurry and could hardly be interpreted by a human
-    gibbs_max_value = 0.85
-    rician_max_value = 1
-    bias_field_max_value = 0.2
+    gibbs_max_value = 0.425
+    rician_max_value = 0.5
+    bias_field_max_value = 0.1
     to_add_list = [
         {'GibbsNoised': {'keys': ['image'],
                          'alpha': gibbs_max_value * noise_value
