@@ -17,6 +17,8 @@ import torch
 from torch.nn.functional import pad
 from monai.transforms import RandRicianNoise
 from monai.transforms import (
+    GibbsNoised,
+    KSpaceSpikeNoised,
     ToNumpyd,
     GaussianSmoothd,
     MapTransform,

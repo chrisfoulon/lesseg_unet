@@ -92,11 +92,13 @@ def main():
     parser.add_argument('-kifs', '--keep_input_folder_structure',
                         action='store_true', help='Segmentation output will reflect the folder structure from'
                                                   ' the given root_folder')
+    # only_save_seg is a boolean used in validation_loop to save only the segmentation image
+    parser.add_argument('-oss', '--only_save_seg', action='store_true', help='Save only the segmentation image')
 
     # Model parameters
-    parser.add_argument('-pp', '--pretrained_point', type=str, help='[Training opt]file path to a torch checkpoint file'
-                                                                    ' or directory (in that case, the most recent '
-                                                                    'checkpoint will be used)')
+    parser.add_argument('-pp', '--pretrained_point', type=str,
+                        help='[Training opt]file path to a torch checkpoint file'
+                             ' or directory (in that case, the most recent checkpoint will be used)')
     parser.add_argument('-mt', '--model_type', type=str, default='UNETR',
                         help='Select the model architecture (UNet, UNETR, SWINUNETR)')
     parser.add_argument('-d', '--torch_device', type=str, help='Device type and number given to'
@@ -310,13 +312,14 @@ def main_worker(local_rank, args, kwargs):
             if td in dir(tr_dicts):
                 transform_dict = getattr(tr_dicts, td)
             else:
-                tr_function_params = td.split('_')[1:]
                 transform_dict = None
                 for d in dir(tr_dicts):
                     if d in td.lower():
+                        tr_function_params = td.split(d)[-1].split('_')[1:]
+
                         transform_dict_fct = getattr(tr_dicts, d)
-                        transform_dict = transform_dict_fct(*tr_function_params)
-                        break
+                        if callable(transform_dict_fct):
+                            transform_dict = transform_dict_fct(*tr_function_params)
                 if transform_dict is None:
                     raise ValueError('{} is not an existing dict file or is not '
                                      'in lesseg_unet/data/transform_dicts.py'.format(args.transform_dict))
@@ -487,6 +490,7 @@ def main_worker(local_rank, args, kwargs):
                                          clamping=clamp_tuple,
                                          segmentation_area=args.segmentation_area,
                                          keep_input_folder_structure=args.keep_input_folder_structure,
+                                         only_save_seg=args.only_save_seg,
                                          **kwargs)
             if args.overlap:
                 nib.save(nifti_overlap_images(output_root, 'output_', recursive=True),

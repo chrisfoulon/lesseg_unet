@@ -1455,31 +1455,95 @@ unetr_shift['mid_transform'].append(
 )
 
 
-def destructive_seg(noise_value):
-    # noise_value is a percentage of the max value of the transformations (e.g. 0.1 for 10%)
+def destructive_all_noises(noise_value):
+    # noise_value is a percentage of the max value of the transformations (e.g. 10 for 0.1)
+    noise_value = int(noise_value) / 100
     # adding transformation that will be kept during segmentation (add it to last_transform)
     tr_dict = deepcopy(unetr_cc)
+    # The image is extremely blurry and could hardly be interpreted by a human
+    gibbs_max_value = 0.85
+    rician_max_value = 1
+    bias_field_max_value = 0.2
     to_add_list = [
-        {'RandGibbsNoised': {'keys': ['image'],
-                             'prob': high_prob,
-                             'alpha': (0.5, 0.7)
-                             },
+        {'GibbsNoised': {'keys': ['image'],
+                         'alpha': gibbs_max_value * noise_value
+                         },
          },
         {'RandRicianNoised': {'keys': ['image'],
                               'prob': 1,
                               'mean': 0.1,
-                              'std': 0.025
+                              'std': rician_max_value * noise_value,
+                              'relative': True,
+                              'sample_std': False,
                               },
-         },
-        {'RandKSpaceSpikeNoised': {'keys': ['image'],
-                                   'prob': 1,
-                                   'intensity_range': (8, 10),
-                                   },
          },
         {'RandBiasFieldd': {
             'keys': ['image'],
             'prob': 1,
-            'coeff_range': (0.1, 0.1)}
-         }
+            'coeff_range': (bias_field_max_value * noise_value, bias_field_max_value * noise_value),
+            },
+         },
     ]
+    # prepend to last_transform
+    tr_dict['last_transform'] = to_add_list + tr_dict['last_transform']
+    return tr_dict
 
+
+def destructive_gibbs(noise_value):
+    # noise_value is a percentage of the max value of the transformations (e.g. 10 for 0.1)
+    noise_value = int(noise_value) / 100
+    # adding transformation that will be kept during segmentation (add it to last_transform)
+    tr_dict = deepcopy(unetr_cc)
+    # The image is extremely blurry and could hardly be interpreted by a human
+    gibbs_max_value = 0.85
+    to_add_list = [
+        {'GibbsNoised': {'keys': ['image'],
+                         'alpha': gibbs_max_value * noise_value
+                         },
+         },
+    ]
+    # prepend to last_transform
+    tr_dict['last_transform'] = to_add_list + tr_dict['last_transform']
+    return tr_dict
+
+
+def destructive_rician(noise_value):
+    # noise_value is a percentage of the max value of the transformations (e.g. 10 for 0.1)
+    noise_value = int(noise_value) / 100
+    # adding transformation that will be kept during segmentation (add it to last_transform)
+    tr_dict = deepcopy(unetr_cc)
+    # The image is extremely blurry and could hardly be interpreted by a human
+    rician_max_value = 1
+    to_add_list = [
+        {'RandRicianNoised': {'keys': ['image'],
+                              'prob': 1,
+                              'mean': 0.1,
+                              'std': rician_max_value * noise_value,
+                              'relative': True,
+                              'sample_std': False,
+                              },
+         },
+    ]
+    # prepend to last_transform
+    tr_dict['last_transform'] = to_add_list + tr_dict['last_transform']
+    return tr_dict
+
+
+def destructive_bias(noise_value):
+    # noise_value is a percentage of the max value of the transformations (e.g. 10 for 0.1)
+    noise_value = int(noise_value) / 100
+    # adding transformation that will be kept during segmentation (add it to last_transform)
+    tr_dict = deepcopy(unetr_cc)
+    # The image is extremely blurry and could hardly be interpreted by a human
+    bias_field_max_value = 0.2
+    to_add_list = [
+        {'RandBiasFieldd': {
+            'keys': ['image'],
+            'prob': 1,
+            'coeff_range': (bias_field_max_value * noise_value, bias_field_max_value * noise_value),
+            },
+         },
+    ]
+    # prepend to last_transform
+    tr_dict['last_transform'] = to_add_list + tr_dict['last_transform']
+    return tr_dict

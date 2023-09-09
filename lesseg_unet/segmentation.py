@@ -9,6 +9,7 @@ import shutil
 import numpy as np
 import nibabel as nib
 import pandas as pd
+from lesseg_unet.utils import save_tensor_to_nifti
 from tqdm import tqdm
 import torch
 from bcblib.tools.general_utils import save_json
@@ -442,6 +443,7 @@ def validation_loop(img_path_list: Sequence,
                     bad_dice_treshold: float = 0,
                     clamping: tuple = None,
                     segmentation_area=True,
+                    only_save_seg=False,
                     **kwargs
                     ):
     if device is None:
@@ -552,8 +554,6 @@ def validation_loop(img_path_list: Sequence,
                 # TODO make it work ...
                 distance_ratio = np.NAN
 
-            vol_output = utils.volume_metric(val_output_convert[0], False, False)
-            input_filename += f'_v{vol_output}v'
             # if 'entropy' in kwargs and (kwargs['entropy'] == 'True' or kwargs['entropy'] == 1):
             #     input_filename += f'_e{utils.entropy_metric(val_outputs_list[0], sigmoid=True)}e'
             output_dict_data = deepcopy(val_data)
@@ -566,11 +566,7 @@ def validation_loop(img_path_list: Sequence,
             # del output_dict_data['image']
             output_dict_data['label'] = deepcopy(val_output_convert[0])
             # Loop dataframe filling
-            loop_dicts_list.append({'core_filename': input_filename.split('input_')[-1],
-                                   'dice_metric': dice,
-                                   'volume': vol_output,
-                                   'distance': dist,
-                                   'distance_ratio': distance_ratio})
+
 
             # Maybe not necessary but I prefer it there
             dice_metric.reset()
@@ -593,6 +589,13 @@ def validation_loop(img_path_list: Sequence,
             # inputs_np = val_data['image'][0].cpu().detach().numpy()
             # labels_np = labels
             # outputs_np = val_output_convert[0][0, :, :, :].cpu().detach().numpy()
+            vol_output = len(outputs_np[np.where(outputs_np)])
+            input_filename += f'_v{vol_output}v'
+            loop_dicts_list.append({'core_filename': input_filename.split('input_')[-1],
+                                    'dice_metric': dice,
+                                    'volume': vol_output,
+                                    'distance': dist,
+                                    'distance_ratio': distance_ratio})
             if dice < bad_dice_treshold:
                 trash_count += 1
                 # print('Saving trash image #{}'.format(trash_count))
@@ -609,9 +612,14 @@ def validation_loop(img_path_list: Sequence,
                     os.makedirs(output_subdir, exist_ok=True)
                 else:
                     output_subdir = trash_val_images_dir
-                output_path_list = utils.save_img_lbl_seg_to_nifti(
-                    inputs_np, labels_np, outputs_np, output_subdir, val_output_affine,
-                    '{}_{}'.format(str(input_filename), str(trash_count)))
+                if not only_save_seg:
+                    output_path_list = utils.save_img_lbl_seg_to_nifti(
+                        inputs_np, labels_np, outputs_np, output_subdir, val_output_affine,
+                        '{}_{}'.format(str(input_filename), str(trash_count)))
+                else:
+                    out_input_path = Path(output_dir, 'input_{}.nii.gz'.format(str(trash_count)))
+                    save_tensor_to_nifti(outputs_np, out_input_path, val_output_affine)
+                    output_path_list = [str(out_input_path)]
             else:
                 # print('Saving good image #{}'.format(img_count))
                 # TODO This is slow AF because of the imshow, maybe resetting the plot would work
@@ -627,14 +635,21 @@ def validation_loop(img_path_list: Sequence,
                     os.makedirs(output_subdir, exist_ok=True)
                 else:
                     output_subdir = val_images_dir
-                output_path_list = utils.save_img_lbl_seg_to_nifti(
-                    inputs_np, labels_np, outputs_np, output_subdir, val_output_affine,
-                    '{}_{}'.format(str(input_filename), str(img_count)))
+
+                if not only_save_seg:
+                    output_path_list = utils.save_img_lbl_seg_to_nifti(
+                        inputs_np, labels_np, outputs_np, output_subdir, val_output_affine,
+                        '{}_{}'.format(str(input_filename), str(img_count)))
+                else:
+                    out_input_path = Path(output_dir, 'input_{}.nii.gz'.format(str(trash_count)))
+                    save_tensor_to_nifti(outputs_np, out_input_path, val_output_affine)
+                    output_path_list = [str(out_input_path)]
                 # It's just easier to start at 0 for EVERYTHING
                 img_count += 1
             img_vol_dict[output_path_list[-1]] = vol_output
+            # TODO this needs to change if we want to increase the batch size > 1
             for i, input_image_path in enumerate(val_data['image_meta_dict']['filename_or_obj']):
-                input_output_paths_dict[input_image_path] = output_path_list[i]
+                input_output_paths_dict[input_image_path] = output_path_list[-1]
             save_json(Path(output_dir, f'__input_output_paths_dict.json'), input_output_paths_dict)
         mean_metric = np.mean(np.array(val_score_list))
         median = np.median(np.array(val_score_list))
