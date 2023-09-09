@@ -641,7 +641,7 @@ def validation_loop(img_path_list: Sequence,
                         inputs_np, labels_np, outputs_np, output_subdir, val_output_affine,
                         '{}_{}'.format(str(input_filename), str(img_count)))
                 else:
-                    out_input_path = Path(output_dir, 'input_{}.nii.gz'.format(str(trash_count)))
+                    out_input_path = Path(output_dir, f'input_{input_filename}_{trash_count}.nii.gz')
                     save_tensor_to_nifti(outputs_np, out_input_path, val_output_affine)
                     output_path_list = [str(out_input_path)]
                 # It's just easier to start at 0 for EVERYTHING
