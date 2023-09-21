@@ -1,7 +1,9 @@
 import os
 from typing import Union, Optional, Sequence, Any
 
+import pandas as pd
 from bcblib.tools.nifti_utils import load_nifti
+from bcblib.tools.spreadsheet_io_utils import import_spreadsheet
 from monai.metrics import HausdorffDistanceMetric, CumulativeIterationMetric, is_binary_tensor, \
     compute_hausdorff_distance, do_metric_reduction
 from monai.utils import MetricReduction
@@ -266,6 +268,43 @@ def distance_ratio_volume(label, prediction):
     return 1 - (distance / max_distance)
 
 
+def distance_ratio_from_spreadsheet(spreadsheet, distance_metric_column, image_shape=None, max_distance=None):
+    """
+    Compute the distance ratio between the prediction and the label.
+    Parameters
+    ----------
+    spreadsheet
+    distance_metric_column
+    image_shape
+    max_distance
+
+    Returns
+    -------
+
+    """
+    # image_shape and max_distance cannot be both None and max distance supercedes image_shape
+    if image_shape is None and max_distance is None:
+        raise ValueError('image_shape and max_distance cannot be both None')
+    # If image_shape is None, max_distance must be a float or int
+    if image_shape is None and not isinstance(max_distance, (float, int)):
+        raise ValueError('image_shape is None, max_distance must be a float or int')
+    # If spreadsheet is a str or pathlike, load the spreadsheet otherwise test if dataframe
+    if isinstance(spreadsheet, (str, os.PathLike)):
+        df = import_spreadsheet(spreadsheet)
+    elif isinstance(spreadsheet, pd.DataFrame):
+        df = spreadsheet
+
+    if max_distance is None:
+        max_coord = [axis - 1 for axis in image_shape[-3:]]
+        max_distance = np.sqrt(np.sum((np.array([0, 0, 0]) - max_coord) ** 2))
+    if 'distance_ratio' not in df.columns:
+        df['distance_ratio'] = np.nan
+    for i, row in df.iterrows():
+        if isinstance(row[distance_metric_column], (float, int)):
+            df.at[i, 'distance_ratio'] = 1 - (row[distance_metric_column] / max_distance)
+    return df
+
+
 def compute_distance_ratio(
         y_pred: torch.Tensor,
         y: torch.Tensor,
@@ -454,3 +493,36 @@ class DistanceRatioMetric(CumulativeIterationMetric):
         f, not_nans = do_metric_reduction(data, reduction or self.reduction)
         return (f, not_nans) if self.get_not_nans else f
 
+
+def volume_ratio_from_spreadsheet(spreadsheet, volume_column, label_path_column):
+    """
+    Compute the volume ratio between the prediction and the label.
+    Parameters
+    ----------
+    spreadsheet
+    volume_column
+    label_path_column
+
+    Returns
+    -------
+
+    """
+    if isinstance(spreadsheet, (str, os.PathLike)):
+        df = import_spreadsheet(spreadsheet)
+    elif isinstance(spreadsheet, pd.DataFrame):
+        df = spreadsheet
+
+    # check whether volume_column and label_path_column exist in the dataframe
+    if volume_column not in df.columns:
+        raise ValueError(f'{volume_column} is not an existing column')
+    if label_path_column not in df.columns:
+        raise ValueError(f'{label_path_column} is not an existing column')
+
+    if 'volume_ratio' not in df.columns:
+        df['volume_ratio'] = np.nan
+    for i, row in df.iterrows():
+        if isinstance(row[volume_column], (float, int)):
+            label_hdr = load_nifti(row[label_path_column])
+            label_data = label_hdr.get_fdata()
+            volume = np.count_nonzero(label_data)
+            df.at[i, 'volume_ratio'] = row[volume_column] / volume

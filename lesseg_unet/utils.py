@@ -738,6 +738,51 @@ def get_seg_dict(seg_folder, keys_struct=None, key_to_match='b1000', relative_pa
     return seg_dict
 
 
+def get_folds_seg_dict(seg_folder, keys_struct):
+    # keys_struct must contain 'label'
+    # if keys_struct is a pathlike object, open it as a json
+    if isinstance(keys_struct, os.PathLike):
+        keys_struct = open_json(keys_struct)
+    if not isinstance(keys_struct, dict):
+        raise ValueError(f'keys_struct must be a dict or a json file path')
+    # list all the nifti images starting with output_ in seg_folder using rglob
+    file_list = [p for p in Path(seg_folder).rglob('*') if is_nifti(p) and p.name.startswith('output_')]
+    # find all the 'val_perf_individual_measures.csv' files in seg_folder and concatenate them
+    val_perf_df = None
+    for p in Path(seg_folder).rglob('val_perf_individual_measures.csv'):
+        if val_perf_df is None:
+            val_perf_df = pd.read_csv(p, header=0)
+        else:
+            val_perf_df = pd.concat([val_perf_df, pd.read_csv(p, header=0)])
+    # add 3 empty columns to val_perf_df, key, label and segmentation
+    val_perf_df['key'] = ''
+    val_perf_df['label'] = ''
+    val_perf_df['segmentation'] = ''
+    # each file from file_list should 1) contain a 'core_filename' from val_perf_df and 2) contain a key from
+    # keys_struct and 3) with the key from keys_struct add the corresponding label.
+    for f in file_list:
+        # find the 'core_filename' contained in p in val_perf_df
+        for row in val_perf_df.iloc:
+            if row['core_filename'] in f.name:
+                # find the key from keys_struct that matches the input path
+                for k in keys_struct:
+                    if k in f.name:
+                        # add the key, label and segmentation to the row
+                        val_perf_df.loc[row.name, 'key'] = k
+                        val_perf_df.loc[row.name, 'label'] = keys_struct[k]['label']
+                        val_perf_df.loc[row.name, 'segmentation'] = str(f)
+                        break
+                break
+    # check that the number of files in file_list is the same as the number of 'key', 'label' and 'segmentation' in
+    # val_perf_df that are not ''
+    if len(file_list) != len(val_perf_df[(val_perf_df['key'] != '') & (val_perf_df['label'] != '') &
+                                            (val_perf_df['segmentation'] != '')]):
+        raise ValueError(f'Could not match all the files in {seg_folder}')
+    return val_perf_df
+
+
+
+
 def get_perf_seg_dict(seg_folder, keys_struct=None, key_to_match='b1000', relative_output_paths=True):
     validation_perf = None
     output_volume_dict = open_json(Path(seg_folder) / '__output_image_volumes.json')

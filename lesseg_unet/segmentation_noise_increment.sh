@@ -4,7 +4,7 @@ model_name=$(basename "$checkpoint_root_path")
 
 for noise_type in "gibbs" "rician" "bias" "all_noises";
 do
-  for incr in {0..10};
+  for incr in {0..0};
   do
     for i in {0..4};
     do
