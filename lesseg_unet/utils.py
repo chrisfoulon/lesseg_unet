@@ -20,6 +20,7 @@ from monai.metrics import HausdorffDistanceMetric, DiceMetric
 from bcblib.tools.nifti_utils import is_nifti, centre_of_mass_difference
 from tqdm import tqdm
 
+from lesseg_unet.loss_and_metric import distance_ratio_from_spreadsheet
 from lesseg_unet.net import create_model
 import nibabel as nib
 import torch
@@ -601,7 +602,7 @@ def add_cluster_to_dict(info_dict, lesion_mask_key='label', output_cluster_name_
     """
     for k in tqdm(info_dict):
         if output_cluster_name_key not in info_dict[k]:
-            if lesion_mask_key not in info_dict[k]:
+            if lesion_mask_key not in [kk for kk in info_dict[k].keys()]:
                 raise ValueError(f'key {lesion_mask_key} not found in {k}')
             clu, flipped = get_image_area(info_dict[k][lesion_mask_key], comp_meth=comp_meth, cluster_thr=cluster_thr)
             if not add_side_prefix:
@@ -738,7 +739,7 @@ def get_seg_dict(seg_folder, keys_struct=None, key_to_match='b1000', relative_pa
     return seg_dict
 
 
-def get_folds_seg_dict(seg_folder, keys_struct):
+def get_folds_seg_df(seg_folder, keys_struct, key_to_match='b1000'):
     # keys_struct must contain 'label'
     # if keys_struct is a pathlike object, open it as a json
     if isinstance(keys_struct, os.PathLike):
@@ -749,37 +750,84 @@ def get_folds_seg_dict(seg_folder, keys_struct):
     file_list = [p for p in Path(seg_folder).rglob('*') if is_nifti(p) and p.name.startswith('output_')]
     # find all the 'val_perf_individual_measures.csv' files in seg_folder and concatenate them
     val_perf_df = None
-    for p in Path(seg_folder).rglob('val_perf_individual_measures.csv'):
+    val_perf_df_path_list = [p for p in Path(seg_folder).rglob('val_perf_individual_measures.csv')]
+    print(f'Found {len(val_perf_df_path_list)} val_perf_individual_measures.csv files')
+    for p in val_perf_df_path_list:
         if val_perf_df is None:
             val_perf_df = pd.read_csv(p, header=0)
         else:
-            val_perf_df = pd.concat([val_perf_df, pd.read_csv(p, header=0)])
+            val_perf_df = pd.concat([val_perf_df, pd.read_csv(p, header=0)], ignore_index=True)
+
     # add 3 empty columns to val_perf_df, key, label and segmentation
     val_perf_df['key'] = ''
     val_perf_df['label'] = ''
     val_perf_df['segmentation'] = ''
     # each file from file_list should 1) contain a 'core_filename' from val_perf_df and 2) contain a key from
     # keys_struct and 3) with the key from keys_struct add the corresponding label.
-    for f in file_list:
-        # find the 'core_filename' contained in p in val_perf_df
-        for row in val_perf_df.iloc:
+    print(f'Found {len(np.unique(file_list))} output_*.nii files')
+    print(f'Found {len(val_perf_df)} rows in total in the val_perf_individual_measures.csv files')
+    print(f'Unique labels in keys_struct: {len(np.unique([keys_struct[k]["label"] for k in keys_struct]))}')
+    print(f'Unique keys in keys_struct: {len(np.unique([k for k in keys_struct.keys()]))}')
+    count_matched_keys = []
+    count_matched_output_files = []
+    # create a progress bar for tqdm where we track the number of files matched and the number of keys matched
+    pbar = tqdm(val_perf_df.iterrows(), desc=f'{len(count_matched_output_files)} output files, {len(count_matched_keys)} keys')
+    for ind, row in pbar:
+        matched_file = False
+        for f in file_list:
             if row['core_filename'] in f.name:
-                # find the key from keys_struct that matches the input path
-                for k in keys_struct:
-                    if k in f.name:
-                        # add the key, label and segmentation to the row
-                        val_perf_df.loc[row.name, 'key'] = k
-                        val_perf_df.loc[row.name, 'label'] = keys_struct[k]['label']
-                        val_perf_df.loc[row.name, 'segmentation'] = str(f)
-                        break
+                # val_perf_df.loc[row.name, 'segmentation'] = str(f)
+                val_perf_df.at[ind, 'segmentation'] = str(f)
+                count_matched_output_files.append(str(f))
+                matched_file = True
                 break
+        if not matched_file:
+            raise ValueError(f'Could not match {row["core_filename"]}')
+        for k in keys_struct:
+            local_match = 0
+            core_name = Path(
+                keys_struct[k][key_to_match]).name.split('.nii')[0].replace('input_', '').replace('output_', '')
+            if core_name in f.name:
+                # add the key, label and segmentation to the row
+                # val_perf_df.loc[row.name, 'key'] = k
+                val_perf_df.at[ind, 'key'] = k
+                # val_perf_df.loc[row.name, 'label'] = keys_struct[k]['label']
+                val_perf_df.at[ind, 'label'] = keys_struct[k]['label']
+                count_matched_keys.append(k)
+                local_match += 1
+            if local_match > 1:
+                raise ValueError(f'Found more than one match for {k}')
+        pbar.set_description(f'{len(count_matched_output_files)} output files, {len(count_matched_keys)} keys')
+    # print len of counters and then len of unique counters
+    print(f'Found {len(count_matched_keys)} keys')
+    print(f'Found {len(count_matched_output_files)} output files')
+    print(f'Unique keys matched: {len(np.unique(count_matched_keys))}')
+    print(f'Unique output files matched: {len(np.unique(count_matched_output_files))}')
+    print(f'Unique keys in val_perf_df: {len(np.unique(val_perf_df["key"].to_list()))}')
+    print(f'Unique labels in val_perf_df: {len(val_perf_df["label"].unique())}')
+    print(f'Unique segmentations in val_perf_df: {len(val_perf_df["segmentation"].unique())}')
+    print(f'Unique core_filenames in val_perf_df: {len(val_perf_df["core_filename"].unique())}')
     # check that the number of files in file_list is the same as the number of 'key', 'label' and 'segmentation' in
     # val_perf_df that are not ''
     if len(file_list) != len(val_perf_df[(val_perf_df['key'] != '') & (val_perf_df['label'] != '') &
-                                            (val_perf_df['segmentation'] != '')]):
+                                         (val_perf_df['segmentation'] != '')]):
         raise ValueError(f'Could not match all the files in {seg_folder}')
     return val_perf_df
 
+
+def create_perf_df_from_folds_root(folds_root, keys_struct):
+    val_perf_df = get_folds_seg_df(folds_root, keys_struct)
+    val_perf_df = distance_ratio_from_spreadsheet(val_perf_df, 'distance', [96, 128, 96])
+
+    val_perf_df['volume_ratio'] = val_perf_df['volume'] / [keys_struct[k]['label_size'] for k in val_perf_df['key']]
+    return val_perf_df
+
+
+def create_perf_dict_from_folds_root(folds_root, keys_struct):
+    val_perf_df = create_perf_df_from_folds_root(folds_root, keys_struct)
+    # convert the dataframe to a dict
+    val_perf_dict = val_perf_df.to_dict(orient='index')
+    return val_perf_dict
 
 
 

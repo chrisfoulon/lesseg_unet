@@ -2,9 +2,10 @@ checkpoint_root_path=$1
 
 model_name=$(basename "$checkpoint_root_path")
 
-for noise_type in "gibbs" "rician" "bias" "all_noises";
+for noise_type in "rician";
+#for noise_type in "gibbs" "rician" "bias" "all_noises";
 do
-  for incr in {0..0};
+  for incr in {16..20};
   do
     for i in {0..4};
     do
