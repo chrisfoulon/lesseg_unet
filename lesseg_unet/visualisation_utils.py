@@ -447,6 +447,54 @@ def plot_archetype_and_cluster_seg(cluster_dict, output_path, key='segmentation'
     pp.close()
 
 
+def plot_perf_violin_per_cluster(perf_seg_dict, output_folder, metric_name='dice_metric', y_val_range=(0, 1)):
+    lesion_cluster_list = list(
+        set([perf_seg_dict[k]['lesion_cluster'].split('L_')[-1].split('R_')[-1] for k in perf_seg_dict]))
+    # For each lesion_cluster, create a list of metric values
+    metric_list = []
+    for lesion_cluster in lesion_cluster_list:
+        metric_list.append([perf_seg_dict[k][metric_name] for k in perf_seg_dict if
+                            lesion_cluster in perf_seg_dict[k]['lesion_cluster']])
+    # sort the cluster list and the metric list by the mean of the metric (decreasing)
+    lesion_cluster_list, metric_list = zip(
+        *sorted(zip(lesion_cluster_list, metric_list), key=lambda x: np.mean(x[1]), reverse=True))
+    # Then, plot the distribution of the metric for each lesion_cluster (one violinplot per lesion_cluster) and compute the correlation between the lesion_cluster and the metric and display all the plots in one figure (save it as a png in the fold_root_folder)
+    # fig, axes = plt.subplots(len(lesion_cluster_list) // 4 + 1, 4)
+    fig, axes = plt.subplots(1, len(lesion_cluster_list), sharey=True)
+    # make plots taller and larger
+    plt.rcParams['figure.figsize'] = [20, 15]
+    # Add space between rows
+    fig.subplots_adjust(hspace=0.5)
+    # fix error: AttributeError: 'numpy.ndarray' object has no attribute 'fill_betweenx'
+    axes = axes.flatten()
+    # all plots y axis should be between 0 and 1
+    # if y_val_range is not None:
+    if y_val_range is not None:
+        for ax in axes:
+            ax.set_ylim(y_val_range)
+    else:
+        # compute the min and max of the metric_list
+        min_metric = min([min(metric) for metric in metric_list])
+        max_metric = max([max(metric) for metric in metric_list])
+        for ax in axes:
+            ax.set_ylim(min_metric, max_metric)
+    # # if the number of lesion_cluster is not a multiple of 4, the last row of plots should be empty
+    # if len(lesion_cluster_list) % 4 != 0:
+    #     for ax in axes[-(4 - len(lesion_cluster_list) % 4):]:
+    #         ax.axis('off')
+
+    for ind, lesion_cluster in enumerate(lesion_cluster_list):
+        sns.violinplot(ax=axes[ind], data=metric_list[ind])
+        # instead of title, the lesion_cluster, number of images in the cluster and
+        # the mean metric should be displayed on the x axis in diagonal
+        axes[ind].set_xlabel(f'{lesion_cluster}', rotation=45, ha='right')
+        # axes[ind].set_xlabel(f'{lesion_cluster} / {len(metric_list[ind])} / {np.mean(metric_list[ind]):.2f}',
+        # rotation=45, ha='right')
+
+    plt.savefig(Path(output_folder, f'{metric_name}_lesion_cluster_correlation.png'))
+    plt.show()
+
+
 def perf_dataset_overlap(input_images, spreadsheet, filename_col='core_filename', perf_col='dice_metric',
                          operation='mean', filter_pref='', recursive=False, non_zero_only=False, header=0,
                          window_size=-1):

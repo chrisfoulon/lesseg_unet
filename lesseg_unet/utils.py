@@ -751,7 +751,6 @@ def get_folds_seg_df(seg_folder, keys_struct, key_to_match='b1000'):
     # find all the 'val_perf_individual_measures.csv' files in seg_folder and concatenate them
     val_perf_df = None
     val_perf_df_path_list = [p for p in Path(seg_folder).rglob('val_perf_individual_measures.csv')]
-    print(f'Found {len(val_perf_df_path_list)} val_perf_individual_measures.csv files')
     for p in val_perf_df_path_list:
         if val_perf_df is None:
             val_perf_df = pd.read_csv(p, header=0)
@@ -762,12 +761,6 @@ def get_folds_seg_df(seg_folder, keys_struct, key_to_match='b1000'):
     val_perf_df['key'] = ''
     val_perf_df['label'] = ''
     val_perf_df['segmentation'] = ''
-    # each file from file_list should 1) contain a 'core_filename' from val_perf_df and 2) contain a key from
-    # keys_struct and 3) with the key from keys_struct add the corresponding label.
-    print(f'Found {len(np.unique(file_list))} output_*.nii files')
-    print(f'Found {len(val_perf_df)} rows in total in the val_perf_individual_measures.csv files')
-    print(f'Unique labels in keys_struct: {len(np.unique([keys_struct[k]["label"] for k in keys_struct]))}')
-    print(f'Unique keys in keys_struct: {len(np.unique([k for k in keys_struct.keys()]))}')
     count_matched_keys = []
     count_matched_output_files = []
     # create a progress bar for tqdm where we track the number of files matched and the number of keys matched
@@ -798,15 +791,6 @@ def get_folds_seg_df(seg_folder, keys_struct, key_to_match='b1000'):
             if local_match > 1:
                 raise ValueError(f'Found more than one match for {k}')
         pbar.set_description(f'{len(count_matched_output_files)} output files, {len(count_matched_keys)} keys')
-    # print len of counters and then len of unique counters
-    print(f'Found {len(count_matched_keys)} keys')
-    print(f'Found {len(count_matched_output_files)} output files')
-    print(f'Unique keys matched: {len(np.unique(count_matched_keys))}')
-    print(f'Unique output files matched: {len(np.unique(count_matched_output_files))}')
-    print(f'Unique keys in val_perf_df: {len(np.unique(val_perf_df["key"].to_list()))}')
-    print(f'Unique labels in val_perf_df: {len(val_perf_df["label"].unique())}')
-    print(f'Unique segmentations in val_perf_df: {len(val_perf_df["segmentation"].unique())}')
-    print(f'Unique core_filenames in val_perf_df: {len(val_perf_df["core_filename"].unique())}')
     # check that the number of files in file_list is the same as the number of 'key', 'label' and 'segmentation' in
     # val_perf_df that are not ''
     if len(file_list) != len(val_perf_df[(val_perf_df['key'] != '') & (val_perf_df['label'] != '') &
