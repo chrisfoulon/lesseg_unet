@@ -457,12 +457,19 @@ def get_fname_from_sorted_images(root_dir, pref='', split_suff=None):
 
 
 def get_best_epoch_from_folder(folder):
-    best_epoch_time = 0
-    best_epoch_path = ''
+    # best_epoch_time = 0
+    # best_epoch_path = ''
+    # for p in [pp for pp in Path(folder).iterdir() if pp.name.endswith('.pth')]:
+    #     t = p.stat().st_ctime
+    #     if best_epoch_time < t:
+    #         best_epoch_time = t
+    #         best_epoch_path = str(p)
+    best_epoch_number = 0
+    best_epoch_path = None
     for p in [pp for pp in Path(folder).iterdir() if pp.name.endswith('.pth')]:
-        t = p.stat().st_ctime
-        if best_epoch_time < t:
-            best_epoch_time = t
+        epoch_number = int(p.name.split('.pth')[0].split('_')[-1])
+        if best_epoch_number < epoch_number:
+            best_epoch_number = epoch_number
             best_epoch_path = str(p)
     return best_epoch_path
 
