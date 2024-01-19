@@ -467,7 +467,10 @@ def get_best_epoch_from_folder(folder):
     best_epoch_number = 0
     best_epoch_path = None
     for p in [pp for pp in Path(folder).iterdir() if pp.name.endswith('.pth')]:
-        epoch_number = int(p.name.split('.pth')[0].split('_')[-1])
+        checkpoint_suffix = p.name.split('.pth')[0].split('_')[-1]
+        if not checkpoint_suffix.isdigit():
+            continue
+        epoch_number = int(checkpoint_suffix)
         if best_epoch_number < epoch_number:
             best_epoch_number = epoch_number
             best_epoch_path = str(p)

@@ -456,6 +456,7 @@ def validation_loop(img_path_list: Sequence,
     val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
     if transform_dict is None:
         transform_dict = checkpoint['transform_dict']
+
     _, val_ds = data_loading.init_training_data(img_path_list, seg_path_list, img_pref,
                                                 image_cut_prefix=image_cut_prefix,
                                                 image_cut_suffix=image_cut_suffix,

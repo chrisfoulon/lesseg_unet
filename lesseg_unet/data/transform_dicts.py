@@ -1463,6 +1463,7 @@ def destructive_all_noises(noise_value):
     # The image is extremely blurry and could hardly be interpreted by a human
     gibbs_max_value = 0.425
     rician_max_value = 0.5
+    rician_std_param = (rician_max_value * noise_value,)
     bias_field_max_value = 0.1
     to_add_list = [
         {'GibbsNoised': {'keys': ['image'],
@@ -1472,9 +1473,10 @@ def destructive_all_noises(noise_value):
         {'RandRicianNoised': {'keys': ['image'],
                               'prob': 1,
                               'mean': 0.1,
-                              'std': rician_max_value * noise_value,
+                              'std': rician_std_param,
                               'relative': True,
                               'sample_std': False,
+                              'channel_wise': True,
                               },
          },
         {'RandBiasFieldd': {
@@ -1514,13 +1516,15 @@ def destructive_rician(noise_value):
     tr_dict = deepcopy(unetr_cc)
     # The image is extremely blurry and could hardly be interpreted by a human
     rician_max_value = 1
+    rician_std_param = (rician_max_value * noise_value,)
     to_add_list = [
         {'RandRicianNoised': {'keys': ['image'],
                               'prob': 1,
                               'mean': 0.1,
-                              'std': rician_max_value * noise_value,
+                              'std': rician_std_param,
                               'relative': True,
                               'sample_std': False,
+                              'channel_wise': True,
                               },
          },
     ]
