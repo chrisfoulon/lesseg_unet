@@ -676,3 +676,192 @@ def validation_loop(img_path_list: Sequence,
     # loop_df_columns = ['core_filename', 'dice_metric', 'volume', 'distance', 'distance_ratio']
     loop_df = pd.DataFrame().from_records(loop_dicts_list)
     loop_df.to_csv(Path(output_dir, 'val_perf_individual_measures.csv'))  # , columns=loop_df_columns)
+
+
+def segmentation_loop_ensemble(img_path_list: Sequence,
+                      output_dir: Union[str, bytes, os.PathLike],
+                      checkpoint_paths: Union[str, bytes, os.PathLike, Sequence[Union[str, bytes, os.PathLike]]],
+                      img_pref: str = None,
+                      transform_dict: dict = None,
+                      output_mode='segmentation',
+                      device: str = None,
+                      batch_size: int = 1,
+                      dataloader_workers: int = 8,
+                      original_size=True,
+                      clamping: tuple = None,
+                      segmentation_area=True,
+                      keep_input_folder_structure=False,
+                      ensemble_op: str = 'mean',
+                      **kwargs):
+
+    from collections import defaultdict
+    from lesseg_unet.utils import ensemble_logits, save_json  # Ensure save_json is imported
+
+    # Ensure checkpoint_paths is a list
+    if isinstance(checkpoint_paths, (str, bytes, os.PathLike)):
+        checkpoint_paths = [checkpoint_paths]
+
+    num_checkpoints = len(checkpoint_paths)
+
+    # If ensembling, enforce output_mode to 'logits'
+    if num_checkpoints > 1 and output_mode != 'logits':
+        logging.warning("Multiple checkpoints provided, setting output_mode to 'logits' for ensembling.")
+        output_mode = 'logits'
+
+    # Set device
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        device = torch.device(device)
+    logging.info(f'Torch device used for this segmentation: {str(device)}')
+
+    # Load the first checkpoint to get transform_dict if needed
+    first_checkpoint = torch.load(checkpoint_paths[0], map_location='cpu')
+
+    if transform_dict is None:
+        transform_dict = first_checkpoint['transform_dict']
+
+    # Load data
+    val_ds = data_loading.init_segmentation(img_path_list, img_pref,
+                                            transform_dict, clamping=clamping)
+    val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
+                                                            dataloader_workers=dataloader_workers)
+
+    val_output_affine = utils.nifti_affine_from_dataset(img_path_list[0])
+
+    training_img_size = transformations.find_param_from_hyper_dict(
+        transform_dict, 'spatial_size', find_last=True)
+    if training_img_size is None:
+        training_img_size = utils.get_img_size(img_path_list[0])
+
+    # Dictionary to store logits paths for each input image
+    logits_paths_per_image = defaultdict(list)
+    img_vol_dict = {}
+    input_output_paths_dict = {}
+
+    # Define post-transforms mapping
+    post_transform_map = {
+        'sigmoid': Compose([
+            Activationsd(keys=['pred'], sigmoid=True),
+            Invertd(
+                keys=['pred'],
+                transform=val_ds.transform,
+                orig_keys='image',
+            )
+        ]),
+        'logits': Compose([
+            Invertd(
+                keys=['pred'],
+                transform=val_ds.transform,
+                orig_keys='image',
+            )
+        ]),
+        'segmentation': Compose([
+            Activationsd(keys=['pred'], sigmoid=True),
+            AsDiscreted(keys=['pred'], threshold=0.5),
+            Invertd(
+                keys=['pred'],
+                transform=val_ds.transform,
+                orig_keys='image',
+            )
+        ])
+    }
+    # Get the appropriate post_trans based on output_mode
+    post_trans = post_transform_map[output_mode]
+
+    # Process each checkpoint
+    for checkpoint_path in checkpoint_paths:
+        logging.info(f'Processing checkpoint: {checkpoint_path}')
+        checkpoint = torch.load(checkpoint_path, map_location='cpu')
+        hyper_params = checkpoint['hyper_params']
+        model_name = checkpoint['model_name']
+
+        # Load the model
+        model = utils.load_model_from_checkpoint(checkpoint, device, hyper_params,
+                                                 model_name=model_name)
+        model.to(device)
+        model.eval()
+
+        # Create output directory for this model's outputs
+        model_output_dir = os.path.join(output_dir, os.path.basename(checkpoint_path).split('.')[0])
+        os.makedirs(model_output_dir, exist_ok=True)
+
+        with torch.no_grad():
+            for val_data in tqdm(val_loader, desc=f'Segmenting with model {os.path.basename(checkpoint_path)}'):
+                inputs = val_data['image'].to(device)
+                with torch.cuda.amp.autocast():
+                    val_data['pred'] = sliding_window_inference(inputs, training_img_size,
+                                                                1, model, overlap=0.8)
+                    val_data['pred'].applied_operations = deepcopy(val_data['image'].applied_operations)
+                    val_outputs_list = decollate_batch(val_data)
+                    val_output_convert = [
+                        post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
+                    ]
+
+                # Process each output in the batch
+                for i, output_data in enumerate(val_output_convert):
+                    inv_outputs = output_data['pred']
+                    input_image_path = val_data['image_meta_dict']['filename_or_obj'][i]
+                    input_filename = Path(input_image_path).name.split('.nii')[0]
+                    output_filename = f"{input_filename}_logits.nii.gz"
+                    output_path = os.path.join(model_output_dir, output_filename)
+
+                    # Save the inv_outputs (logits) as Nifti image.
+                    logits_np = inv_outputs.cpu().numpy()
+                    nib.save(nib.Nifti1Image(logits_np, val_output_affine), output_path)
+
+                    # Keep track of the output path.
+                    logits_paths_per_image[input_image_path].append(output_path)
+
+        # After processing all images, delete the model to free GPU memory.
+        del model
+        torch.cuda.empty_cache()
+
+    # Now, process the outputs and perform ensembling if necessary
+    for input_image_path, logits_paths in logits_paths_per_image.items():
+        input_filename = Path(input_image_path).name.split('.nii')[0]
+
+        # If multiple checkpoints, perform ensembling
+        if num_checkpoints > 1:
+            # Use the ensemble_logits function
+            ensembled_nifti, ensembled_output_path = ensemble_logits(
+                logits_paths=logits_paths,
+                output_dir=output_dir,
+                ensemble_op=ensemble_op
+            )
+        else:
+            # Only one checkpoint, use the logits directly
+            ensembled_output_path = logits_paths[0]
+            ensembled_nifti = nib.load(ensembled_output_path)
+
+        # Apply sigmoid activation and thresholding to get segmentation
+        logits_data = ensembled_nifti.get_fdata()
+        sigmoid_data = 1 / (1 + np.exp(-logits_data))
+        segmentation_data = (sigmoid_data > 0.5).astype(np.uint8)
+
+        # Save the final segmentation
+        segmentation_nifti = nib.Nifti1Image(segmentation_data, ensembled_nifti.affine)
+
+        # Determine output directory
+        if not keep_input_folder_structure:
+            output_subdir = output_dir
+        else:
+            relative_path = Path(input_image_path).parent.relative_to(keep_input_folder_structure)
+            output_subdir = Path(output_dir, relative_path)
+        os.makedirs(output_subdir, exist_ok=True)
+
+        segmentation_filename = f"{input_filename}_segmentation.nii.gz"
+        segmentation_output_path = Path(output_subdir, segmentation_filename)
+        nib.save(segmentation_nifti, segmentation_output_path)
+
+        # Compute volume metric
+        vol_output = np.sum(segmentation_data)  # Adjust as per your volume metric function
+
+        img_vol_dict[str(segmentation_output_path)] = vol_output
+        input_output_paths_dict[input_image_path] = str(segmentation_output_path)
+
+    # Save the volume metrics and input-output mapping using save_json
+    save_json(Path(output_dir, f'__input_output_paths_dict.json'), input_output_paths_dict)
+    save_json(Path(output_dir, f'__output_image_volumes.json'), img_vol_dict)
+    pd.DataFrame().from_dict(img_vol_dict, orient='index').to_csv(
+        Path(output_dir, f'__output_image_volumes.csv'))

@@ -948,7 +948,49 @@ def compute_distance_ratio_from_spreadsheet(spreadsheet, images_shape=None):
     # import csv if it's not already a pandas dataframe
     if not isinstance(spreadsheet, pd.DataFrame):
         spreadsheet = import_spreadsheet(spreadsheet)
-
+    raise NotImplementedError('This function is not implemented yet')
     # TODO
 
 
+def ensemble_logits(logits_paths: List[str], output_dir: Union[str, bytes, os.PathLike],
+                    ensemble_op: str = "mean") -> (nib.Nifti1Image, str):
+    """
+    Loads a list of logits NIfTI files, applies the specified ensemble operation, and returns the ensembled Nifti1Image object
+    and its save path.
+
+    Args:
+        logits_paths (List[str]): List of file paths for logits NIfTI files (from different models).
+        output_dir (Union[str, bytes, os.PathLike]): Directory where the ensembled NIfTI file will be saved.
+        ensemble_op (str): The ensemble operation to apply (e.g., "mean", "median"). Defaults to "mean".
+
+    Returns:
+        nib.Nifti1Image: The ensembled NIfTI image.
+        str: The path to the saved ensembled NIfTI file.
+    """
+    # List to store loaded logits
+    all_logits = []
+
+    # Load logits from NIfTI files
+    for logits_path in logits_paths:
+        logits_img = nib.load(logits_path)
+        logits_data = logits_img.get_fdata()
+        all_logits.append(logits_data)
+
+    # Stack logits along a new axis and apply the ensemble operation
+    all_logits = np.stack(all_logits, axis=0)
+
+    # Use the specified numpy operation (e.g., "mean", "median")
+    ensemble_func = getattr(np, ensemble_op, None)
+    if ensemble_func is None:
+        raise ValueError(f"Unsupported ensemble operation: {ensemble_op}")
+
+    ensembled_logits = ensemble_func(all_logits, axis=0)
+
+    # Create a new NIfTI image with the ensembled data
+    ensembled_nifti = nib.Nifti1Image(ensembled_logits, logits_img.affine)
+
+    # Save the ensembled NIfTI image to disk
+    ensembled_output_path = os.path.join(output_dir, "ensembled_logits.nii.gz")
+    nib.save(ensembled_nifti, ensembled_output_path)
+
+    return ensembled_nifti, ensembled_output_path
