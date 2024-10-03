@@ -101,8 +101,8 @@ def main():
                              ' or directory (in that case, the most recent checkpoint will be used)')
     parser.add_argument('-mt', '--model_type', type=str, default='UNETR',
                         help='Select the model architecture (UNet, UNETR, SWINUNETR)')
-    parser.add_argument('-d', '--torch_device', type=str, help='Device type and number given to'
-                                                               'torch.device()')
+    parser.add_argument('-d', '--torch_device', type=str, default=None,
+                        help='Device type and number given to torch.device()')
     parser.add_argument('-dropout', type=float, help='Set a dropout value for the model')
     parser.add_argument('-fs', '--feature_size', type=int, help='Set the feature size for (SWIN)UNETR')
     # Gradient accumulation
@@ -227,15 +227,25 @@ def main_worker(local_rank, args, kwargs):
         os.environ['MASTER_ADDR'] = 'localhost'
     if 'MASTER_PORT' not in os.environ:
         os.environ['MASTER_PORT'] = '1234'
-    args.world_size = int(os.environ['WORLD_SIZE'])
-    print(f'WORLD SIZE: {args.world_size}')
-    print(f'################RANK : {local_rank}####################')
-
-    print("Waiting for all DDP processes to establish contact...")
-    if args.torch_device != 'cpu':
-        dist.init_process_group('nccl', rank=local_rank, world_size=args.world_size)
+    if args.checkpoint and args.world_size == 1:
+        dist.init_process_group(backend='gloo', world_size=1, rank=0)
+        print("Distributed process group initialized with one process.")
     else:
-        dist.init_process_group('gloo', rank=local_rank, world_size=args.world_size)
+        if args.world_size > 1:
+            print("Waiting for all DDP processes to establish contact...")
+            if args.torch_device != 'cpu':
+                dist.init_process_group('nccl', rank=local_rank, world_size=args.world_size)
+            else:
+                dist.init_process_group('gloo', rank=local_rank, world_size=args.world_size)
+            print('Contact established!')
+        else:
+            dist.init_process_group(backend='gloo', world_size=1, rank=0)
+            print("Distributed process group initialized with one process.")
+    if args.torch_device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        device = torch.device(args.torch_device)
+    logging.info(f'Using device: {device}')
     print('Contact established!')
     # logs init
     if args.stop_best_epoch is None:

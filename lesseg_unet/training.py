@@ -858,7 +858,9 @@ def training(img_path_list: Sequence,
 
 
             del loss, controls_loss
-            torch.cuda.empty_cache()
+            # Emptying cache after training
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
             if one_loop:
                 exit()
