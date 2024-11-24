@@ -310,9 +310,10 @@ def compute_distance_ratio(
         y: torch.Tensor,
         include_background: bool = False,
         distance_metric: str = "euclidean",
-        percentile: float | None = 95.0,
+        percentile: Optional[float] = 95.0,
         directed: bool = False,
-        spacing: int | float | np.ndarray | Sequence[int | float | np.ndarray | Sequence[int | float]] | None = None,
+        spacing: Union
+        [int, float, np.ndarray, Sequence[Union[int, float, np.ndarray, Sequence[Union[int, float]]]], None] = None,
         ) -> torch.Tensor:
     """
     Compute the distance ratio between the prediction and the label.

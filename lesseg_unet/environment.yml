@@ -1,0 +1,25 @@
+name: lesseg_unet_env
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.10
+  - nibabel==3.2.2
+  - numpy==1.21.0
+  - nilearn==0.9.0
+  - monai==1.0
+  - bcblib
+  - pytorch
+  - torchio==0.18.73
+  - torchvision
+  - matplotlib==3.5.1
+  - pandas==1.3.5
+  - tensorboard>=2.6.0
+  - scipy
+  - tqdm
+  - einops
+  - python-dateutil
+  - seaborn
+  - dask
+  - pip
+  - bcblib

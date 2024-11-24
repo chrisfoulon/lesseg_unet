@@ -9,18 +9,18 @@ def read(fname):
 setup(
     name='lesseg_unet',        # This is the name of your PyPI-package.
     version='0.13.0',     # Update the version number for new releases
-    python_requires='>3.10',
+    python_requires='>3.8',
     zip_safe=True,
     include_package_data=True,
     packages=find_packages(exclude=['__pycache__']),
     # einops is only for the UNETR
-    # install_requires=['nibabel>=3.2.2', 'numpy>=1.18.5', 'nilearn>=0.9.0', 'monai>=1.0', 'bcblib>=0.3.4.3',
-    #                   'torch>=1.10.2', 'torchio>=0.18.73', 'torchvision>=0.11.3', 'matplotlib>=3.5.1', 'pandas>=1.3.5',
-    #                   'tensorboard>=2.6.0', 'scipy', 'tqdm', 'einops', 'python-dateutil', 'seaborn', 'dask'],
-    install_requires=['nibabel==3.2.2', 'numpy==1.21.0', 'nilearn==0.9.0', 'monai==1.0', 'bcblib==0.3.4.3',
-                      'torch==1.11.0', 'torchio==0.18.73', 'torchvision==0.12', 'matplotlib==3.5.1',
-                      'pandas==1.3.5', 'tensorboard>=2.6.0', 'scipy', 'tqdm', 'einops', 'python-dateutil', 'seaborn',
-                      'dask'],
+    install_requires=['nibabel>=3.2.2', 'numpy>=1.18.5', 'nilearn>=0.9.0', 'monai==1.0', 'bcblib>=0.3.4.3',
+                      'torch==1.10.2', 'torchio==0.18.73', 'torchvision==0.11.3', 'matplotlib>=3.5.1', 'pandas>=1.3.5',
+                      'tensorboard>=2.6.0', 'scipy', 'tqdm', 'einops', 'python-dateutil', 'seaborn', 'dask'],
+    # install_requires=['nibabel==3.2.2', 'numpy==1.21.0', 'nilearn==0.9.0', 'monai==1.0', 'bcblib==0.3.4.3',
+    #                   'torch==1.11.0', 'torchio==0.18.73', 'torchvision==0.12', 'matplotlib==3.5.1',
+    #                   'pandas==1.3.5', 'tensorboard>=2.6.0', 'scipy', 'tqdm', 'einops', 'python-dateutil', 'seaborn',
+    #                   'dask'],
     package_data={
         # If any package contains *.txt or *.rst files, include them:
         "": ["*.txt", "*.rst", "*.md"],
