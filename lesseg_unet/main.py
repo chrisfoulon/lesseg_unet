@@ -89,9 +89,10 @@ def main():
     parser.add_argument('-kmos', '--keep_model_output_size', action='store_true', help='Keep the output of the '
                                                                                        'segmentation in the '
                                                                                        'spatial_size of the model')
-    parser.add_argument('-kifs', '--keep_input_folder_structure',
-                        action='store_true', help='Segmentation output will reflect the folder structure from'
-                                                  ' the given root_folder')
+    parser.add_argument('-upf',
+                        '--use_parent_folder',
+                        action='store_true',
+                        help='Create a folder in the output with the parent folder name of the input file')
     # only_save_seg is a boolean used in validation_loop to save only the segmentation image
     parser.add_argument('-oss', '--only_save_seg', action='store_true', help='Save only the segmentation image')
 
@@ -455,7 +456,7 @@ def main_worker(local_rank, args, kwargs):
                                                    dataloader_workers=args.num_workers,
                                                    clamping=clamp_tuple,
                                                    segmentation_area=args.segmentation_area,
-                                                   keep_input_folder_structure=args.keep_input_folder_structure,
+                                                   use_parent_folder=args.use_parent_folder,
                                                    **kwargs)
                 if args.overlap:
                     overlaps_subfolders(output_root, 'output_')
@@ -472,7 +473,7 @@ def main_worker(local_rank, args, kwargs):
                                                dataloader_workers=args.num_workers,
                                                clamping=clamp_tuple,
                                                segmentation_area=args.segmentation_area,
-                                               keep_input_folder_structure=args.keep_input_folder_structure,
+                                               use_parent_folder=args.use_parent_folder,
                                                **kwargs)
                 if args.overlap:
                     nib.save(nifti_overlap_images(output_root, 'output_', recursive=True),
@@ -499,7 +500,7 @@ def main_worker(local_rank, args, kwargs):
                                          # default_label=args.default_label
                                          clamping=clamp_tuple,
                                          segmentation_area=args.segmentation_area,
-                                         keep_input_folder_structure=args.keep_input_folder_structure,
+                                         use_parent_folder=args.use_parent_folder,
                                          only_save_seg=args.only_save_seg,
                                          **kwargs)
             if args.overlap:
