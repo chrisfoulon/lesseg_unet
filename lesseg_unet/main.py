@@ -511,3 +511,4 @@ def main_worker(local_rank, args, kwargs):
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method('spawn')
     main()
+    dist.destroy_process_group()  # Cleanly shut it down
