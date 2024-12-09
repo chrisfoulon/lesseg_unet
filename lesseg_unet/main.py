@@ -89,6 +89,7 @@ def main():
     parser.add_argument('-kmos', '--keep_model_output_size', action='store_true', help='Keep the output of the '
                                                                                        'segmentation in the '
                                                                                        'spatial_size of the model')
+    # TODO modify that to instead take an int setting the number of subfolders to recreate in the output folder
     parser.add_argument('-upf',
                         '--use_parent_folder',
                         action='store_true',
