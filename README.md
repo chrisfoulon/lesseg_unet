@@ -2,6 +2,8 @@
 
 This project provides automated segmentation of acute ischemic stroke lesions from diffusion-weighted MRI (DWI) scans using deep learning models. It supports various models (UNet, UNETR, SWIN-UNETR) and includes distributed training, advanced data transformations, and segmentation output options.
 
+Please check the current latest version of the project on the [GitHub repository](https://github.com/chrisfoulon/lesseg_unet).
+
 ## Features
 - Supports UNet and transformer-based UNETR/SWIN-UNETR architectures.
 - Distributed training with PyTorch (DDP).
