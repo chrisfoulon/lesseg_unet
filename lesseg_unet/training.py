@@ -136,6 +136,7 @@ def training(img_path_list: Sequence,
              world_size=1,
              cache_num=None,
              enable_amp=True,
+             learning_rate=1e-4,
              delayed_control_training=False,
              use_ema=False,
              track_ema=False,
@@ -457,7 +458,7 @@ def training(img_path_list: Sequence,
             model = utils.load_model_from_checkpoint(checkpoint, device, hyper_params, model_name=model_type)
             if torch.cuda.is_available():
                 model.to(dist.get_rank())
-            optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-5)
             optimizer.load_state_dict(checkpoint['optim_dict'])
             scaler.load_state_dict(checkpoint['scaler_dict'])
             utils.logging_rank_0(f'{model_type} created and succesfully loaded from {pretrained_point} with '
@@ -489,7 +490,7 @@ def training(img_path_list: Sequence,
                                  f'hyper parameters: {hyper_params}',
                                  dist.get_rank())
             # print(f'[Rank {dist.get_rank()}]model created')
-            optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-5)
             # use amp to accelerate training
         if dist.get_rank() == 0:
             total_param_count = count_unique_parameters(model.named_parameters())

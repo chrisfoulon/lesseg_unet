@@ -106,6 +106,8 @@ def main():
     parser.add_argument('-d', '--torch_device', type=str, default=None,
                         help='Device type and number given to torch.device()')
     parser.add_argument('-dropout', type=float, help='Set a dropout value for the model')
+    parser.add_argument('-lr', '--learning_rate', type=float, default=1e-4,
+                        help='Learning rate for the AdamW optimizer')
     parser.add_argument('-fs', '--feature_size', type=int, help='Set the feature size for (SWIN)UNETR')
     # Gradient accumulation
     parser.add_argument('-ga', '--gradient_accumulation', type=int, default=1,
@@ -416,6 +418,7 @@ def main_worker(local_rank, args, kwargs):
                           rank=local_rank,
                           cache_num=args.cache_num,
                           enable_amp=not args.disable_mixed_precision,
+                          learning_rate=args.learning_rate,
                           delayed_control_training=args.delayed_control_training,
                           use_ema=args.ema,
                           track_ema=args.track_ema,
