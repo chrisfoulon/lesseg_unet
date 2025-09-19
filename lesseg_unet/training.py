@@ -598,6 +598,9 @@ def training(img_path_list: Sequence,
             start_time = time.time()
             loading_time = True
 
+            # Initialize gradient clipping flag for UNet models
+            _gradients_unscaled = False
+
             """
             TRAINING INITIALISATION
             """
@@ -804,8 +807,22 @@ def training(img_path_list: Sequence,
                     # mean_loss = (loss + controls_loss) / 2
                     mean_loss = (loss + controls_loss)
                     scaler.scale(mean_loss).backward()
+
+                    # Gradient clipping for UNet models to prevent gradient explosion
+                    if model_type.lower() == 'unet':
+                        if not _gradients_unscaled:
+                            scaler.unscale_(optimizer)
+                            _gradients_unscaled = True
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 else:
                     scaler.scale(loss).backward()
+
+                    # Gradient clipping for UNet models to prevent gradient explosion
+                    if model_type.lower() == 'unet':
+                        if not _gradients_unscaled:
+                            scaler.unscale_(optimizer)
+                            _gradients_unscaled = True
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 """
                 The different ranks are coming together here
                 """
@@ -831,6 +848,8 @@ def training(img_path_list: Sequence,
                     scaler.step(optimizer)
                     scaler.update()
                     optimizer.zero_grad()
+                    # Reset gradient unscaling flag for next accumulation cycle
+                    _gradients_unscaled = False
                 """
                 Progress and other str formatting
                 """
