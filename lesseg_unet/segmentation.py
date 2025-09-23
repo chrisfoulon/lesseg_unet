@@ -31,6 +31,27 @@ from monai.transforms import (
 from lesseg_unet.loss_and_metric import DistanceRatioMetric
 
 
+def fix_zero_dice_distance(dice, distance, max_distance):
+    """
+    Fix distance when both dice and distance are 0 (empty predictions).
+
+    When predictions are empty, MONAI's HausdorffDistanceMetric returns 0.0
+    instead of max_distance as expected. This function corrects this behavior
+    by setting distance to max_distance when both dice=0 and distance=0.
+
+    Args:
+        dice: Dice coefficient value
+        distance: Hausdorff distance value
+        max_distance: Maximum possible distance in the image
+
+    Returns:
+        Corrected distance value
+    """
+    if dice == 0.0 and distance == 0.0:
+        return max_distance
+    return distance
+
+
 def get_images_np_on_cpu(batch_data, batch_images, compute_device, dataset_obj, output_size=None):
     # batch_data_image is typically batch_data['image'] or batch_data['label'] or outputs of the model
     if output_size is not None and output_size != batch_images.shape[-3:]:
@@ -145,6 +166,11 @@ def segmentation(img_path_list: Sequence,
     if perform_validation:
         dice_metric = DiceMetric(include_background=True, reduction="mean")
         hausdorff_metric = HausdorffDistanceMetric(include_background=True, reduction="mean", percentile=95)
+
+        # Calculate max_distance for fixing zero dice/distance cases
+        max_coord = [axis - 1 for axis in training_img_size]
+        max_distance = np.sqrt(np.sum((np.array([0, 0, 0]) - max_coord) ** 2))
+
         val_images_dir = Path(output_dir, 'val_images')
         trash_val_images_dir = Path(output_dir, 'trash_val_images')
         if not val_images_dir.is_dir():
@@ -214,6 +240,8 @@ def segmentation(img_path_list: Sequence,
                     dice = dice_metric.aggregate().item()
                     hausdorff_metric(y_pred=output_pred, y=label)
                     dist = hausdorff_metric.aggregate().item()
+                    # Fix distance when both dice and distance are 0 (empty predictions)
+                    dist = fix_zero_dice_distance(dice, dist, max_distance)
                     # Loop dataframe filling
                     one_image_measures = {'dice_metric': dice, 'distance': dist}
                     val_score_list.append(dice)
@@ -492,6 +520,11 @@ def validation_loop(img_path_list: Sequence,
     dist_ratio = DistanceRatioMetric(include_background=True, reduction="mean")
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
 
+    # Calculate max_distance for fixing zero dice/distance cases
+    # All processed images have the same spatial size: training_img_size
+    max_coord = [axis - 1 for axis in training_img_size]
+    max_distance = np.sqrt(np.sum((np.array([0, 0, 0]) - max_coord) ** 2))
+
     les_area_finder = None
     if segmentation_area:
         les_area_finder = utils.LesionAreaFinder()
@@ -510,7 +543,10 @@ def validation_loop(img_path_list: Sequence,
     if not val_images_dir.is_dir():
         val_images_dir.mkdir(exist_ok=True)
     for f in val_images_dir.iterdir():
-        shutil.rmtree(f)
+        if f.is_dir():
+            shutil.rmtree(f)
+        else:
+            os.remove(f)
     if not trash_val_images_dir.is_dir():
         trash_val_images_dir.mkdir(exist_ok=True)
     for f in trash_val_images_dir.iterdir():
@@ -552,6 +588,8 @@ def validation_loop(img_path_list: Sequence,
                 dice = dice_metric.aggregate().item()
                 hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
                 dist = hausdorff_metric.aggregate().item()
+                # Fix distance when both dice and distance are 0 (empty predictions)
+                dist = fix_zero_dice_distance(dice, dist, max_distance)
                 # dist_ratio(y_pred=val_output_convert, y=masks_only_val_labels)
                 # distance_ratio = dist_ratio.aggregate().item()
                 # TODO make it work ...
