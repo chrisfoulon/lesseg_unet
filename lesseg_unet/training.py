@@ -450,7 +450,7 @@ def training(img_path_list: Sequence,
         SET MODEL PARAM AND CREATE / LOAD MODEL OBJECT
         """
         utils.logging_rank_0(f'Creating monai {model_type}', dist.get_rank())
-        scaler = torch.cuda.amp.GradScaler()
+        scaler = torch.cuda.amp.GradScaler() if enable_amp else None
         starting_epoch = 0
         if checkpoint_to_share is not None:
             starting_epoch = checkpoint_to_share[0]['epoch']
@@ -461,7 +461,8 @@ def training(img_path_list: Sequence,
                 model.to(dist.get_rank())
             optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
             optimizer.load_state_dict(checkpoint['optim_dict'])
-            scaler.load_state_dict(checkpoint['scaler_dict'])
+            if scaler is not None and checkpoint.get('scaler_dict') is not None:
+                scaler.load_state_dict(checkpoint['scaler_dict'])
             utils.logging_rank_0(f'{model_type} created and succesfully loaded from {pretrained_point} with '
                                  f'hyper parameters: {hyper_params}',
                                  dist.get_rank())
@@ -806,20 +807,26 @@ def training(img_path_list: Sequence,
                 if controls_loss is not None and not no_backward_on_controls:
                     # mean_loss = (loss + controls_loss) / 2
                     mean_loss = (loss + controls_loss)
-                    scaler.scale(mean_loss).backward()
+                    if scaler is not None:
+                        scaler.scale(mean_loss).backward()
+                    else:
+                        mean_loss.backward()
 
                     # Gradient clipping for UNet models to prevent gradient explosion
                     if model_type.lower() == 'unet':
-                        if not _gradients_unscaled:
+                        if scaler is not None and not _gradients_unscaled:
                             scaler.unscale_(optimizer)
                             _gradients_unscaled = True
                         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 else:
-                    scaler.scale(loss).backward()
+                    if scaler is not None:
+                        scaler.scale(loss).backward()
+                    else:
+                        loss.backward()
 
                     # Gradient clipping for UNet models to prevent gradient explosion
                     if model_type.lower() == 'unet':
-                        if not _gradients_unscaled:
+                        if scaler is not None and not _gradients_unscaled:
                             scaler.unscale_(optimizer)
                             _gradients_unscaled = True
                         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -844,9 +851,11 @@ def training(img_path_list: Sequence,
                 #         print(name, var.is_cuda)
                 # print('############ CHECKING IS CUDA ###########################')
                 if step % gradient_accumulation_steps == 0:
-                    # optimizer.step()
-                    scaler.step(optimizer)
-                    scaler.update()
+                    if scaler is not None:
+                        scaler.step(optimizer)
+                        scaler.update()
+                    else:
+                        optimizer.step()
                     optimizer.zero_grad()
                     # Reset gradient unscaling flag for next accumulation cycle
                     _gradients_unscaled = False
@@ -1177,4 +1186,15 @@ def training(img_path_list: Sequence,
         if writer is not None:
             writer.close()
         utils.logging_rank_0(f'Fold {fold} finished', rank)
+
+        # Clean up GPU memory between folds to prevent CUDA OOM
+        if torch.cuda.is_available():
+            # Delete model and optimizer to free GPU memory
+            del model, optimizer
+            if scaler is not None:
+                del scaler
+            # Clear CUDA cache and synchronize
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            utils.logging_rank_0(f'GPU memory cleaned up after fold {fold}', rank)
     dist.destroy_process_group()
