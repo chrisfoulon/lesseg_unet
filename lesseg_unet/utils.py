@@ -116,7 +116,7 @@ def save_checkpoint(model, epoch, fold, optimizer, scaler, hyper_params, output_
                     transform_dict, filename=None, scheduler=None):
     state_dict = {'epoch': epoch,
                   'fold': fold,
-                  'state_dict': model.module.state_dict(),
+                  'state_dict': model.module.state_dict() if hasattr(model, 'module') else model.state_dict(),
                   'optim_dict': optimizer.state_dict(),
                   'hyper_params': hyper_params,
                   'scaler_dict': scaler.state_dict() if scaler is not None else None,

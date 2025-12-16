@@ -96,6 +96,7 @@ def segmentation(img_path_list: Sequence,
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
+    cpu_device = device.type == 'cpu'
 
     if seg_path_list is None or not seg_path_list:
         perform_validation = False
@@ -317,6 +318,7 @@ def segmentation_loop(img_path_list: Sequence,
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
+    cpu_device = device.type == 'cpu'
 
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
 
@@ -384,7 +386,7 @@ def segmentation_loop(img_path_list: Sequence,
         for val_data in tqdm(val_loader, desc=f'Segmentation '):
             img_count += 1
             inputs = val_data['image'].to(device)
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast(device_type='cuda', enabled=not cpu_device):
                 # if training_img_size < inputs size we need several patches to cover the inputs
                 # if training_img_size > inputs sliding_window_inference pads for the inference and then crops back
                 val_data['pred'] = sliding_window_inference(inputs, training_img_size,
@@ -480,6 +482,7 @@ def validation_loop(img_path_list: Sequence,
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device)
+    cpu_device = device.type == 'cpu'
 
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
 
@@ -574,7 +577,7 @@ def validation_loop(img_path_list: Sequence,
             input_filename = Path(val_data['image_meta_dict']['filename_or_obj'][0]).name.split('.nii')[0]
             # outputs = model(inputs)
             # outputs = post_trans(outputs)
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast(device_type='cuda', enabled=not cpu_device):
                 masks_only_val_labels = labels[:, :1, :, :, :]
                 # TODO
                 # print(type(model.module.weight))

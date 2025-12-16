@@ -3,6 +3,7 @@ import os
 import random
 import shutil
 import logging
+import gc
 from copy import deepcopy
 from pathlib import Path
 from typing import Sequence, Union, Iterable
@@ -33,14 +34,54 @@ from torch.nn import BCEWithLogitsLoss
 from lesseg_unet import net, utils, data_loading, transformations, loss_and_metric
 
 
-# def handler(signum, frame):
-#     res = input("Ctrl-c was pressed. Do you really want to exit? y/n ")
-#     if res == 'y':
-#         dist.destroy_process_group()
-#         exit(1)
-#
-#
-# signal.signal(signal.SIGINT, handler)
+# Global variable to store cleanup context
+_cleanup_context = {}
+
+
+def cleanup_on_exit(signum=None, frame=None):
+    """
+    Cleanup function called on Ctrl+C or normal exit.
+    Releases memory and cleans up distributed processes.
+    """
+    print(f"\n[Rank {dist.get_rank() if dist.is_initialized() else 0}] Cleaning up resources...")
+
+    # Delete model, optimizer, and scaler to free memory
+    if 'model' in _cleanup_context:
+        del _cleanup_context['model']
+    if 'optimizer' in _cleanup_context:
+        del _cleanup_context['optimizer']
+    if 'scaler' in _cleanup_context and _cleanup_context['scaler'] is not None:
+        del _cleanup_context['scaler']
+    if 'train_loader' in _cleanup_context:
+        del _cleanup_context['train_loader']
+    if 'val_loader' in _cleanup_context:
+        del _cleanup_context['val_loader']
+
+    # Clear CUDA cache if using GPU
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+        print(f"[Rank {dist.get_rank() if dist.is_initialized() else 0}] GPU memory cleared")
+
+    # Force garbage collection
+    gc.collect()
+    print(f"[Rank {dist.get_rank() if dist.is_initialized() else 0}] CPU memory cleared")
+
+    # Destroy DDP process group if it was initialized
+    if dist.is_initialized():
+        try:
+            dist.destroy_process_group()
+            print(f"[Rank {dist.get_rank()}] DDP process group destroyed")
+        except Exception as e:
+            print(f"Warning: Could not destroy process group: {e}")
+
+    if signum is not None:
+        print(f"\n[Rank {dist.get_rank() if dist.is_initialized() else 0}] Exiting due to interrupt signal")
+        sys.exit(0)
+
+
+# Register signal handler for Ctrl+C (SIGINT)
+signal.signal(signal.SIGINT, cleanup_on_exit)
 
 
 def count_unique_parameters(parameters):
@@ -234,9 +275,15 @@ def training(img_path_list: Sequence,
     # setup(rank, world_size, cpu=cpu_device)
     if not cpu_device:
         device = torch.device(f"cuda:{rank}")
-    torch.cuda.set_device(device)
+        torch.cuda.set_device(device)  # Only set CUDA device if using GPU
 
     logging.info(f'Torch device used for this training: {str(device)}')
+
+    # Disable AMP on CPU (AMP only works with CUDA)
+    if cpu_device and enable_amp:
+        utils.print_rank_0('Warning: AMP (Automatic Mixed Precision) is not supported on CPU. Disabling AMP.',
+                          dist.get_rank())
+        enable_amp = False
 
     """
     LOSS FUNCTIONS
@@ -507,11 +554,22 @@ def training(img_path_list: Sequence,
             utils.logging_rank_0(f'Total number of parameters in the model: {str(total_param_count)}',
                                  dist.get_rank())
         params = list(model.parameters())
-        if torch.cuda.is_available():
+
+        # Move model to device and wrap in DDP
+        if cpu_device:
+            # CPU: move to CPU device, no device_ids
+            model.to(device)
+            if world_size > 1:
+                model = DistributedDataParallel(model, find_unused_parameters=False)
+                utils.print_rank_0('Model wrapped in DDP for CPU multi-process training', dist.get_rank())
+            else:
+                utils.print_rank_0('Model on CPU (single process, no DDP)', dist.get_rank())
+        else:
+            # GPU: move to specific GPU rank, use device_ids
             model.to(dist.get_rank())
             model = DistributedDataParallel(model, device_ids=[rank], output_device=dist.get_rank(),
                                             find_unused_parameters=False)
-            utils.print_rank_0('Model sent to the different ranks', dist.get_rank())
+            utils.print_rank_0('Model sent to GPU ranks with DDP', dist.get_rank())
         if folds_number == 1:
             output_fold_dir = output_dir
         else:
@@ -530,6 +588,15 @@ def training(img_path_list: Sequence,
                 val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
                 world_size=world_size, rank=dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num
             )
+
+        # Register objects for cleanup on Ctrl+C
+        _cleanup_context['model'] = model
+        _cleanup_context['optimizer'] = optimizer
+        _cleanup_context['scaler'] = scaler
+        if 'train_loader' in locals():
+            _cleanup_context['train_loader'] = train_loader
+        if 'val_loader' in locals():
+            _cleanup_context['val_loader'] = val_loader
 
         """Initiailise EMA"""
         monitor_emas = use_ema
@@ -589,6 +656,9 @@ def training(img_path_list: Sequence,
                     world_size=world_size, rank=dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num,
                     training_persistent_workers=False
                 )
+                # Update cleanup context with new loaders
+                _cleanup_context['train_loader'] = train_loader
+                _cleanup_context['val_loader'] = val_loader
 
                 # train_loader = data_loading.create_ctr_dataloader(
                 #     split_lists, ctr_split_lists, fold, train_img_transforms,
@@ -683,7 +753,7 @@ def training(img_path_list: Sequence,
                                  Path(img_dir, f'{lbl_name}.nii.gz'))
                         continue
 
-                with torch.cuda.amp.autocast(enabled=enable_amp):
+                with torch.amp.autocast(device_type='cuda', enabled=enable_amp):
                     logit_outputs = model(inputs)
                     # In case we use CoordConv, we only take the mask of the labels without the coordinates
                     masks_only_labels = labels
@@ -955,7 +1025,7 @@ def training(img_path_list: Sequence,
                         if ctr_split_lists is not None and use_controls:
                             ctr_val_inputs = val_data['control'].to(device, non_blocking=non_blocking)
                         # In case CoordConv is used
-                        with torch.cuda.amp.autocast():
+                        with torch.amp.autocast(device_type='cuda', enabled=enable_amp):
                             # masks_only_val_labels = val_labels[:, :1, :, :, :]
                             val_outputs = sliding_window_inference(val_inputs, model_img_size,
                                                                    val_batch_size, model)
@@ -1195,14 +1265,21 @@ def training(img_path_list: Sequence,
             writer.close()
         utils.logging_rank_0(f'Fold {fold} finished', rank)
 
-        # Clean up GPU memory between folds to prevent CUDA OOM
+        # Clean up memory between folds (but don't destroy process group yet)
+        if 'model' in _cleanup_context:
+            del _cleanup_context['model']
+        if 'optimizer' in _cleanup_context:
+            del _cleanup_context['optimizer']
+        if 'scaler' in _cleanup_context and _cleanup_context['scaler'] is not None:
+            del _cleanup_context['scaler']
+        if 'train_loader' in _cleanup_context:
+            del _cleanup_context['train_loader']
+        if 'val_loader' in _cleanup_context:
+            del _cleanup_context['val_loader']
+
         if torch.cuda.is_available():
-            # Delete model and optimizer to free GPU memory
-            del model, optimizer
-            if scaler is not None:
-                del scaler
-            # Clear CUDA cache and synchronize
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
-            utils.logging_rank_0(f'GPU memory cleaned up after fold {fold}', rank)
+        gc.collect()
+        utils.logging_rank_0(f'Memory cleaned up after fold {fold}', rank)
     dist.destroy_process_group()
