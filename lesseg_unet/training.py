@@ -391,8 +391,12 @@ def training(img_path_list: Sequence,
     # We need the training image size for the unetr as we need to know the size of the model to create it
     if list(transform_dict.keys())[-1] == 'patches':
         # TODO this might change depending on the cropping transformation
+        # Try roi_size first (old MONAI), then spatial_size (new MONAI)
         model_img_size = transformations.find_param_from_hyper_dict(
             transform_dict, 'roi_size', find_last=True)
+        if model_img_size is None:
+            model_img_size = transformations.find_param_from_hyper_dict(
+                transform_dict, 'spatial_size', find_last=True)
         model_img_size = model_img_size[-3:]
         transformations.setup_coord_conv(transform_dict, original_image_shape)
     else:
@@ -471,9 +475,10 @@ def training(img_path_list: Sequence,
             if model_type.lower() == 'unetr' or model_type.lower() == 'swinunetr':
                 if model_type.lower() == 'unetr':
                     hyper_params = net.default_unetr_hyper_params
+                    hyper_params['img_size'] = model_img_size  # UNETR still requires img_size
                 else:
                     hyper_params = net.default_swinunetr_hyper_params
-                hyper_params['img_size'] = model_img_size
+                    # SwinUNETR: img_size removed in MONAI 1.5+ - now accepts dynamic sizes
                 if feature_size is not None:
                     hyper_params['feature_size'] = int(feature_size)
                 elif 'feature_size' in kwargs:

@@ -18,7 +18,7 @@ min_small_crop_size = [int(0.95 * d) for d in def_spatial_size]
 full_hyper_dict = {
     'first_transform': [
         {'LoadImaged': {'keys': ['image', 'label']}},
-        {'AddChanneld': {'keys': ['image', 'label']}},
+        {'EnsureChannelFirstd': {'keys': ['image', 'label']}},
         # {'AsChannelFirstd': {
         #     'keys': ['image', 'label'],
         #     'channel_dim': -1}
@@ -176,7 +176,7 @@ minimal_hyper_dict = {
         {'LoadImaged': {
             'keys': ['image', 'label']}},
         # {'ToTensord': {'keys': ['image', 'label']}},
-        {'AddChanneld': {'keys': ['image', 'label']}},
+        {'EnsureChannelFirstd': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE RESIZE'}},
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
@@ -231,7 +231,7 @@ minimal_hyper_dict_altcc['last_transform'].append({'CoordConvAltd': {'keys': ['i
 new_dict = {
     'first_transform': [
         {'LoadImaged': {'keys': ['image', 'label']}},
-        {'AddChanneld': {'keys': ['image', 'label']}},
+        {'EnsureChannelFirstd': {'keys': ['image', 'label']}},
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
@@ -344,7 +344,7 @@ curated_dict = {
             'keys': ['image', 'label']}},
         # {'ToTensord': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE RESIZE'}},
-        {'AddChanneld': {'keys': ['image', 'label']}},
+        {'EnsureChannelFirstd': {'keys': ['image', 'label']}},
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
             'spatial_size': def_spatial_size}
@@ -502,7 +502,7 @@ test_dict = {
         {'LoadImaged': {
             'keys': ['image', 'label']}},
         {'ToTensord': {'keys': ['image', 'label']}},
-        {'AddChanneld': {'keys': ['image', 'label']}},
+        {'EnsureChannelFirstd': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE RESIZE'}},
         {'ResizeWithPadOrCropd': {
             'keys': ['image', 'label'],
@@ -570,7 +570,7 @@ crop_test = {
         {'LoadImaged': {
             'keys': ['image', 'label']}},
         # {'ToTensord': {'keys': ['image', 'label']}},
-        {'AddChanneld': {'keys': ['image', 'label']}},
+        {'EnsureChannelFirstd': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE RESIZE'}},
         # {'ResizeWithPadOrCropd': {
         #     'keys': ['image', 'label'],
@@ -723,7 +723,7 @@ unetr_dict = {
         {'LoadImaged': {
             'keys': ['image', 'label']}},
         # {'ToTensord': {'keys': ['image', 'label']}},
-        {'AddChanneld': {'keys': ['image', 'label']}},
+        {'EnsureChannelFirstd': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE RESIZE'}},
         # {'ResizeWithPadOrCropd': {
         #     'keys': ['image', 'label'],
@@ -900,7 +900,7 @@ unetr_dict_lastflip = {
         {'LoadImaged': {
             'keys': ['image', 'label']}},
         # {'ToTensord': {'keys': ['image', 'label']}},
-        {'AddChanneld': {'keys': ['image', 'label']}},
+        {'EnsureChannelFirstd': {'keys': ['image', 'label']}},
         # {'PrintDim': {'keys': ['image', 'label'], 'msg': 'BEFORE RESIZE'}},
         # {'ResizeWithPadOrCropd': {
         #     'keys': ['image', 'label'],

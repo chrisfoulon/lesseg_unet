@@ -35,7 +35,7 @@ default_unetr_hyper_params = {
 default_swinunetr_hyper_params = {
     'in_channels': 1,
     'out_channels': 1,
-    'img_size': (96, 96, 96),
+    # 'img_size': (96, 96, 96),  # Removed in MONAI 1.5+ - now accepts dynamic sizes
     'feature_size': 36,
     'attn_drop_rate': 0.0,
     'dropout_path_rate': 0.0,
