@@ -110,6 +110,13 @@ def main():
                         help='Learning rate for the AdamW optimizer')
     parser.add_argument('-wd', '--weight_decay', type=float, default=1e-5,
                         help='Weight decay for the AdamW optimizer')
+    # Learning rate scheduler
+    parser.add_argument('--use_lr_scheduler', action='store_true',
+                        help='Enable learning rate scheduling to prevent gradient explosion')
+    parser.add_argument('--lr_scheduler_patience', type=int, default=10,
+                        help='Epochs to wait before reducing LR when validation loss plateaus')
+    parser.add_argument('--lr_scheduler_factor', type=float, default=0.5,
+                        help='Factor to multiply LR by when reducing (0.5 = half LR)')
     parser.add_argument('-fs', '--feature_size', type=int, help='Set the feature size for (SWIN)UNETR')
     # Gradient accumulation
     parser.add_argument('-ga', '--gradient_accumulation', type=int, default=1,
@@ -117,6 +124,11 @@ def main():
     # Mixed precision
     parser.add_argument('-dmp', '--disable_mixed_precision', action='store_true',
                         help='Disable mixed precision training')
+    # Output clamping for numerical stability
+    parser.add_argument('-oc', '--output_clamping', action='store_true',
+                        help='Enable output clamping to prevent float16 overflow and NaN values')
+    parser.add_argument('-ocr', '--output_clamp_range', type=float, default=10.0,
+                        help='Range for output clamping: [-range, +range] (default: 10.0)')
     # Files split and matching options
     parser.add_argument('-tv', '--train_val', type=int, help='Training / validation percentage cut')
     parser.add_argument('-pref', '--image_prefix', type=str, help='Define a prefix to filter the input images')
@@ -422,12 +434,18 @@ def main_worker(local_rank, args, kwargs):
                           enable_amp=not args.disable_mixed_precision,
                           learning_rate=args.learning_rate,
                           weight_decay=args.weight_decay,
+                          use_lr_scheduler=args.use_lr_scheduler,
+                          lr_scheduler_patience=args.lr_scheduler_patience,
+                          lr_scheduler_factor=args.lr_scheduler_factor,
                           delayed_control_training=args.delayed_control_training,
                           use_ema=args.ema,
                           track_ema=args.track_ema,
                           no_backward_on_controls=args.no_backward_on_controls,
+                          output_clamping=args.output_clamping,
+                          output_clamp_range=args.output_clamp_range,
                           limit_of_open_files=args.limit_of_open_files,
                           debug=args.debug,
+                          feature_size=args.feature_size,
                           **kwargs)
     else:
         if args.checkpoint is None:

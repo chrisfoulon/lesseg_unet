@@ -144,6 +144,7 @@ def training(img_path_list: Sequence,
              no_backward_on_controls=False,
              limit_of_open_files=None,
              debug=False,
+             feature_size=None,
              **kwargs
              ):
     """
@@ -473,7 +474,9 @@ def training(img_path_list: Sequence,
                 else:
                     hyper_params = net.default_swinunetr_hyper_params
                 hyper_params['img_size'] = model_img_size
-                if 'feature_size' in kwargs:
+                if feature_size is not None:
+                    hyper_params['feature_size'] = int(feature_size)
+                elif 'feature_size' in kwargs:
                     hyper_params['feature_size'] = int(kwargs['feature_size'])
             else:
                 hyper_params = net.default_unet_hyper_params

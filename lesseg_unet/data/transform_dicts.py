@@ -1203,35 +1203,79 @@ unetr_cc_resize['first_transform'][2] = {'Resized': {
 unetr_cc_patches = deepcopy(unetr_cc)
 del unetr_cc_patches['first_transform'][2]
 unetr_cc_patches['patches'] = [
-    {'RandSpatialCropSamplesd': {
+    # CRITICAL for lesion segmentation: use RandCropByPosNegLabeld
+    # This ensures patches are centered on lesions (pos) and healthy tissue (neg)
+    {'RandCropByPosNegLabeld': {
         'keys': ['image', 'label'],
-        'roi_size': [64, 64, 64],
-        'num_samples': 2,
-        'random_center': True,
-        'random_size': False}},
-    # {'RandCropByPosNegLabeld': {
-    #     'keys': ['image', 'label'],
-    #     'label_key': 'label',
-    #     'spatial_size': [80, 80, 80],
-    #     'pos': 1,
-    #     'neg': 1,
-    #     'num_samples': 4}},
-    # {'RandFlipd': {
-    #     'keys': ["image", "label"],
-    #     'spatial_axis': [1],
-    #     'prob': low_prob}
-    #  },
-    # {'RandFlipd': {
-    #     'keys': ["image", "label"],
-    #     'spatial_axis': [2],
-    #     'prob': low_prob}
-    #  },
+        'label_key': 'label',
+        'spatial_size': [96, 96, 96],  # Larger patches for better context
+        'pos': 2,  # 2 patches centered on lesion voxels
+        'neg': 1,  # 1 patch on healthy tissue
+        'num_samples': 3}},  # Total 3 patches per image per iteration
 ]
 
 
 swinunetr_cc_patches = deepcopy(unetr_cc_patches)
-# SwinUNETR requires an images size divisible by 12 and divisible by 2 five times ... So, multiples of 32 essentially
-swinunetr_cc_patches['patches'][0]['RandSpatialCropSamplesd']['roi_size'] = [64, 64, 64]
+# SwinUNETR requires image size divisible by 32
+# unetr_cc_patches already uses 96x96x96 patches, which is perfect for SwinUNETR
+# No changes needed - it now uses RandCropByPosNegLabeld with spatial_size [96,96,96]
+
+# Patch-based SWIN-UNETR WITHOUT CoordConv (recommended)
+# CoordConv with patches gives inconsistent coordinates - harmful for generalization
+swinunetr_patches = deepcopy(swinunetr_cc_patches)
+del swinunetr_patches['last_transform'][2]  # Remove CoordConv
+
+# SHORT NAMES for command line convenience:
+# p96 = 96³ patches, high negative sampling for DWI artifacts
+# Use: -trs p96 -bs 1 -ga 6
+# Strategy: Many negative samples to learn DWI artifacts vs real lesions
+p96 = deepcopy(unetr_cc)
+del p96['first_transform'][2]
+del p96['last_transform'][2]  # Remove CoordConv
+p96['patches'] = [
+    {'RandCropByPosNegLabeld': {
+        'keys': ['image', 'label'],
+        'label_key': 'label',
+        'spatial_size': [96, 96, 96],
+        'pos': 1,   # 1 lesion patch
+        'neg': 3,   # 3 healthy patches (learn to reject artifacts!)
+        'num_samples': 4}},
+]
+
+# p64 = 64³ patches, balanced sampling, more spatial diversity
+# Use: -trs p64 -bs 2 -ga 3
+# Strategy: Smaller patches = more samples per image, learn local patterns
+p64 = deepcopy(unetr_cc)
+del p64['first_transform'][2]
+del p64['last_transform'][2]  # Remove CoordConv
+p64['patches'] = [
+    {'RandCropByPosNegLabeld': {
+        'keys': ['image', 'label'],
+        'label_key': 'label',
+        'spatial_size': [64, 64, 64],
+        'pos': 2,   # 2 lesion patches
+        'neg': 4,   # 4 healthy patches (high negative sampling)
+        'num_samples': 6}},
+]
+
+# p64_sparse = 64³ patches, fewer samples for memory efficiency
+# Use: -trs p64_sparse -bs 2 -ga 2
+# Strategy: Efficient memory, faster iterations, sees more unique images
+p64_sparse = deepcopy(unetr_cc)
+del p64_sparse['first_transform'][2]
+del p64_sparse['last_transform'][2]  # Remove CoordConv
+p64_sparse['patches'] = [
+    {'RandCropByPosNegLabeld': {
+        'keys': ['image', 'label'],
+        'label_key': 'label',
+        'spatial_size': [64, 64, 64],
+        'pos': 1,   # 1 lesion patch
+        'neg': 2,   # 2 healthy patches
+        'num_samples': 3}},
+]
+
+unetr_no_cc = deepcopy(unetr_cc)
+del unetr_no_cc['last_transform'][2]
 
 low_prob = high_prob = tiny_prob = 1
 unetr_aug_test = {
