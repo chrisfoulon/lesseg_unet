@@ -438,13 +438,19 @@ def training(img_path_list: Sequence,
     # We need the training image size for the unetr as we need to know the size of the model to create it
     if list(transform_dict.keys())[-1] == 'patches':
         # TODO this might change depending on the cropping transformation
-        # Try roi_size first (old MONAI), then spatial_size (new MONAI)
+        # Try roi_size first (for patches), then spatial_size (for resize transforms)
         model_img_size = transformations.find_param_from_hyper_dict(
             transform_dict, 'roi_size', find_last=True)
         if model_img_size is None:
             model_img_size = transformations.find_param_from_hyper_dict(
                 transform_dict, 'spatial_size', find_last=True)
-        model_img_size = model_img_size[-3:]
+        if model_img_size is not None:
+            model_img_size = model_img_size[-3:]
+        else:
+            raise ValueError(
+                "Could not find 'roi_size' or 'spatial_size' in transform_dict. "
+                "Please ensure your transforms include a cropping or resizing operation."
+            )
         transformations.setup_coord_conv(transform_dict, original_image_shape)
     else:
         model_img_size = transformations.find_param_from_hyper_dict(

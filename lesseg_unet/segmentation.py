@@ -113,9 +113,13 @@ def segmentation(img_path_list: Sequence,
         val_ds = data_loading.init_segmentation(img_path_list, img_pref, transform_dict, clamping=clamping)
         val_loader = data_loading.create_validation_data_loader(val_ds, batch_size=batch_size,
                                                                 dataloader_workers=dataloader_workers)
-    # Either the transformations contain a crop/pad/resize function with "spatial_size"
+    # Either the transformations contain a crop/pad/resize function with "spatial_size" or "roi_size"
     training_img_size = transformations.find_param_from_hyper_dict(
         transform_dict, 'spatial_size', find_last=True)
+    # Try roi_size if spatial_size not found (for RandSpatialCropSamplesd)
+    if training_img_size is None:
+        training_img_size = transformations.find_param_from_hyper_dict(
+            transform_dict, 'roi_size', find_last=True)
     # Or the transformations don't change the size of the input images
     if training_img_size is None:
         training_img_size = utils.get_img_size(img_path_list[0])
