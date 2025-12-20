@@ -541,6 +541,13 @@ def training(img_path_list: Sequence,
                     hyper_params['feature_size'] = int(kwargs['feature_size'])
             else:
                 hyper_params = net.default_unet_hyper_params
+
+            # Auto-detect model configuration from split_lists (multi-modal support)
+            model_config = data_utils.extract_model_config(split_lists)
+            hyper_params['in_channels'] = model_config['in_channels']
+            hyper_params['out_channels'] = model_config['out_channels']
+            utils.logging_rank_0(f'Auto-detected model config: {model_config}', dist.get_rank())
+
             # checking is CoordConv is used and change the input channel dimension
             if transform_dict is not None:
                 for li in transform_dict:

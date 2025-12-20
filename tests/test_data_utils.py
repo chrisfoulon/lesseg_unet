@@ -10,6 +10,7 @@ from lesseg_unet.data_utils import (
     get_category_keys,
     build_schema,
     validate_against_schema,
+    extract_model_config,
     SubjectDict,
 )
 
@@ -322,3 +323,98 @@ class TestValidateAgainstSchema:
         # Should show what was found
         assert 'image_dwi' in error_msg
         assert 'label' in error_msg
+
+
+class TestExtractModelConfig:
+    """Test extract_model_config() function."""
+
+    def test_single_modality_default_config(self):
+        """Single modality should return default config with in_channels=1, out_channels=1."""
+        split_lists = [[
+            {'image': '/path/img.nii.gz', 'label': '/path/mask.nii.gz'}
+        ]]
+
+        config = extract_model_config(split_lists)
+
+        assert config['in_channels'] == 1
+        assert config['out_channels'] == 1
+
+    def test_multi_modal_images(self):
+        """Multi-modal images should return in_channels = number of modalities."""
+        split_lists = [[
+            {
+                'image_dwi': '/path/dwi.nii.gz',
+                'image_adc': '/path/adc.nii.gz',
+                'label': '/path/mask.nii.gz'
+            }
+        ]]
+
+        config = extract_model_config(split_lists)
+
+        assert config['in_channels'] == 2
+        assert config['out_channels'] == 1
+
+    def test_multi_class_labels(self):
+        """Multi-class labels should return out_channels = number of classes."""
+        split_lists = [[
+            {
+                'image': '/path/img.nii.gz',
+                'label_class0': '/path/mask0.nii.gz',
+                'label_class1': '/path/mask1.nii.gz',
+                'label_class2': '/path/mask2.nii.gz'
+            }
+        ]]
+
+        config = extract_model_config(split_lists)
+
+        assert config['in_channels'] == 1
+        assert config['out_channels'] == 3
+
+    def test_multi_modal_and_multi_class(self):
+        """Both multi-modal images and multi-class labels."""
+        split_lists = [[
+            {
+                'image_flair': '/path/flair.nii.gz',
+                'image_dwi': '/path/dwi.nii.gz',
+                'image_adc': '/path/adc.nii.gz',
+                'label_class0': '/path/mask0.nii.gz',
+                'label_class1': '/path/mask1.nii.gz'
+            }
+        ]]
+
+        config = extract_model_config(split_lists)
+
+        assert config['in_channels'] == 3
+        assert config['out_channels'] == 2
+
+    def test_empty_split_lists(self):
+        """Empty split_lists should return default config."""
+        split_lists = []
+
+        config = extract_model_config(split_lists)
+
+        assert config['in_channels'] == 1
+        assert config['out_channels'] == 1
+
+    def test_empty_fold(self):
+        """Empty fold should return default config."""
+        split_lists = [[]]
+
+        config = extract_model_config(split_lists)
+
+        assert config['in_channels'] == 1
+        assert config['out_channels'] == 1
+
+    def test_single_modality_with_identifier(self):
+        """Single modality with identifier (e.g., image_dwi only) should return in_channels=1."""
+        split_lists = [[
+            {
+                'image_dwi': '/path/dwi.nii.gz',
+                'label': '/path/mask.nii.gz'
+            }
+        ]]
+
+        config = extract_model_config(split_lists)
+
+        assert config['in_channels'] == 1
+        assert config['out_channels'] == 1

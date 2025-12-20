@@ -704,3 +704,76 @@ def adapt_transforms_for_multimodal(transform_dict: dict, split_lists: SplitList
         adapted_dict['first_transform'].insert(insertion_index + 1, concat_transform)
 
     return adapted_dict
+
+
+def extract_model_config(split_lists: SplitLists) -> dict:
+    """Extract model configuration from split_lists structure.
+
+    Automatically detects the number of input channels (image modalities) and
+    output channels (label classes) from the split_lists data structure.
+
+    Parameters
+    ----------
+    split_lists : SplitLists
+        List of cross-validation folds containing subject dictionaries.
+
+    Returns
+    -------
+    dict
+        Configuration dictionary with keys:
+        - 'in_channels': int - Number of input image channels (modalities)
+        - 'out_channels': int - Number of output label channels (classes)
+
+    Examples
+    --------
+    Single modality, single class:
+    >>> split_lists = [[{'image': '/path/img.nii.gz', 'label': '/path/mask.nii.gz'}]]
+    >>> extract_model_config(split_lists)
+    {'in_channels': 1, 'out_channels': 1}
+
+    Multi-modal (DWI + ADC), single class:
+    >>> split_lists = [[{
+    ...     'image_dwi': '/path/dwi.nii.gz',
+    ...     'image_adc': '/path/adc.nii.gz',
+    ...     'label': '/path/mask.nii.gz'
+    ... }]]
+    >>> extract_model_config(split_lists)
+    {'in_channels': 2, 'out_channels': 1}
+
+    Single modality, multi-class:
+    >>> split_lists = [[{
+    ...     'image': '/path/img.nii.gz',
+    ...     'label_class0': '/path/mask0.nii.gz',
+    ...     'label_class1': '/path/mask1.nii.gz'
+    ... }]]
+    >>> extract_model_config(split_lists)
+    {'in_channels': 1, 'out_channels': 2}
+
+    Notes
+    -----
+    - Returns default config (1 input, 1 output) for empty split_lists
+    - Backward compatible with single-modality workflows
+    - Uses first subject from first fold for detection
+    """
+    # Default configuration for empty split_lists
+    default_config = {'in_channels': 1, 'out_channels': 1}
+
+    # Check for empty split_lists or empty first fold
+    if not split_lists or not split_lists[0]:
+        return default_config
+
+    # Extract first subject to analyze keys
+    first_subject = split_lists[0][0]
+
+    # Get image and label keys using existing utility function
+    image_keys = get_category_keys(first_subject, 'image')
+    label_keys = get_category_keys(first_subject, 'label')
+
+    # Calculate channel counts
+    in_channels = len(image_keys) if image_keys else 1
+    out_channels = len(label_keys) if label_keys else 1
+
+    return {
+        'in_channels': in_channels,
+        'out_channels': out_channels
+    }
