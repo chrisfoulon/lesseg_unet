@@ -40,6 +40,7 @@ import re
 import numpy as np
 from pathlib import Path
 from typing import TypeAlias
+from copy import deepcopy
 
 # Type definitions for multi-modal data structures
 SubjectDict: TypeAlias = dict[str, str]
@@ -596,3 +597,110 @@ def folder_mode_to_split_lists(
     split_lists = [list(fold) for fold in split_arrays]
 
     return split_lists
+
+
+def adapt_transforms_for_multimodal(transform_dict: dict, split_lists: SplitLists) -> dict:
+    """
+    Adapt transform dictionary for multi-modal data.
+
+    This function modifies transform dictionaries to work with multi-modal data by:
+    1. Detecting all image modalities from the first subject
+    2. Replacing single 'image' key with list of image_* keys in all transforms
+    3. Inserting ConcatItemsd after LoadImaged to merge modalities into single tensor
+
+    If single modality is detected, returns unchanged (backward compatible).
+
+    Parameters
+    ----------
+    transform_dict : dict
+        Transform dictionary with structure like:
+        {'first_transform': [...], 'monai_transform': [...], ...}
+    split_lists : SplitLists
+        Cross-validation fold splits containing SubjectDict entries
+
+    Returns
+    -------
+    dict
+        Modified transform dictionary with multi-modal support
+
+    Examples
+    --------
+    Single modality (unchanged):
+    >>> split_lists = [[{'image': '/path/img.nii.gz', 'label': '/path/mask.nii.gz'}]]
+    >>> adapted = adapt_transforms_for_multimodal(transform_dict, split_lists)
+    >>> # Returns transform_dict unchanged
+
+    Multi-modal (adapted):
+    >>> split_lists = [[{
+    ...     'image_dwi': '/path/dwi.nii.gz',
+    ...     'image_adc': '/path/adc.nii.gz',
+    ...     'label': '/path/mask.nii.gz'
+    ... }]]
+    >>> adapted = adapt_transforms_for_multimodal(transform_dict, split_lists)
+    >>> # Replaces 'image' with ['image_adc', 'image_dwi'] and adds ConcatItemsd
+
+    Notes
+    -----
+    - Image keys are sorted alphabetically for consistent ordering
+    - ConcatItemsd is inserted after LoadImaged in first_transform
+    - Output from ConcatItemsd is named 'image' (standard key)
+    - Label keys are not modified
+    - Control keys are not included in concatenation
+    """
+    # Step 1: Get first subject to detect keys
+    if not split_lists or not split_lists[0]:
+        # Empty split_lists, return unchanged
+        return transform_dict
+
+    first_subject = split_lists[0][0]
+    image_keys = get_category_keys(first_subject, 'image')
+
+    # Step 2: Check if adaptation is needed
+    if len(image_keys) == 1 and image_keys[0] == 'image':
+        # Single modality with standard key - no adaptation needed
+        return transform_dict
+
+    # Step 3: Sort image keys for consistent ordering
+    image_keys_sorted = sorted(image_keys)
+
+    # Step 4: Deep copy to avoid modifying original
+    adapted_dict = deepcopy(transform_dict)
+
+    # Step 5: Find insertion point and replace 'image' only in early transforms
+    # Only LoadImaged and EnsureChannelFirstd need image_* keys (they load raw files)
+    # After ConcatItemsd, all other transforms use 'image' (the concatenated result)
+    insertion_index = None
+    if 'first_transform' in adapted_dict:
+        first_transform = adapted_dict['first_transform']
+
+        # Find insertion point (after EnsureChannelFirstd, or after LoadImaged if not found)
+        transforms_to_update = ['LoadImaged', 'EnsureChannelFirstd']
+
+        for i, transform_dict_item in enumerate(first_transform):
+            transform_name = list(transform_dict_item.keys())[0]
+            if transform_name in transforms_to_update:
+                insertion_index = i
+                # Replace 'image' with image_* keys in this transform
+                params = transform_dict_item[transform_name]
+                if 'keys' in params and 'image' in params['keys']:
+                    new_keys = []
+                    for key in params['keys']:
+                        if key == 'image':
+                            new_keys.extend(image_keys_sorted)
+                        else:
+                            new_keys.append(key)
+                    params['keys'] = new_keys
+
+    # Step 6: Insert ConcatItemsd after the last early transform
+    if 'first_transform' in adapted_dict and len(image_keys) > 1 and insertion_index is not None:
+        concat_transform = {
+            'ConcatItemsd': {
+                'keys': image_keys_sorted,
+                'name': 'image',  # Output key
+                'dim': 0  # Concatenate along channel dimension
+            }
+        }
+        # Insert after the last transform that was updated
+        adapted_dict['first_transform'].insert(insertion_index + 1, concat_transform)
+
+    return adapted_dict

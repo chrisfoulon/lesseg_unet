@@ -31,7 +31,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 from torch.nn import BCEWithLogitsLoss
-from lesseg_unet import net, utils, data_loading, transformations, loss_and_metric
+from lesseg_unet import net, utils, data_loading, transformations, loss_and_metric, data_utils
 
 
 # Global variable to store cleanup context
@@ -456,6 +456,9 @@ def training(img_path_list: Sequence,
         model_img_size = transformations.find_param_from_hyper_dict(
             transform_dict, 'spatial_size', find_last=True)
         transformations.setup_coord_conv(transform_dict, model_img_size)
+
+    # Adapt transform dict for multi-modal data if needed
+    transform_dict = data_utils.adapt_transforms_for_multimodal(transform_dict, split_lists)
 
     # If we use controls, we need to add 'control' to the transform_dict every time the 'image' key is used
     if ctr_split_lists is not None:
