@@ -8,6 +8,7 @@ import re
 
 from monai.config import print_config
 from lesseg_unet import utils, training, segmentation
+from lesseg_unet.data_utils import folder_mode_to_split_lists
 from bcblib.tools.nifti_utils import file_to_list, overlaps_subfolders, nifti_overlap_images
 import lesseg_unet.data.transform_dicts as tr_dicts
 import nibabel as nib
@@ -33,6 +34,16 @@ def main():
                                         '[Cannot be used for Validation]')
     nifti_paths_group.add_argument('-psl', '--pretrained_split_list', type=str,
                                    help='File containing split paths lists of the k-fold')
+    nifti_paths_group.add_argument('--image-folders', type=str,
+                                   help='Space-separated modality:path pairs for folder-based multi-modal input '
+                                        '(e.g., "dwi:data/dwi adc:data/adc"). Requires --label-folder.')
+
+    # Additional arguments for folder-based multi-modal mode
+    parser.add_argument('--label-folder', type=str,
+                        help='Path to folder containing label files (required with --image-folders)')
+    parser.add_argument('--subject-pattern', type=str, default=r'(sub-\d+)',
+                        help='Regex pattern for extracting subject IDs from filenames '
+                             '(default: r\'(sub-\\d+)\')')
 
     lesion_paths_group = parser.add_mutually_exclusive_group(required=False)
     lesion_paths_group.add_argument('-lp', '--lesion_input_path', type=str,
@@ -294,6 +305,43 @@ def main_worker(local_rank, args, kwargs):
         with open(args.seg_input_dict, 'r') as f:
             seg_input_dict = json.load(f)
         img_list = [img_path for sublist in seg_input_dict for img_path in sublist]
+    elif args.image_folders is not None:
+        # Folder-based multi-modal mode
+        if args.label_folder is None:
+            raise ValueError("--label-folder is required when using --image-folders")
+
+        utils.logging_rank_0('Using folder-based multi-modal mode', dist.get_rank())
+
+        # Parse image_folders format: "dwi:data/dwi adc:data/adc"
+        image_folders_dict = {}
+        for pair in args.image_folders.split():
+            if ':' not in pair:
+                raise ValueError(
+                    f"Invalid format for --image-folders: '{pair}'. "
+                    f"Expected format: 'modality:path' (e.g., 'dwi:data/dwi')"
+                )
+            modality, folder_path = pair.split(':', 1)
+            image_folders_dict[modality] = Path(folder_path)
+
+        utils.logging_rank_0(f'Image modalities: {list(image_folders_dict.keys())}', dist.get_rank())
+        utils.logging_rank_0(f'Label folder: {args.label_folder}', dist.get_rank())
+        utils.logging_rank_0(f'Subject pattern: {args.subject_pattern}', dist.get_rank())
+
+        # Call folder converter to get SplitLists
+        img_list = folder_mode_to_split_lists(
+            image_folders=image_folders_dict,
+            label_folder=Path(args.label_folder),
+            n_folds=args.folds_number,
+            subject_pattern=args.subject_pattern,
+            random_seed=42
+        )
+
+        # Set les_list to None to signal that img_list is already in SplitLists format
+        les_list = None
+        utils.logging_rank_0(
+            f'Folder mode: matched {sum(len(fold) for fold in img_list)} subjects across {args.folds_number} folds',
+            dist.get_rank()
+        )
     else:
         img_list = utils.open_json(args.pretrained_split_list)
     # TODO not very pretty in the case of pretrained_split_list ...
@@ -301,18 +349,21 @@ def main_worker(local_rank, args, kwargs):
         raise ValueError("The output directory CANNOT be one of the input directories")
     if args.debug_img_num is not None:
         img_list = img_list[:args.debug_img_num]
-    utils.print_rank_0('loading input lesion label path list', dist.get_rank())
-    if args.lesion_input_path is not None:
-        logging.info(f'Input lesion directory : {args.lesion_input_path}')
-        les_list = utils.create_input_path_list_from_root(args.lesion_input_path)
-        if args.lesion_input_path == args.output:
-            raise ValueError("The output directory CANNOT be the input directory")
-    # So args.lesion_input_list is not None
-    elif args.lesion_input_list is not None:
-        utils.print_rank_0(f'Input lesion list : {args.lesion_input_list}', dist.get_rank())
-        les_list = file_to_list(args.lesion_input_list)
-    else:
-        les_list = None
+
+    # Skip lesion loading if using folder mode (already matched in SplitLists)
+    if args.image_folders is None:
+        utils.print_rank_0('loading input lesion label path list', dist.get_rank())
+        if args.lesion_input_path is not None:
+            logging.info(f'Input lesion directory : {args.lesion_input_path}')
+            les_list = utils.create_input_path_list_from_root(args.lesion_input_path)
+            if args.lesion_input_path == args.output:
+                raise ValueError("The output directory CANNOT be the input directory")
+        # So args.lesion_input_list is not None
+        elif args.lesion_input_list is not None:
+            utils.print_rank_0(f'Input lesion list : {args.lesion_input_list}', dist.get_rank())
+            les_list = file_to_list(args.lesion_input_list)
+        else:
+            les_list = None
     # if args.debug_img_num is not None and les_list is not None:
     #     img_list = les_list[:args.debug_img_num]
     if args.controls_path is not None:
