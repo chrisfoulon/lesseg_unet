@@ -36,6 +36,9 @@ Multi-modal imaging:
     ['image_dwi', 'image_adc']
 """
 
+import re
+import numpy as np
+from pathlib import Path
 from typing import TypeAlias
 
 # Type definitions for multi-modal data structures
@@ -286,3 +289,325 @@ def validate_against_schema(subject: SubjectDict, schema: dict, subject_id: str)
                 f"Expected keys: {all_required_keys}\n"
                 f"Found keys: {list(subject.keys())}"
             )
+
+
+# ============================================================================
+# Folder-per-Modality Converter
+# ============================================================================
+
+
+def _extract_subject_id(filename: str, pattern: str) -> str | None:
+    r"""Extract subject ID from filename using regex pattern.
+
+    Parameters
+    ----------
+    filename : str
+        Filename to extract subject ID from (e.g., 'sub-001_dwi.nii.gz')
+    pattern : str
+        Regex pattern with one capture group for subject ID
+        (e.g., r'(sub-\d+)')
+
+    Returns
+    -------
+    str or None
+        Subject ID if pattern matches, None otherwise
+
+    Examples
+    --------
+    >>> _extract_subject_id('sub-001_dwi.nii.gz', r'(sub-\d+)')
+    'sub-001'
+    >>> _extract_subject_id('patient_042_t1.nii.gz', r'(patient_\d+)')
+    'patient_042'
+    >>> _extract_subject_id('no_match.nii.gz', r'(sub-\d+)')
+    None
+    """
+    match = re.search(pattern, filename)
+    if match:
+        return match.group(1)
+    return None
+
+
+def _list_nifti_files(folder: Path) -> list[Path]:
+    """List all NIfTI files in a folder.
+
+    Parameters
+    ----------
+    folder : Path
+        Folder to search for NIfTI files
+
+    Returns
+    -------
+    list[Path]
+        List of Path objects for .nii.gz and .nii files
+
+    Examples
+    --------
+    >>> folder = Path('data/dwi')
+    >>> files = _list_nifti_files(folder)
+    >>> [f.name for f in files]
+    ['sub-001_dwi.nii.gz', 'sub-002_dwi.nii.gz']
+    """
+    nifti_files = []
+    # Search for both .nii.gz and .nii files
+    nifti_files.extend(folder.glob('*.nii.gz'))
+    nifti_files.extend(folder.glob('*.nii'))
+    return sorted(nifti_files)
+
+
+def _build_subject_to_file_mapping(
+    folder: Path,
+    pattern: str
+) -> dict[str, str]:
+    r"""Build mapping from subject IDs to file paths.
+
+    Parameters
+    ----------
+    folder : Path
+        Folder containing NIfTI files
+    pattern : str
+        Regex pattern to extract subject ID from filenames
+
+    Returns
+    -------
+    dict[str, str]
+        Dictionary mapping subject IDs to absolute file paths
+
+    Raises
+    ------
+    ValueError
+        If multiple files match the same subject ID
+
+    Examples
+    --------
+    >>> folder = Path('data/dwi')
+    >>> mapping = _build_subject_to_file_mapping(folder, r'(sub-\d+)')
+    >>> mapping
+    {'sub-001': '/abs/path/data/dwi/sub-001_dwi.nii.gz',
+     'sub-002': '/abs/path/data/dwi/sub-002_dwi.nii.gz'}
+    """
+    files = _list_nifti_files(folder)
+    mapping = {}
+
+    for file_path in files:
+        subject_id = _extract_subject_id(file_path.name, pattern)
+        if subject_id:
+            if subject_id in mapping:
+                raise ValueError(
+                    f"Duplicate subject ID '{subject_id}' found in {folder}\n"
+                    f"Files: {mapping[subject_id]} and {file_path}"
+                )
+            mapping[subject_id] = str(file_path.absolute())
+
+    return mapping
+
+
+def folder_mode_to_split_lists(
+    image_folders: dict[str, Path | str],
+    label_folder: Path | str,
+    n_folds: int = 5,
+    subject_pattern: str = r'(sub-\d+)',
+    random_seed: int = 42
+) -> SplitLists:
+    r"""Convert folder-per-modality structure to SplitLists format.
+
+    This function implements the "folder-per-modality" input mode where each
+    imaging modality is stored in a separate folder. It matches files by
+    subject ID across modalities and labels, then splits subjects into folds
+    for cross-validation.
+
+    Parameters
+    ----------
+    image_folders : dict[str, Path | str]
+        Dictionary mapping modality names to folder paths.
+        Keys become identifiers in 'image_{modality}' format.
+
+        Example:
+            {'dwi': 'data/dwi', 'adc': 'data/adc'}
+            → creates 'image_dwi' and 'image_adc' keys
+
+    label_folder : Path | str
+        Path to folder containing label files
+
+    n_folds : int, default=5
+        Number of folds for cross-validation split
+
+    subject_pattern : str, default=r'(sub-\d+)'
+        Regex pattern to extract subject ID from filenames.
+        Must contain exactly one capture group.
+
+        Examples:
+            r'(sub-\d+)' → matches 'sub-001', 'sub-042'
+            r'(patient_\d+)' → matches 'patient_001', 'patient_123'
+
+    random_seed : int, default=42
+        Random seed for reproducible fold splitting
+
+    Returns
+    -------
+    SplitLists
+        List of folds, each containing SubjectDict entries with
+        'image_{modality}' and 'label' keys
+
+    Raises
+    ------
+    ValueError
+        - If folder is empty (no NIfTI files found)
+        - If subject is missing modality files
+        - If subject is missing label file
+        - If no valid subjects found (no complete data)
+        - If multiple files match same subject ID in same folder
+
+    Examples
+    --------
+    Basic usage with two modalities:
+
+    >>> image_folders = {
+    ...     'dwi': Path('data/dwi'),
+    ...     'adc': Path('data/adc')
+    ... }
+    >>> label_folder = Path('data/lesion_masks')
+    >>> split_lists = folder_mode_to_split_lists(
+    ...     image_folders=image_folders,
+    ...     label_folder=label_folder,
+    ...     n_folds=5
+    ... )
+    >>> split_lists[0][0]  # First subject in first fold
+    {'image_dwi': '/path/data/dwi/sub-001_dwi.nii.gz',
+     'image_adc': '/path/data/adc/sub-001_adc.nii.gz',
+     'label': '/path/data/lesion_masks/sub-001_lesion.nii.gz'}
+
+    Custom subject pattern:
+
+    >>> split_lists = folder_mode_to_split_lists(
+    ...     image_folders={'t1': 'data/t1'},
+    ...     label_folder='data/masks',
+    ...     subject_pattern=r'(patient_\d+)',  # Match 'patient_001'
+    ...     n_folds=3
+    ... )
+
+    Notes
+    -----
+    - All file paths in returned SubjectDict are absolute paths as strings
+    - Subjects are randomly shuffled before splitting (controlled by random_seed)
+    - If n_subjects % n_folds != 0, later folds may have one fewer subject
+    - Only subjects with ALL modalities AND label are included
+    """
+    # Convert paths to Path objects
+    image_folders = {
+        modality: Path(folder) for modality, folder in image_folders.items()
+    }
+    label_folder = Path(label_folder)
+
+    # Step 1: Build subject-to-file mappings for each modality
+    modality_files = {}
+    for modality, folder in image_folders.items():
+        mapping = _build_subject_to_file_mapping(folder, subject_pattern)
+        if not mapping:
+            raise ValueError(
+                f"No NIfTI files found in {folder} matching pattern '{subject_pattern}'"
+            )
+        modality_files[modality] = mapping
+
+    # Step 2: Build subject-to-file mapping for labels
+    label_files = _build_subject_to_file_mapping(label_folder, subject_pattern)
+    if not label_files:
+        raise ValueError(
+            f"No NIfTI files found in {label_folder} matching pattern '{subject_pattern}'"
+        )
+
+    # Step 3: Find subjects with complete data (all modalities + label)
+    all_modalities = set(image_folders.keys())
+    complete_subjects = []
+    incomplete_subjects = []
+
+    for subject_id in label_files.keys():
+        # Check if subject has all modalities
+        missing_modalities = []
+        for modality in all_modalities:
+            if subject_id not in modality_files[modality]:
+                missing_modalities.append(modality)
+
+        if missing_modalities:
+            incomplete_subjects.append((subject_id, missing_modalities))
+        else:
+            complete_subjects.append(subject_id)
+
+    # Also check for subjects with images but no label
+    subjects_with_images = set()
+    for modality_mapping in modality_files.values():
+        subjects_with_images.update(modality_mapping.keys())
+
+    subjects_missing_labels = subjects_with_images - set(label_files.keys())
+
+    # Check if no valid subjects found FIRST
+    if not complete_subjects:
+        raise ValueError(
+            f"No valid subjects found with all modalities and labels.\n"
+            f"Modalities required: {list(all_modalities)}\n"
+            f"Subjects with labels: {len(label_files)}\n"
+            f"Subjects with images: {len(subjects_with_images)}\n"
+            f"Subjects with incomplete data: {len(incomplete_subjects) + len(subjects_missing_labels)}\n"
+            f"Check that filenames match pattern '{subject_pattern}'"
+        )
+
+    # Warn about incomplete subjects (if any)
+    if incomplete_subjects or subjects_missing_labels:
+        error_parts = ["Some subjects have incomplete data:"]
+
+        if incomplete_subjects:
+            error_parts.append("\nSubjects missing modalities:")
+            for subj_id, missing_mods in incomplete_subjects[:10]:  # Show first 10
+                error_parts.append(f"  - {subj_id}: missing {missing_mods}")
+            if len(incomplete_subjects) > 10:
+                error_parts.append(f"  ... and {len(incomplete_subjects) - 10} more")
+
+        if subjects_missing_labels:
+            error_parts.append("\nSubjects missing labels:")
+            missing_list = sorted(list(subjects_missing_labels))[:10]
+            for subj_id in missing_list:
+                error_parts.append(f"  - {subj_id}")
+            if len(subjects_missing_labels) > 10:
+                error_parts.append(f"  ... and {len(subjects_missing_labels) - 10} more")
+
+        raise ValueError('\n'.join(error_parts))
+
+    # Step 4: Build SubjectDict entries for complete subjects
+    subject_list = []
+    for subject_id in complete_subjects:
+        subject_dict = {}
+
+        # Add all image modalities
+        for modality in sorted(all_modalities):  # Sort for consistent ordering
+            key = f'image_{modality}'
+            subject_dict[key] = modality_files[modality][subject_id]
+
+        # Add label
+        subject_dict['label'] = label_files[subject_id]
+
+        subject_list.append(subject_dict)
+
+    # Step 5: Shuffle and split into folds
+    np.random.seed(random_seed)
+    shuffled_indices = np.random.permutation(len(subject_list))
+
+    split_lists = []
+    n_subjects = len(subject_list)
+    base_fold_size = n_subjects // n_folds
+    remainder = n_subjects % n_folds
+
+    # Distribute subjects evenly across folds
+    # First 'remainder' folds get one extra subject
+    start_idx = 0
+    for i in range(n_folds):
+        # Folds 0 to remainder-1 get base_fold_size + 1 subjects
+        # Remaining folds get base_fold_size subjects
+        fold_size = base_fold_size + (1 if i < remainder else 0)
+        end_idx = start_idx + fold_size
+
+        fold_indices = shuffled_indices[start_idx:end_idx]
+        fold = [subject_list[idx] for idx in fold_indices]
+        split_lists.append(fold)
+
+        start_idx = end_idx
+
+    return split_lists
