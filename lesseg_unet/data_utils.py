@@ -589,25 +589,10 @@ def folder_mode_to_split_lists(
     # Step 5: Shuffle and split into folds
     np.random.seed(random_seed)
     shuffled_indices = np.random.permutation(len(subject_list))
+    shuffled_subjects = [subject_list[idx] for idx in shuffled_indices]
 
-    split_lists = []
-    n_subjects = len(subject_list)
-    base_fold_size = n_subjects // n_folds
-    remainder = n_subjects % n_folds
-
-    # Distribute subjects evenly across folds
-    # First 'remainder' folds get one extra subject
-    start_idx = 0
-    for i in range(n_folds):
-        # Folds 0 to remainder-1 get base_fold_size + 1 subjects
-        # Remaining folds get base_fold_size subjects
-        fold_size = base_fold_size + (1 if i < remainder else 0)
-        end_idx = start_idx + fold_size
-
-        fold_indices = shuffled_indices[start_idx:end_idx]
-        fold = [subject_list[idx] for idx in fold_indices]
-        split_lists.append(fold)
-
-        start_idx = end_idx
+    # Use numpy's array_split for even distribution (same as existing codebase)
+    split_arrays = np.array_split(np.array(shuffled_subjects, dtype=object), n_folds)
+    split_lists = [list(fold) for fold in split_arrays]
 
     return split_lists
