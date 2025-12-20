@@ -8,19 +8,36 @@ def read(fname):
 
 setup(
     name='lesseg_unet',        # This is the name of your PyPI-package.
-    version='1.0.1',     # Update the version number for new releases
-    python_requires='>3.8',
+    version='2.0.0',     # Updated for PyTorch 2.7 migration
+    python_requires='>=3.11',  # Required by scipy 1.16.3
     zip_safe=True,
     include_package_data=True,
     packages=find_packages(exclude=['__pycache__']),
-    # einops is only for the UNETR
-    install_requires=['nibabel>=3.2.2', 'numpy>=1.18.5', 'nilearn>=0.9.0', 'monai==1.0', 'bcblib>=0.3.4.3',
-                      'torch==1.10.2', 'torchio==0.18.73', 'torchvision==0.11.3', 'matplotlib>=3.5.1', 'pandas>=1.3.5',
-                      'tensorboard>=2.6.0', 'scipy', 'tqdm', 'einops', 'python-dateutil', 'seaborn', 'dask'],
-    # install_requires=['nibabel==3.2.2', 'numpy==1.21.0', 'nilearn==0.9.0', 'monai==1.0', 'bcblib==0.3.4.3',
-    #                   'torch==1.11.0', 'torchio==0.18.73', 'torchvision==0.12', 'matplotlib==3.5.1',
-    #                   'pandas==1.3.5', 'tensorboard>=2.6.0', 'scipy', 'tqdm', 'einops', 'python-dateutil', 'seaborn',
-    #                   'dask'],
+    # Updated requirements for PyTorch 2.7 compatibility
+    install_requires=[
+        # PyTorch ecosystem
+        'torch==2.7.0',
+        'torchvision==0.22.0',
+        'monai==1.5.1',
+        'torchio==0.21.0',
+        # Neuroimaging libraries
+        'nibabel==5.3.3',
+        'nilearn==0.12.1',
+        # Scientific computing
+        'scipy==1.16.3',
+        'pandas==2.3.3',
+        # Visualization
+        'matplotlib==3.10.8',
+        'seaborn==0.13.2',
+        'tensorboard==2.20.0',
+        # Utilities
+        'tqdm==4.67.1',
+        'einops==0.8.1',  # Required for UNETR/SwinUNETR
+        'python-dateutil==2.9.0.post0',
+        'dask==2025.12.0',
+        # Custom package
+        'bcblib>=0.3.4.3',
+    ],
     package_data={
         # If any package contains *.txt or *.rst files, include them:
         "": ["*.txt", "*.rst", "*.md"],

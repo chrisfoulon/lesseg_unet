@@ -98,15 +98,79 @@ else:
 
 ## Previous Fixes (PyTorch 2.7 Migration)
 
+### CPU and Distributed Training Support
+- Added full CPU training support (single-process and multi-process DDP)
+- Implemented automatic AMP disabling on CPU (AMP only works with CUDA)
+- Fixed device placement for both CPU and GPU modes
+- Added proper DDP wrapping for CPU multi-process training (gloo backend)
+- Guarded `torch.cuda.set_device()` to prevent crashes on CPU
+
+**Files Modified**: `lesseg_unet/training.py`, `lesseg_unet/segmentation.py`
+
+**Compatibility Matrix**:
+| Mode | DDP Wrapper | AMP | Status |
+|------|-------------|-----|--------|
+| CPU Single | No | No | ✅ Works |
+| CPU Multi | Yes | No | ✅ Works |
+| GPU Single | Yes | Yes | ✅ Works |
+| GPU Multi | Yes | Yes | ✅ Works |
+
 ### Deprecation Fixes
 - Replaced deprecated `torch.cuda.amp.autocast()` with `torch.autocast(device_type='cuda')`
 - Fixed checkpoint saving to handle DDP-wrapped models: `model.module.state_dict()` vs `model.state_dict()`
 
-### Files Modified
-- `lesseg_unet/training.py`
-- `lesseg_unet/utils.py`
+**Files Modified**: `lesseg_unet/training.py`, `lesseg_unet/segmentation.py`, `lesseg_unet/utils.py`
 
-**See**: `DEPRECATION_AND_CHECKPOINT_FIXES.md` for details
+---
+
+## Testing
+
+### Example Training Command
+```bash
+# Quick test with sample data (5 epochs)
+lesseg_unet \
+  -o /tmp/lesseg_test/training \
+  -p /path/to/data/dwi \
+  -lp /path/to/data/stroke \
+  -ics _dwi \
+  -nw 4 \
+  -trs p64 \
+  -lfct dicefocal \
+  -vlfct dice_dist \
+  -bs 1 \
+  -vbs 1 \
+  -nf 5 \
+  -ne 5 \
+  -sbe 2 \
+  -mt swinunetr \
+  --local_rank 0
+```
+
+### Example Inference Command
+```bash
+# Run segmentation with trained model
+lesseg_unet \
+  -o /tmp/lesseg_test/segmentation \
+  -li <image_list.csv> \
+  -trs p64 \
+  -nw 4 \
+  -mt swinunetr \
+  -overlap \
+  -sa \
+  -pt <path/to/model.pth> \
+  --local_rank 0
+```
+
+### CPU Training
+```bash
+# Single-process CPU training
+lesseg_unet -d cpu -ne 5 -bs 1 -nw 4 -o /tmp/test_cpu ...
+
+# Multi-process CPU DDP (4 workers)
+torchrun --nproc_per_node=4 \
+  $(which lesseg_unet) \
+  -d cpu --world_size 4 -ne 5 -bs 1 ...
+```
 
 ---
 
@@ -115,3 +179,4 @@ else:
 - All fixes maintain backward compatibility
 - No breaking changes to existing training workflows
 - Tested with PyTorch 2.7 + MONAI 1.5.1
+- Python >= 3.11 required (due to scipy 1.16.3)

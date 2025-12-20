@@ -1,0 +1,31 @@
+# lesseg_unet requirements updated for PyTorch 2.7
+# Generated on 2025-12-15
+# Python >= 3.11 required
+
+# PyTorch ecosystem
+torch==2.7.0
+torchvision==0.22.0
+monai==1.5.1
+torchio==0.21.0
+
+# Neuroimaging libraries
+nibabel==5.3.3
+nilearn==0.12.1
+
+# Scientific computing
+scipy==1.16.3
+pandas==2.3.3
+
+# Visualization
+matplotlib==3.10.8
+seaborn==0.13.2
+tensorboard==2.20.0
+
+# Utilities
+tqdm==4.67.1
+einops==0.8.1
+python-dateutil==2.9.0.post0
+dask==2025.12.0
+
+# Custom package (user-maintained)
+bcblib>=0.3.4.3
