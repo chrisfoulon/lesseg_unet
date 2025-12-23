@@ -485,8 +485,9 @@ class AutoConfigurator:
         # num_workers × prefetch_factor × images_per_batch × GB_per_image
         dataloader_ram_gb = num_workers * prefetch_factor * images_per_batch * gb_per_image
 
-        # Available RAM (be conservative - use 40% for DataLoader)
-        max_dataloader_ram_gb = self.hardware.cpu.available_ram_gb * 0.4
+        # Available RAM (be conservative - use 25% for DataLoader to account for
+        # Python interpreter overhead in each worker, loaded libraries, etc.)
+        max_dataloader_ram_gb = self.hardware.cpu.available_ram_gb * 0.25
 
         if dataloader_ram_gb <= max_dataloader_ram_gb:
             # No constraint needed

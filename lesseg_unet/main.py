@@ -929,6 +929,27 @@ def main_worker(local_rank, args, kwargs):
         args.feature_size = auto_config_result.feature_size
         args.disable_mixed_precision = not auto_config_result.use_amp
 
+        # Constrain batch_size by actual fold size (drop_last=True requires batch_size <= dataset size)
+        # Get smallest fold size (conservative - use validation fold as training might be larger)
+        if isinstance(img_list, list) and img_list:
+            # Multi-modal folder mode returns list of lists (folds)
+            min_fold_size = min(len(fold) for fold in img_list)
+            # Each sample produces num_samples patches (from RandCropByPosNegLabeld)
+            num_samples = 4  # Must match transform_dict default
+            max_patches_per_epoch = min_fold_size * num_samples
+
+            if args.batch_size > max_patches_per_epoch:
+                old_batch = args.batch_size
+                args.batch_size = max(1, max_patches_per_epoch)
+                utils.logging_rank_0(
+                    f'\nWARNING: Batch size reduced {old_batch}→{args.batch_size} due to small fold size '
+                    f'(fold has {min_fold_size} samples × {num_samples} patches/sample = {max_patches_per_epoch} patches total). '
+                    f'Consider using fewer folds (-nf) or reducing batch size override.',
+                    dist.get_rank()
+                )
+                # Also reduce validation batch proportionally
+                args.val_batch_size = max(1, int(args.val_batch_size * args.batch_size / old_batch))
+
         # Update default transform_dict with auto-configured patch_size
         if transform_dict is not None and 'patches' in transform_dict:
             # Update the spatial_size in the patches transform
