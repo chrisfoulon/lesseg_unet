@@ -346,20 +346,30 @@ class AutoConfigurator:
 
         # Step 8: Suggest validation batch size
         # Validation can use larger batch (no gradients), but be conservative
-        vram_gb = self._get_vram_per_gpu()
-        if vram_gb > 20:  # Large VRAM (e.g., A100, RTX 3090)
-            val_batch_multiplier = 4
-        elif vram_gb > 10:  # Medium VRAM (e.g., RTX 3080)
-            val_batch_multiplier = 3
-        elif vram_gb > 4:  # Small VRAM (e.g., RTX 3060)
-            val_batch_multiplier = 2
-        else:  # Very small VRAM or CPU mode
-            val_batch_multiplier = 1.5
+        # CPU mode needs extra conservative multiplier due to RAM constraints
+        if self.num_gpus == 0:
+            # CPU mode: very conservative multiplier
+            val_batch_multiplier = 1.2
+            reason_suffix = "(CPU mode - very conservative)"
+        else:
+            vram_gb = self._get_vram_per_gpu()
+            if vram_gb > 20:  # Large VRAM (e.g., A100, RTX 3090)
+                val_batch_multiplier = 4
+                reason_suffix = "(large VRAM)"
+            elif vram_gb > 10:  # Medium VRAM (e.g., RTX 3080)
+                val_batch_multiplier = 3
+                reason_suffix = "(medium VRAM)"
+            elif vram_gb > 4:  # Small VRAM (e.g., RTX 3060)
+                val_batch_multiplier = 2
+                reason_suffix = "(small VRAM)"
+            else:  # Very small VRAM
+                val_batch_multiplier = 1.5
+                reason_suffix = "(very small VRAM)"
 
         val_batch_size = max(1, int(batch_size * val_batch_multiplier))
         self.reasoning['val_batch_size'] = (
             f"Validation batch {val_batch_size} = {val_batch_multiplier}× training batch "
-            f"(no gradients needed)"
+            f"{reason_suffix}"
         )
 
         # Log configuration summary
@@ -388,16 +398,17 @@ class AutoConfigurator:
         )
 
     def _get_vram_per_gpu(self) -> float:
-        """Get VRAM per GPU in GB.
+        """Get VRAM per GPU in GB (or RAM for CPU mode).
 
         Returns
         -------
         float
-            VRAM per GPU in GB. If no GPU, returns large value for CPU mode.
+            VRAM per GPU in GB. If no GPU (CPU mode), returns 50% of available RAM.
         """
         if not self.hardware.gpus or self.num_gpus == 0:
-            # CPU mode: return large value (use RAM-based limits elsewhere)
-            return 999.0
+            # CPU mode: use available RAM instead of placeholder
+            # Be conservative - use 50% of available RAM to leave room for OS and other processes
+            return self.hardware.cpu.available_ram_gb * 0.5
 
         # Use smallest GPU VRAM (conservative)
         gpus_to_use = self.hardware.gpus[:self.num_gpus]

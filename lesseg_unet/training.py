@@ -797,9 +797,12 @@ def training(img_path_list: Sequence,
                         utils.tensorboard_write_rank_0(writer, 'ema_abnormals',
                                                        ema_magnitude_abnormals,
                                                        writer_step, dist.get_rank())
+
+                    # Initialize controls_loss (always, regardless of debug mode)
+                    controls_loss = None
+
                     if not debug:
                         del inputs, labels
-                    controls_loss = None
                     if ctr_inputs is not None:
                         ctr_logit_outputs = model(ctr_inputs)
                         # ctr_logit_outputs = torch.tensor(ctr_logit_outputs, dtype=torch.float)

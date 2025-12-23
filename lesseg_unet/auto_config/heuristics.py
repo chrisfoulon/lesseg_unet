@@ -349,35 +349,37 @@ def suggest_feature_size(
     >>> print(f"Suggested feature size: {feature_size}")
     """
     if model_type == 'swinunetr':
-        # SwinUNETR feature sizes
+        # SwinUNETR feature sizes (must be divisible by 12)
+        # Valid values: 12, 24, 36, 48, 60, 72, 84, 96, etc.
         if target == 'memory':
             if vram_gb >= 16.0:
                 feature_size = 48
             elif vram_gb >= 8.0:
-                feature_size = 32
+                feature_size = 36  # Changed from 32 to be divisible by 12
             else:
                 feature_size = 24
         elif target == 'speed':
             # Larger model for quality
             if vram_gb >= 24.0:
-                feature_size = 64
+                feature_size = 60  # Changed from 64 to be divisible by 12
             elif vram_gb >= 16.0:
                 feature_size = 48
             elif vram_gb >= 8.0:
-                feature_size = 32
+                feature_size = 36  # Changed from 32 to be divisible by 12
             else:
                 feature_size = 24
         else:  # balanced
             if vram_gb >= 16.0:
                 feature_size = 48
             elif vram_gb >= 8.0:
-                feature_size = 32
+                feature_size = 36  # Changed from 32 to be divisible by 12
             else:
                 feature_size = 24
 
         # Reduce for depth 4 (already lighter)
-        if network_depth == 4 and feature_size > 32:
-            feature_size = max(32, feature_size - 16)
+        # Ensure result is still divisible by 12
+        if network_depth == 4 and feature_size > 36:
+            feature_size = max(36, ((feature_size - 12) // 12) * 12)
 
     else:  # unet
         # UNet feature sizes (initial channels)

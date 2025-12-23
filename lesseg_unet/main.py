@@ -765,6 +765,13 @@ def main_worker(local_rank, args, kwargs):
 
         # Detect hardware
         hw_profile = get_hardware_profile()
+
+        # Override to CPU mode if user specified -d cpu
+        if args.torch_device == 'cpu':
+            utils.logging_rank_0('User forced CPU mode (-d cpu), ignoring GPU hardware', dist.get_rank())
+            hw_profile.gpus = []  # Clear GPU list for CPU-only configuration
+            hw_profile.device_type = 'cpu'
+
         utils.logging_rank_0(f'Device: {hw_profile.device_type}', dist.get_rank())
         utils.logging_rank_0(f'GPUs detected: {len(hw_profile.gpus)}', dist.get_rank())
         for gpu in hw_profile.gpus:
