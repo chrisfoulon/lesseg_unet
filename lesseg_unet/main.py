@@ -2,6 +2,7 @@ import logging
 import sys
 import argparse
 from pathlib import Path
+from datetime import datetime
 import os
 import json
 import re
@@ -869,6 +870,47 @@ def main_worker(local_rank, args, kwargs):
         training_config.save(output_root / 'auto_config.yaml', overwrite=True)
         utils.logging_rank_0(f'\nConfiguration saved to: {output_root / "auto_config.yaml"}', dist.get_rank())
         utils.logging_rank_0('=' * 70, dist.get_rank())
+    elif args.checkpoint is None:
+        # ===== SAVE MANUAL CONFIGURATION =====
+        # Even without auto_config, save the training configuration for reproducibility
+        utils.logging_rank_0('Saving manual training configuration...', dist.get_rank())
+
+        # Get hardware profile for reference
+        hw_profile = get_hardware_profile()
+
+        # Try to extract patch_size from transform_dict name (e.g., 'p64' -> (64, 64, 64))
+        patch_size = None
+        if args.transform_dict is not None:
+            import re
+            # Check if transform_dict is a simple name like 'p64'
+            match = re.search(r'p(\d+)', str(args.transform_dict))
+            if match:
+                size = int(match.group(1))
+                patch_size = (size, size, size)
+
+        # Create manual training config
+        manual_config = TrainingConfig(
+            batch_size=args.batch_size,
+            patch_size=patch_size if patch_size else (64, 64, 64),  # Default if unknown
+            num_workers=args.num_workers,
+            network_depth=args.network_depth if hasattr(args, 'network_depth') and args.network_depth else None,
+            feature_size=args.feature_size if args.feature_size else 48,  # Default
+            use_amp=not args.disable_mixed_precision,
+            num_gpus=args.num_gpus if hasattr(args, 'num_gpus') and args.num_gpus else 1,
+            vram_safety_margin=args.vram_safety_margin if hasattr(args, 'vram_safety_margin') else 0.95,
+            learning_rate=args.learning_rate,
+            num_epochs=args.num_epochs,
+            model_type=args.model_type,
+            hardware_profile=hw_profile.to_dict(),
+            command=' '.join(sys.argv),
+            timestamp=datetime.now().isoformat(),
+            reasoning={'source': 'Manual configuration (not auto-configured)'},
+            memory_estimate={},
+            user_overrides={}
+        )
+
+        manual_config.save(output_root / 'training_config.yaml', overwrite=True)
+        utils.logging_rank_0(f'Manual configuration saved to: {output_root / "training_config.yaml"}', dist.get_rank())
 
     # ===== END AUTO-CONFIGURATION LOGIC =====
 
