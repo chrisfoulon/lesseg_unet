@@ -13,6 +13,7 @@ def minimal_config():
     """Minimal TrainingConfig for testing."""
     return TrainingConfig(
         batch_size=4,
+        val_batch_size=8,
         patch_size=(96, 96, 96),
         num_workers=8,
         network_depth=5,
@@ -28,6 +29,7 @@ def full_config():
     """Full TrainingConfig with all optional fields."""
     return TrainingConfig(
         batch_size=4,
+        val_batch_size=8,
         patch_size=(96, 96, 96),
         num_workers=8,
         network_depth=5,
@@ -56,6 +58,7 @@ def auto_config_result():
     """Sample AutoConfigResult for testing."""
     return AutoConfigResult(
         batch_size=4,
+        val_batch_size=8,
         patch_size=(96, 96, 96),
         num_workers=8,
         network_depth=5,
@@ -167,6 +170,7 @@ class TestSerialization:
         """Test creating config from dict."""
         data = {
             'batch_size': 4,
+            'val_batch_size': 8,
             'patch_size': [96, 96, 96],  # List (will be converted to tuple)
             'num_workers': 8,
             'network_depth': 5,
@@ -179,6 +183,7 @@ class TestSerialization:
         config = TrainingConfig.from_dict(data)
 
         assert config.batch_size == 4
+        assert config.val_batch_size == 8
         assert config.patch_size == (96, 96, 96)  # Should be tuple
         assert config.num_workers == 8
 
@@ -386,6 +391,7 @@ class TestApplyToNamespace:
         import argparse
         config = TrainingConfig(
             batch_size=4,
+            val_batch_size=8,
             patch_size=(96, 96, 96),
             num_workers=8,
             network_depth=5,

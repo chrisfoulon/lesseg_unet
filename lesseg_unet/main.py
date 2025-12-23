@@ -820,6 +820,7 @@ def main_worker(local_rank, args, kwargs):
         # Display configuration
         utils.logging_rank_0('\nSuggested Configuration:', dist.get_rank())
         utils.logging_rank_0(f'  batch_size: {auto_config_result.batch_size}', dist.get_rank())
+        utils.logging_rank_0(f'  val_batch_size: {auto_config_result.val_batch_size}', dist.get_rank())
         utils.logging_rank_0(f'  patch_size: {auto_config_result.patch_size}', dist.get_rank())
         utils.logging_rank_0(f'  num_workers: {auto_config_result.num_workers}', dist.get_rank())
         utils.logging_rank_0(f'  network_depth: {auto_config_result.network_depth}', dist.get_rank())
@@ -845,6 +846,7 @@ def main_worker(local_rank, args, kwargs):
 
         # Apply configuration to args
         args.batch_size = auto_config_result.batch_size
+        args.val_batch_size = auto_config_result.val_batch_size
         args.num_workers = auto_config_result.num_workers
         args.network_depth = auto_config_result.network_depth
         args.feature_size = auto_config_result.feature_size
@@ -891,6 +893,7 @@ def main_worker(local_rank, args, kwargs):
         # Create manual training config
         manual_config = TrainingConfig(
             batch_size=args.batch_size,
+            val_batch_size=args.val_batch_size,
             patch_size=patch_size if patch_size else (64, 64, 64),  # Default if unknown
             num_workers=args.num_workers,
             network_depth=args.network_depth if hasattr(args, 'network_depth') and args.network_depth else None,

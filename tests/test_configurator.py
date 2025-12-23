@@ -81,6 +81,7 @@ class TestAutoConfigResult:
         """Test AutoConfigResult creation."""
         result = AutoConfigResult(
             batch_size=4,
+            val_batch_size=8,
             patch_size=(96, 96, 96),
             num_workers=8,
             network_depth=5,
@@ -91,6 +92,7 @@ class TestAutoConfigResult:
         )
 
         assert result.batch_size == 4
+        assert result.val_batch_size == 8
         assert result.patch_size == (96, 96, 96)
         assert result.num_workers == 8
         assert result.network_depth == 5
@@ -103,6 +105,7 @@ class TestAutoConfigResult:
         """Test AutoConfigResult serialization."""
         result = AutoConfigResult(
             batch_size=4,
+            val_batch_size=8,
             patch_size=(96, 96, 96),
             num_workers=8,
             network_depth=5,
@@ -115,6 +118,7 @@ class TestAutoConfigResult:
         d = result.to_dict()
 
         assert d['batch_size'] == 4
+        assert d['val_batch_size'] == 8
         assert d['patch_size'] == (96, 96, 96)
         assert d['num_workers'] == 8
         assert 'reasoning' in d

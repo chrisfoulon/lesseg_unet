@@ -63,6 +63,7 @@ class TrainingConfig:
 
     # Required training parameters
     batch_size: int
+    val_batch_size: int
     patch_size: tuple[int, int, int]
     num_workers: int
     network_depth: int
@@ -143,6 +144,7 @@ class TrainingConfig:
         """
         return cls(
             batch_size=auto_config.batch_size,
+            val_batch_size=auto_config.val_batch_size,
             patch_size=auto_config.patch_size,
             num_workers=auto_config.num_workers,
             network_depth=auto_config.network_depth,

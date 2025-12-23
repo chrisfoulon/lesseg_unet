@@ -70,6 +70,7 @@ class AutoConfigResult:
     """
 
     batch_size: int
+    val_batch_size: int
     patch_size: tuple[int, int, int]
     num_workers: int
     network_depth: int
@@ -90,6 +91,7 @@ class AutoConfigResult:
         """
         return {
             'batch_size': self.batch_size,
+            'val_batch_size': self.val_batch_size,
             'patch_size': self.patch_size,
             'num_workers': self.num_workers,
             'network_depth': self.network_depth,
@@ -342,6 +344,24 @@ class AutoConfigurator:
         memory_breakdown = memory_calculator.estimate_total_memory(batch_size)
         memory_estimate = memory_breakdown.to_dict()
 
+        # Step 8: Suggest validation batch size
+        # Validation can use larger batch (no gradients), but be conservative
+        vram_gb = self._get_vram_per_gpu()
+        if vram_gb > 20:  # Large VRAM (e.g., A100, RTX 3090)
+            val_batch_multiplier = 4
+        elif vram_gb > 10:  # Medium VRAM (e.g., RTX 3080)
+            val_batch_multiplier = 3
+        elif vram_gb > 4:  # Small VRAM (e.g., RTX 3060)
+            val_batch_multiplier = 2
+        else:  # Very small VRAM or CPU mode
+            val_batch_multiplier = 1.5
+
+        val_batch_size = max(1, int(batch_size * val_batch_multiplier))
+        self.reasoning['val_batch_size'] = (
+            f"Validation batch {val_batch_size} = {val_batch_multiplier}× training batch "
+            f"(no gradients needed)"
+        )
+
         # Log configuration summary
         self._log_configuration_summary(
             batch_size=batch_size,
@@ -355,6 +375,7 @@ class AutoConfigurator:
 
         return AutoConfigResult(
             batch_size=batch_size,
+            val_batch_size=val_batch_size,
             patch_size=patch_size,
             num_workers=num_workers,
             network_depth=network_depth,
