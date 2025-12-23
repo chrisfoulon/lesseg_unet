@@ -704,6 +704,7 @@ def training(img_path_list: Sequence,
             model.train()
             epoch_loss = 0
             ctr_epoch_loss = 0
+            controls_loss = None  # Initialize at epoch level to avoid UnboundLocalError
             step = 0
             start_time = time.time()
             loading_time = True

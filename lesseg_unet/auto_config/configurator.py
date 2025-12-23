@@ -128,6 +128,9 @@ class AutoConfigurator:
     num_gpus : Optional[int]
         Number of GPUs to use. If None, uses all available.
         Multi-GPU is opt-in via this parameter.
+    num_samples : int
+        Number of patches cropped from each image by RandCropByPosNegLabeld.
+        Used to calculate DataLoader RAM requirements. Default: 4.
 
     Examples
     --------
@@ -160,7 +163,8 @@ class AutoConfigurator:
         model_type: Literal['swinunetr', 'unet'] = 'swinunetr',
         target: Literal['speed', 'memory', 'balanced'] = 'balanced',
         vram_safety_margin: float = 0.95,
-        num_gpus: Optional[int] = None
+        num_gpus: Optional[int] = None,
+        num_samples: int = 4
     ):
         """Initialize auto-configurator."""
         self.hardware = hardware_profile
@@ -168,6 +172,7 @@ class AutoConfigurator:
         self.model_type = model_type
         self.target = target
         self.vram_safety_margin = vram_safety_margin
+        self.num_samples = num_samples
 
         # Determine number of GPUs to use
         if num_gpus is None:
@@ -340,6 +345,25 @@ class AutoConfigurator:
                 f"{self.num_gpus} GPU(s), storage={self.dataset.storage_type}"
             )
 
+        # Step 6.5: Constrain batch_size by DataLoader RAM requirements
+        # This accounts for RAM needed to load full images when num_samples > 1
+        if override_batch_size is None:
+            constrained_batch, ram_warning = self._constrain_batch_by_dataloader_ram(
+                batch_size=batch_size,
+                num_workers=num_workers
+            )
+            if ram_warning is not None:
+                logger.warning(ram_warning)
+                batch_size = constrained_batch
+                # Update memory estimate with constrained batch size
+                memory_breakdown = memory_calculator.estimate_total_memory(batch_size)
+                vram_gb = self._get_vram_per_gpu()
+                self.reasoning['batch_size'] = (
+                    f"Batch {batch_size} constrained by DataLoader RAM "
+                    f"(uses ~{memory_breakdown.total_gb:.2f}GB / {vram_gb:.2f}GB model "
+                    f"+ {num_workers}×{int(batch_size/self.num_samples)} images in RAM)"
+                )
+
         # Get memory estimate
         memory_breakdown = memory_calculator.estimate_total_memory(batch_size)
         memory_estimate = memory_breakdown.to_dict()
@@ -414,6 +438,73 @@ class AutoConfigurator:
         gpus_to_use = self.hardware.gpus[:self.num_gpus]
         min_vram_mb = min(gpu.total_memory_mb for gpu in gpus_to_use)
         return min_vram_mb / 1024
+
+    def _constrain_batch_by_dataloader_ram(
+        self,
+        batch_size: int,
+        num_workers: int,
+        prefetch_factor: int = 2
+    ) -> tuple[int, str | None]:
+        """Constrain batch size based on DataLoader RAM requirements.
+
+        When using num_samples > 1 in RandCropByPosNegLabeld, the DataLoader
+        needs to load full images before cropping patches. This calculates RAM
+        needed by workers and reduces batch_size if it exceeds available RAM.
+
+        Parameters
+        ----------
+        batch_size : int
+            Suggested batch size from VRAM calculation.
+        num_workers : int
+            Number of DataLoader workers.
+        prefetch_factor : int
+            PyTorch DataLoader prefetch_factor. Default: 2.
+
+        Returns
+        -------
+        tuple[int, str | None]
+            (constrained_batch_size, warning_message)
+            If no constraint needed, warning_message is None.
+        """
+        if self.num_samples == 1 or num_workers == 0:
+            # No RAM issue if num_samples=1 (loads patches directly)
+            # or num_workers=0 (main process only)
+            return batch_size, None
+
+        # Calculate bytes per full image (all channels)
+        h, w, d = self.dataset.median_image_size
+        channels = self.dataset.in_channels
+        bytes_per_image = h * w * d * channels * 4  # float32
+        gb_per_image = bytes_per_image / (1024 ** 3)
+
+        # Calculate images per batch (batch_size / num_samples)
+        # num_samples is how many patches we crop from each image
+        images_per_batch = max(1, int(batch_size / self.num_samples))
+
+        # Total RAM for DataLoader:
+        # num_workers × prefetch_factor × images_per_batch × GB_per_image
+        dataloader_ram_gb = num_workers * prefetch_factor * images_per_batch * gb_per_image
+
+        # Available RAM (be conservative - use 40% for DataLoader)
+        max_dataloader_ram_gb = self.hardware.cpu.available_ram_gb * 0.4
+
+        if dataloader_ram_gb <= max_dataloader_ram_gb:
+            # No constraint needed
+            return batch_size, None
+
+        # Need to reduce batch_size
+        # Solve for batch_size: dataloader_ram = workers × prefetch × (batch/samples) × GB_per_img
+        # batch_size = (max_ram / (workers × prefetch × GB_per_img)) × samples
+        max_images_per_batch = int(max_dataloader_ram_gb / (num_workers * prefetch_factor * gb_per_image))
+        constrained_batch = max(1, max_images_per_batch * self.num_samples)
+
+        warning = (
+            f"Batch reduced {batch_size}→{constrained_batch} due to DataLoader RAM constraint "
+            f"(would need {dataloader_ram_gb:.1f}GB but {max_dataloader_ram_gb:.1f}GB available "
+            f"for {num_workers} workers with num_samples={self.num_samples})"
+        )
+
+        return constrained_batch, warning
 
     def _create_memory_calculator(
         self,

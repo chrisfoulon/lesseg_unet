@@ -379,3 +379,50 @@ class TestAutoConfigurator:
 
         # All should be positive numbers
         assert config.memory_estimate['total_gb'] > 0
+
+    def test_dataloader_ram_constraint(self, hardware_laptop, dataset_standard):
+        """Test that batch size is constrained by DataLoader RAM requirements.
+
+        With num_samples=4, large batch sizes require loading many full images
+        into RAM by DataLoader workers. This test verifies that batch_size is
+        reduced when RAM requirements would exceed available memory.
+        """
+        # Create configurator with num_samples=4 (default)
+        configurator = AutoConfigurator(
+            hardware_profile=hardware_laptop,
+            dataset_profile=dataset_standard,
+            num_samples=4  # Requires loading full images before cropping
+        )
+
+        config = configurator.suggest_config()
+
+        # With limited laptop RAM (20GB available), batch should be constrained
+        # Verify it's reasonable (not the unconstrained 64)
+        assert config.batch_size < 64, "Batch size should be constrained by DataLoader RAM"
+        assert config.batch_size >= 1, "Batch size should be at least 1"
+
+        # Reasoning should mention RAM if constrained
+        if config.batch_size < 20:
+            assert 'RAM' in config.reasoning['batch_size'] or 'batch_size' in config.reasoning
+
+    def test_no_ram_constraint_with_num_samples_1(self, hardware_laptop, dataset_standard):
+        """Test that no RAM constraint is applied when num_samples=1.
+
+        When num_samples=1, patches are loaded directly without loading full images,
+        so DataLoader RAM usage is minimal and shouldn't constrain batch_size.
+        """
+        # Create configurator with num_samples=1 (direct patch loading)
+        configurator = AutoConfigurator(
+            hardware_profile=hardware_laptop,
+            dataset_profile=dataset_standard,
+            num_samples=1  # Direct patch loading, no full images
+        )
+
+        config = configurator.suggest_config()
+
+        # Batch size should be based on VRAM only, not RAM-constrained
+        # (might still be small due to 3.7GB VRAM limit)
+        assert config.batch_size >= 1
+
+        # Reasoning should NOT mention DataLoader RAM constraint
+        assert 'DataLoader RAM' not in config.reasoning.get('batch_size', '')

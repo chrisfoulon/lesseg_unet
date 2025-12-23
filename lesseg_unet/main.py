@@ -863,13 +863,15 @@ def main_worker(local_rank, args, kwargs):
         model_type_normalized = args.model_type.lower()
 
         # Create configurator
+        # num_samples=4 matches default transform_dict RandCropByPosNegLabeld setting
         configurator = AutoConfigurator(
             hardware_profile=hw_profile,
             dataset_profile=dataset_profile,
             model_type=model_type_normalized,
             target=args.auto_config_target,
             vram_safety_margin=args.vram_safety_margin,
-            num_gpus=args.num_gpus
+            num_gpus=args.num_gpus,
+            num_samples=4  # Must match RandCropByPosNegLabeld num_samples in transform_dict
         )
 
         # Parse override_patch_size if provided
