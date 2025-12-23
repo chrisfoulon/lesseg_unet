@@ -433,7 +433,11 @@ def training(img_path_list: Sequence,
         transform_dict = transformations.replace_tr(
             transform_dict, 'ResizeWithPadOrCropd', resize_function)
 
-    original_image_shape = utils.get_img_size(split_lists[0][0]['image'])
+    # Get any image key to determine original shape (all modalities have same spatial dims)
+    first_subject = split_lists[0][0]
+    image_keys = data_utils.get_category_keys(first_subject, 'image')
+    first_image_key = image_keys[0] if image_keys else 'image'  # Fallback for backward compatibility
+    original_image_shape = utils.get_img_size(first_subject[first_image_key])
     utils.print_rank_0(f'Original image shape: {original_image_shape}', dist.get_rank())
     # We need the training image size for the unetr as we need to know the size of the model to create it
     if list(transform_dict.keys())[-1] == 'patches':

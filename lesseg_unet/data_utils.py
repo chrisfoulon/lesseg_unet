@@ -404,9 +404,11 @@ def _build_subject_to_file_mapping(
 
 def folder_mode_to_split_lists(
     image_folders: dict[str, Path | str],
-    label_folder: Path | str,
+    label_folders: dict[str, Path | str] | None = None,
+    control_folders: dict[str, Path | str] | None = None,
     n_folds: int = 5,
     subject_pattern: str = r'(sub-\d+)',
+    control_pattern: str = r'(ctr-\d+)',
     random_seed: int = 42
 ) -> SplitLists:
     r"""Convert folder-per-modality structure to SplitLists format.
@@ -426,19 +428,43 @@ def folder_mode_to_split_lists(
             {'dwi': 'data/dwi', 'adc': 'data/adc'}
             → creates 'image_dwi' and 'image_adc' keys
 
-    label_folder : Path | str
-        Path to folder containing label files
+    label_folders : dict[str, Path | str] or None, optional
+        Dictionary mapping label class names to folder paths.
+        Keys become identifiers in 'label_{class}' format.
+
+        Example:
+            {'lesion': 'data/lesion', 'edema': 'data/edema'}
+            → creates 'label_lesion' and 'label_edema' keys
+
+        If None, subjects without labels are included (for control-only datasets).
+
+    control_folders : dict[str, Path | str] or None, optional
+        Dictionary mapping control modality names to folder paths.
+        Keys become identifiers in 'control_{modality}' format.
+        Controls are healthy subjects without labels.
+
+        Example:
+            {'dwi': 'data/controls_dwi', 'adc': 'data/controls_adc'}
+            → creates 'control_dwi' and 'control_adc' keys
 
     n_folds : int, default=5
         Number of folds for cross-validation split
 
     subject_pattern : str, default=r'(sub-\d+)'
-        Regex pattern to extract subject ID from filenames.
+        Regex pattern to extract subject ID from patient filenames.
         Must contain exactly one capture group.
 
         Examples:
             r'(sub-\d+)' → matches 'sub-001', 'sub-042'
             r'(patient_\d+)' → matches 'patient_001', 'patient_123'
+
+    control_pattern : str, default=r'(ctr-\d+)'
+        Regex pattern to extract subject ID from control filenames.
+        Must contain exactly one capture group.
+
+        Examples:
+            r'(ctr-\d+)' → matches 'ctr-001', 'ctr-042'
+            r'(control_\d+)' → matches 'control_001', 'control_123'
 
     random_seed : int, default=42
         Random seed for reproducible fold splitting
@@ -446,45 +472,66 @@ def folder_mode_to_split_lists(
     Returns
     -------
     SplitLists
-        List of folds, each containing SubjectDict entries with
-        'image_{modality}' and 'label' keys
+        List of folds, each containing SubjectDict entries with:
+        - 'image_{modality}' keys for each image modality
+        - 'label_{class}' keys for each label class (if label_folders provided)
+        - 'control_{modality}' keys for control subjects (if control_folders provided)
 
     Raises
     ------
     ValueError
         - If folder is empty (no NIfTI files found)
         - If subject is missing modality files
-        - If subject is missing label file
+        - If subject is missing label files (when labels required)
         - If no valid subjects found (no complete data)
         - If multiple files match same subject ID in same folder
 
     Examples
     --------
-    Basic usage with two modalities:
+    Basic usage with two modalities and single label:
 
     >>> image_folders = {
     ...     'dwi': Path('data/dwi'),
     ...     'adc': Path('data/adc')
     ... }
-    >>> label_folder = Path('data/lesion_masks')
+    >>> label_folders = {'lesion': Path('data/lesion_masks')}
     >>> split_lists = folder_mode_to_split_lists(
     ...     image_folders=image_folders,
-    ...     label_folder=label_folder,
+    ...     label_folders=label_folders,
     ...     n_folds=5
     ... )
     >>> split_lists[0][0]  # First subject in first fold
-    {'image_dwi': '/path/data/dwi/sub-001_dwi.nii.gz',
-     'image_adc': '/path/data/adc/sub-001_adc.nii.gz',
-     'label': '/path/data/lesion_masks/sub-001_lesion.nii.gz'}
+    {'image_adc': '/path/data/adc/sub-001_adc.nii.gz',
+     'image_dwi': '/path/data/dwi/sub-001_dwi.nii.gz',
+     'label_lesion': '/path/data/lesion_masks/sub-001_lesion.nii.gz'}
 
-    Custom subject pattern:
+    Multi-class labels:
 
     >>> split_lists = folder_mode_to_split_lists(
-    ...     image_folders={'t1': 'data/t1'},
-    ...     label_folder='data/masks',
-    ...     subject_pattern=r'(patient_\d+)',  # Match 'patient_001'
+    ...     image_folders={'dwi': 'data/dwi'},
+    ...     label_folders={'lesion': 'data/lesion', 'edema': 'data/edema'},
     ...     n_folds=3
     ... )
+    >>> split_lists[0][0]
+    {'image_dwi': '/path/data/dwi/sub-001_dwi.nii.gz',
+     'label_edema': '/path/data/edema/sub-001_edema.nii.gz',
+     'label_lesion': '/path/data/lesion/sub-001_lesion.nii.gz'}
+
+    With controls:
+
+    >>> split_lists = folder_mode_to_split_lists(
+    ...     image_folders={'dwi': 'data/dwi'},
+    ...     label_folders={'lesion': 'data/lesion'},
+    ...     control_folders={'dwi': 'data/controls_dwi'},
+    ...     subject_pattern=r'(sub-\d+)',
+    ...     control_pattern=r'(ctr-\d+)',
+    ...     n_folds=3
+    ... )
+    >>> # Patients have images + labels, controls have images only
+    >>> split_lists[0][0]  # Patient
+    {'image_dwi': '/path/sub-001_dwi.nii.gz', 'label_lesion': '/path/sub-001_lesion.nii.gz'}
+    >>> split_lists[0][1]  # Control
+    {'control_dwi': '/path/ctr-001_dwi.nii.gz'}
 
     Notes
     -----
@@ -493,13 +540,35 @@ def folder_mode_to_split_lists(
     - If n_subjects % n_folds != 0, later folds may have one fewer subject
     - Only subjects with ALL modalities AND label are included
     """
+    # Validate current limitations (multi-class/multi-modal not yet implemented)
+    if label_folders is not None and len(label_folders) > 1:
+        raise NotImplementedError(
+            f"Multi-class label segmentation not yet implemented. "
+            f"Received {len(label_folders)} label classes: {list(label_folders.keys())}"
+        )
+
+    if control_folders is not None and len(control_folders) > 1:
+        raise NotImplementedError(
+            f"Multi-modal controls not yet implemented. "
+            f"Received {len(control_folders)} control modalities: {list(control_folders.keys())}"
+        )
+
     # Convert paths to Path objects
     image_folders = {
         modality: Path(folder) for modality, folder in image_folders.items()
     }
-    label_folder = Path(label_folder)
 
-    # Step 1: Build subject-to-file mappings for each modality
+    if label_folders is not None:
+        label_folders = {
+            label_class: Path(folder) for label_class, folder in label_folders.items()
+        }
+
+    if control_folders is not None:
+        control_folders = {
+            modality: Path(folder) for modality, folder in control_folders.items()
+        }
+
+    # Step 1: Build subject-to-file mappings for each image modality
     modality_files = {}
     for modality, folder in image_folders.items():
         mapping = _build_subject_to_file_mapping(folder, subject_pattern)
@@ -509,72 +578,133 @@ def folder_mode_to_split_lists(
             )
         modality_files[modality] = mapping
 
-    # Step 2: Build subject-to-file mapping for labels
-    label_files = _build_subject_to_file_mapping(label_folder, subject_pattern)
-    if not label_files:
-        raise ValueError(
-            f"No NIfTI files found in {label_folder} matching pattern '{subject_pattern}'"
-        )
+    # Step 2: Build subject-to-file mapping for each label class (if provided)
+    label_class_files = {}
+    if label_folders is not None:
+        for label_class, folder in label_folders.items():
+            mapping = _build_subject_to_file_mapping(folder, subject_pattern)
+            if not mapping:
+                raise ValueError(
+                    f"No NIfTI files found in {folder} matching pattern '{subject_pattern}'"
+                )
+            label_class_files[label_class] = mapping
 
-    # Step 3: Find subjects with complete data (all modalities + label)
+    # Step 3: Build control-to-file mapping for each control modality (if provided)
+    control_modality_files = {}
+    if control_folders is not None:
+        for modality, folder in control_folders.items():
+            mapping = _build_subject_to_file_mapping(folder, control_pattern)
+            if not mapping:
+                raise ValueError(
+                    f"No NIfTI files found in {folder} matching pattern '{control_pattern}'"
+                )
+            control_modality_files[modality] = mapping
+
+    # Step 4: Find patients with complete data (all image modalities + all label classes)
     all_modalities = set(image_folders.keys())
-    complete_subjects = []
-    incomplete_subjects = []
+    all_label_classes = set(label_class_files.keys()) if label_folders is not None else set()
 
-    for subject_id in label_files.keys():
-        # Check if subject has all modalities
-        missing_modalities = []
+    complete_patients = []
+    incomplete_patients = []
+
+    # Determine which subjects to check - get all subjects with images
+    subjects_to_check = set()
+    for modality_mapping in modality_files.values():
+        subjects_to_check.update(modality_mapping.keys())
+
+    # Also include subjects with labels (in case they're missing images)
+    if label_folders is not None:
+        for label_mapping in label_class_files.values():
+            subjects_to_check.update(label_mapping.keys())
+
+    for subject_id in subjects_to_check:
+        missing_items = []
+
+        # Check if subject has all image modalities
         for modality in all_modalities:
             if subject_id not in modality_files[modality]:
-                missing_modalities.append(modality)
+                missing_items.append(f"image_{modality}")
 
-        if missing_modalities:
-            incomplete_subjects.append((subject_id, missing_modalities))
+        # Check if subject has all label classes (if labels required)
+        if label_folders is not None:
+            for label_class in all_label_classes:
+                if subject_id not in label_class_files[label_class]:
+                    missing_items.append(f"label_{label_class}")
+
+        if missing_items:
+            incomplete_patients.append((subject_id, missing_items))
         else:
-            complete_subjects.append(subject_id)
+            complete_patients.append(subject_id)
 
-    # Also check for subjects with images but no label
-    subjects_with_images = set()
-    for modality_mapping in modality_files.values():
-        subjects_with_images.update(modality_mapping.keys())
+    # Step 5: Find controls with complete data (all control modalities)
+    complete_controls = []
+    incomplete_controls = []
 
-    subjects_missing_labels = subjects_with_images - set(label_files.keys())
+    if control_folders is not None:
+        all_control_modalities = set(control_folders.keys())
 
-    # Check if no valid subjects found FIRST
-    if not complete_subjects:
-        raise ValueError(
-            f"No valid subjects found with all modalities and labels.\n"
-            f"Modalities required: {list(all_modalities)}\n"
-            f"Subjects with labels: {len(label_files)}\n"
-            f"Subjects with images: {len(subjects_with_images)}\n"
-            f"Subjects with incomplete data: {len(incomplete_subjects) + len(subjects_missing_labels)}\n"
-            f"Check that filenames match pattern '{subject_pattern}'"
-        )
+        # Get all control IDs
+        controls_to_check = set()
+        for modality_mapping in control_modality_files.values():
+            controls_to_check.update(modality_mapping.keys())
 
-    # Warn about incomplete subjects (if any)
-    if incomplete_subjects or subjects_missing_labels:
-        error_parts = ["Some subjects have incomplete data:"]
+        for control_id in controls_to_check:
+            missing_modalities = []
 
-        if incomplete_subjects:
-            error_parts.append("\nSubjects missing modalities:")
-            for subj_id, missing_mods in incomplete_subjects[:10]:  # Show first 10
-                error_parts.append(f"  - {subj_id}: missing {missing_mods}")
-            if len(incomplete_subjects) > 10:
-                error_parts.append(f"  ... and {len(incomplete_subjects) - 10} more")
+            # Check if control has all modalities
+            for modality in all_control_modalities:
+                if control_id not in control_modality_files[modality]:
+                    missing_modalities.append(f"control_{modality}")
 
-        if subjects_missing_labels:
-            error_parts.append("\nSubjects missing labels:")
-            missing_list = sorted(list(subjects_missing_labels))[:10]
-            for subj_id in missing_list:
-                error_parts.append(f"  - {subj_id}")
-            if len(subjects_missing_labels) > 10:
-                error_parts.append(f"  ... and {len(subjects_missing_labels) - 10} more")
+            if missing_modalities:
+                incomplete_controls.append((control_id, missing_modalities))
+            else:
+                complete_controls.append(control_id)
+
+    # Check if no valid subjects found
+    if not complete_patients and not complete_controls:
+        error_parts = ["No valid subjects found."]
+
+        if label_folders is not None:
+            error_parts.append(f"Image modalities required: {list(all_modalities)}")
+            error_parts.append(f"Label classes required: {list(all_label_classes)}")
+        else:
+            error_parts.append(f"Image modalities required: {list(all_modalities)}")
+
+        if control_folders is not None:
+            error_parts.append(f"Control modalities required: {list(all_control_modalities)}")
+
+        error_parts.append(f"Subjects with incomplete data: {len(incomplete_patients)}")
+        if control_folders is not None:
+            error_parts.append(f"Controls with incomplete data: {len(incomplete_controls)}")
+
+        error_parts.append(f"Check that filenames match patterns: subject='{subject_pattern}', control='{control_pattern}'")
 
         raise ValueError('\n'.join(error_parts))
 
-    # Step 4: Build SubjectDict entries for complete subjects
+    # Warn about incomplete subjects (if any)
+    if incomplete_patients or incomplete_controls:
+        error_parts = ["Some subjects have incomplete data:"]
+
+        if incomplete_patients:
+            error_parts.append(f"\nPatients missing data ({len(incomplete_patients)} total):")
+            for subj_id, missing in incomplete_patients[:10]:  # Show first 10
+                error_parts.append(f"  - {subj_id}: missing {missing}")
+            if len(incomplete_patients) > 10:
+                error_parts.append(f"  ... and {len(incomplete_patients) - 10} more")
+
+        if incomplete_controls:
+            error_parts.append(f"\nControls missing data ({len(incomplete_controls)} total):")
+            for ctrl_id, missing in incomplete_controls[:10]:
+                error_parts.append(f"  - {ctrl_id}: missing {missing}")
+            if len(incomplete_controls) > 10:
+                error_parts.append(f"  ... and {len(incomplete_controls) - 10} more")
+
+        raise ValueError('\n'.join(error_parts))
+
+    # Step 6: Build SubjectDict entries for patients
     subject_list = []
-    for subject_id in complete_subjects:
+    for subject_id in complete_patients:
         subject_dict = {}
 
         # Add all image modalities
@@ -582,12 +712,27 @@ def folder_mode_to_split_lists(
             key = f'image_{modality}'
             subject_dict[key] = modality_files[modality][subject_id]
 
-        # Add label
-        subject_dict['label'] = label_files[subject_id]
+        # Add all label classes (if provided)
+        if label_folders is not None:
+            for label_class in sorted(all_label_classes):  # Sort for consistent ordering
+                key = f'label_{label_class}'
+                subject_dict[key] = label_class_files[label_class][subject_id]
 
         subject_list.append(subject_dict)
 
-    # Step 5: Shuffle and split into folds
+    # Step 7: Build SubjectDict entries for controls (if provided)
+    if control_folders is not None:
+        for control_id in complete_controls:
+            control_dict = {}
+
+            # Add all control modalities
+            for modality in sorted(all_control_modalities):  # Sort for consistent ordering
+                key = f'control_{modality}'
+                control_dict[key] = control_modality_files[modality][control_id]
+
+            subject_list.append(control_dict)
+
+    # Step 8: Shuffle and split into folds
     np.random.seed(random_seed)
     shuffled_indices = np.random.permutation(len(subject_list))
     shuffled_subjects = [subject_list[idx] for idx in shuffled_indices]
@@ -604,9 +749,10 @@ def adapt_transforms_for_multimodal(transform_dict: dict, split_lists: SplitList
     Adapt transform dictionary for multi-modal data.
 
     This function modifies transform dictionaries to work with multi-modal data by:
-    1. Detecting all image modalities from the first subject
-    2. Replacing single 'image' key with list of image_* keys in all transforms
-    3. Inserting ConcatItemsd after LoadImaged to merge modalities into single tensor
+    1. Detecting all image modalities and label classes from the first subject
+    2. Replacing 'image' key with list of image_* keys in early transforms
+    3. Replacing 'label' key with list of label_* keys in early transforms
+    4. Inserting ConcatItemsd after LoadImaged to merge image modalities into single tensor
 
     If single modality is detected, returns unchanged (backward compatible).
 
@@ -625,26 +771,29 @@ def adapt_transforms_for_multimodal(transform_dict: dict, split_lists: SplitList
 
     Examples
     --------
-    Single modality (unchanged):
+    Single modality with unnamed keys (unchanged):
     >>> split_lists = [[{'image': '/path/img.nii.gz', 'label': '/path/mask.nii.gz'}]]
     >>> adapted = adapt_transforms_for_multimodal(transform_dict, split_lists)
     >>> # Returns transform_dict unchanged
 
-    Multi-modal (adapted):
+    Multi-modal images with named label:
     >>> split_lists = [[{
     ...     'image_dwi': '/path/dwi.nii.gz',
     ...     'image_adc': '/path/adc.nii.gz',
-    ...     'label': '/path/mask.nii.gz'
+    ...     'label_stroke': '/path/stroke.nii.gz'
     ... }]]
     >>> adapted = adapt_transforms_for_multimodal(transform_dict, split_lists)
     >>> # Replaces 'image' with ['image_adc', 'image_dwi'] and adds ConcatItemsd
+    >>> # Replaces 'label' with ['label_stroke']
 
     Notes
     -----
     - Image keys are sorted alphabetically for consistent ordering
-    - ConcatItemsd is inserted after LoadImaged in first_transform
+    - Label keys are sorted alphabetically for consistent ordering
+    - ConcatItemsd is inserted after LoadImaged in first_transform (for images only)
     - Output from ConcatItemsd is named 'image' (standard key)
-    - Label keys are not modified
+    - Single label classes are not concatenated (just renamed)
+    - Multi-label concatenation is not yet implemented (raises NotImplementedError)
     - Control keys are not included in concatenation
     """
     # Step 1: Get first subject to detect keys
@@ -654,21 +803,27 @@ def adapt_transforms_for_multimodal(transform_dict: dict, split_lists: SplitList
 
     first_subject = split_lists[0][0]
     image_keys = get_category_keys(first_subject, 'image')
+    label_keys = get_category_keys(first_subject, 'label')
 
     # Step 2: Check if adaptation is needed
-    if len(image_keys) == 1 and image_keys[0] == 'image':
-        # Single modality with standard key - no adaptation needed
+    # Adapt if: (1) multi-modal images, OR (2) named labels, OR (3) both
+    has_multi_modal = len(image_keys) > 1 or (len(image_keys) == 1 and image_keys[0] != 'image')
+    has_named_labels = len(label_keys) > 0 and (len(label_keys) > 1 or label_keys[0] != 'label')
+
+    if not has_multi_modal and not has_named_labels:
+        # Standard single modality with 'image' and 'label' keys - no adaptation needed
         return transform_dict
 
-    # Step 3: Sort image keys for consistent ordering
+    # Step 3: Sort keys for consistent ordering
     image_keys_sorted = sorted(image_keys)
+    label_keys_sorted = sorted(label_keys) if label_keys else []
 
     # Step 4: Deep copy to avoid modifying original
     adapted_dict = deepcopy(transform_dict)
 
-    # Step 5: Find insertion point and replace 'image' only in early transforms
-    # Only LoadImaged and EnsureChannelFirstd need image_* keys (they load raw files)
-    # After ConcatItemsd, all other transforms use 'image' (the concatenated result)
+    # Step 5: Find insertion point and replace pattern keys in early transforms
+    # Only LoadImaged and EnsureChannelFirstd need actual modality/label keys (they load raw files)
+    # After ConcatItemsd (for images), all other transforms use 'image' (the concatenated result)
     insertion_index = None
     if 'first_transform' in adapted_dict:
         first_transform = adapted_dict['first_transform']
@@ -680,18 +835,23 @@ def adapt_transforms_for_multimodal(transform_dict: dict, split_lists: SplitList
             transform_name = list(transform_dict_item.keys())[0]
             if transform_name in transforms_to_update:
                 insertion_index = i
-                # Replace 'image' with image_* keys in this transform
+                # Replace pattern keys ('image', 'label') with actual keys
                 params = transform_dict_item[transform_name]
-                if 'keys' in params and 'image' in params['keys']:
+                if 'keys' in params:
                     new_keys = []
                     for key in params['keys']:
-                        if key == 'image':
+                        if key == 'image' and image_keys_sorted:
+                            # Expand 'image' pattern to actual image modality keys
                             new_keys.extend(image_keys_sorted)
+                        elif key == 'label' and label_keys_sorted:
+                            # Expand 'label' pattern to actual label class keys
+                            new_keys.extend(label_keys_sorted)
                         else:
+                            # Keep specific keys as-is (e.g., 'image_dwi', 'label_stroke')
                             new_keys.append(key)
                     params['keys'] = new_keys
 
-    # Step 6: Insert ConcatItemsd after the last early transform
+    # Step 6: Insert ConcatItemsd after the last early transform (for multi-modal images)
     if 'first_transform' in adapted_dict and len(image_keys) > 1 and insertion_index is not None:
         concat_transform = {
             'ConcatItemsd': {
@@ -702,6 +862,26 @@ def adapt_transforms_for_multimodal(transform_dict: dict, split_lists: SplitList
         }
         # Insert after the last transform that was updated
         adapted_dict['first_transform'].insert(insertion_index + 1, concat_transform)
+
+    # Step 7: For single named label, create alias 'label' → 'label_xxx'
+    # This allows subsequent transforms to use generic 'label' key
+    # (Similar to how ConcatItemsd creates 'image' for multi-modal)
+    if ('first_transform' in adapted_dict and len(label_keys_sorted) == 1
+        and label_keys_sorted[0] != 'label' and insertion_index is not None):
+        # Single named label (e.g., 'label_stroke') - create 'label' alias
+        copy_label_transform = {
+            'CopyItemsd': {
+                'keys': label_keys_sorted[0],  # Source: 'label_stroke'
+                'times': 1,
+                'names': 'label',  # Destination: 'label'
+                'allow_missing_keys': False
+            }
+        }
+        # Insert after ConcatItemsd (if exists) or after last early transform
+        insert_at = insertion_index + 1
+        if len(image_keys) > 1:
+            insert_at += 1  # Account for ConcatItemsd already inserted
+        adapted_dict['first_transform'].insert(insert_at, copy_label_transform)
 
     return adapted_dict
 

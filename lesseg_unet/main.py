@@ -20,13 +20,180 @@ import torch.multiprocessing as mp
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 
 
+def validate_modality_names(names, reserved):
+    """Validate modality names are valid identifiers and not reserved.
+
+    Parameters
+    ----------
+    names : list of str
+        List of modality names to validate
+    reserved : set of str
+        Set of reserved names that cannot be used
+
+    Raises
+    ------
+    ValueError
+        If any name is invalid (not a Python identifier), is reserved, or duplicates exist
+
+    Examples
+    --------
+    >>> validate_modality_names(['dwi', 'adc'], reserved={'label', 'control'})
+    # Passes without error
+
+    >>> validate_modality_names(['label'], reserved={'label'})
+    ValueError: Modality name 'label' is reserved.
+    """
+    for name in names:
+        if not name.isidentifier():
+            raise ValueError(
+                f"Invalid modality name '{name}'. Must be a valid Python identifier "
+                f"(alphanumeric and underscores only, cannot start with number)."
+            )
+        if name in reserved:
+            raise ValueError(
+                f"Modality name '{name}' is reserved. Choose a different name."
+            )
+
+    # Check for duplicates
+    if len(set(names)) != len(names):
+        duplicates = [name for name in set(names) if names.count(name) > 1]
+        raise ValueError(
+            f"Duplicate modality names detected: {duplicates}"
+        )
+
+
+def validate_multimodal_arguments(args):
+    """Validate multi-value argument combinations.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command-line arguments
+
+    Returns
+    -------
+    argparse.Namespace
+        Validated arguments (same object, returned for chaining)
+
+    Raises
+    ------
+    ValueError
+        If argument combinations are invalid (e.g., name count mismatch)
+
+    Examples
+    --------
+    Multi-modal images with explicit names:
+    >>> args.input_path = ['/data/dwi', '/data/adc']
+    >>> args.image_modality_names = ['dwi', 'adc']
+    >>> validate_multimodal_arguments(args)  # Passes
+
+    Missing names (will use defaults):
+    >>> args.input_path = ['/data/mod1', '/data/mod2']
+    >>> args.image_modality_names = None
+    >>> validate_multimodal_arguments(args)  # Passes, will auto-generate names
+    """
+    # Validate image modalities
+    if args.input_path and len(args.input_path) > 1:
+        if args.image_modality_names:
+            if len(args.image_modality_names) != len(args.input_path):
+                raise ValueError(
+                    f"Image modality count mismatch: {len(args.image_modality_names)} names provided "
+                    f"but {len(args.input_path)} image paths specified.\n"
+                    f"Example: -p /data/dwi /data/adc -imn dwi adc"
+                )
+            validate_modality_names(args.image_modality_names, reserved={'label', 'control'})
+
+    # Validate label classes
+    if args.lesion_input_path and len(args.lesion_input_path) > 1:
+        if args.label_modality_names:
+            if len(args.label_modality_names) != len(args.lesion_input_path):
+                raise ValueError(
+                    f"Label class count mismatch: {len(args.label_modality_names)} names provided "
+                    f"but {len(args.lesion_input_path)} label paths specified.\n"
+                    f"Example: -lp /labels/lesion /labels/edema -lmn lesion edema"
+                )
+            validate_modality_names(args.label_modality_names, reserved={'image', 'control'})
+
+    # Validate control modalities
+    if args.controls_path and len(args.controls_path) > 1:
+        if args.control_modality_names:
+            if len(args.control_modality_names) != len(args.controls_path):
+                raise ValueError(
+                    f"Control modality count mismatch: {len(args.control_modality_names)} names provided "
+                    f"but {len(args.controls_path)} control paths specified.\n"
+                    f"Example: -ctr /controls/dwi /controls/adc -cmn dwi adc"
+                )
+            validate_modality_names(args.control_modality_names, reserved={'image', 'label'})
+
+    return args
+
+
+def build_modality_dict(paths, names, default_prefix):
+    """Build modality dictionary from paths and optional names.
+
+    Parameters
+    ----------
+    paths : list of str or None
+        List of folder paths for each modality
+    names : list of str or None
+        Optional list of modality names. If None, generates alphabetic names (a, b, c, ...)
+    default_prefix : str
+        Prefix for auto-generated names (e.g., 'image', 'label', 'control')
+
+    Returns
+    -------
+    dict or None
+        Dictionary mapping modality names to Path objects, or None if paths is None/empty
+
+    Examples
+    --------
+    With explicit names:
+    >>> build_modality_dict(['/data/dwi', '/data/adc'], ['dwi', 'adc'], 'image')
+    {'dwi': Path('/data/dwi'), 'adc': Path('/data/adc')}
+
+    With auto-generated alphabetic names:
+    >>> build_modality_dict(['/data/mod1', '/data/mod2'], None, 'image')
+    {'a': Path('/data/mod1'), 'b': Path('/data/mod2')}
+
+    Single path:
+    >>> build_modality_dict(['/data/images'], None, 'image')
+    {'a': Path('/data/images')}
+    """
+    if not paths:
+        return None
+
+    if not isinstance(paths, list):
+        paths = [paths]
+
+    # Generate alphabetic names if not provided
+    if names is None:
+        # Use lowercase letters: a, b, c, ..., z, aa, ab, ...
+        import string
+        alphabet = string.ascii_lowercase
+        names = []
+        for i in range(len(paths)):
+            if i < 26:
+                names.append(alphabet[i])
+            else:
+                # For > 26 paths, use aa, ab, ac, ... ba, bb, ...
+                names.append(alphabet[i // 26 - 1] + alphabet[i % 26])
+
+    return {name: Path(path) for name, path in zip(names, paths)}
+
+
 def main():
     # Script arguments
     parser = argparse.ArgumentParser(description='Monai unet training')
     # Paths
     parser.add_argument('-o', '--output', type=str, help='output folder', required=True)
     nifti_paths_group = parser.add_mutually_exclusive_group(required=True)
-    nifti_paths_group.add_argument('-p', '--input_path', type=str, help='Root folder of the b1000 dataset')
+    nifti_paths_group.add_argument(
+        '-p', '--input_path',
+        type=str,
+        nargs='*',
+        help='Image folder path(s). Single path: scans folder for NIfTI files. '
+             'Multiple paths: folder-per-modality mode (use -imn to name modalities, default: a, b, c, ...)'
+    )
     nifti_paths_group.add_argument('-li', '--input_list', type=str, help='Text file containing the list of b1000')
     nifti_paths_group.add_argument('-sid', '--seg_input_dict', type=str,
                                    help='[Segmentation only] The path to a json dict containing the keys of the '
@@ -34,30 +201,63 @@ def main():
                                         '[Cannot be used for Validation]')
     nifti_paths_group.add_argument('-psl', '--pretrained_split_list', type=str,
                                    help='File containing split paths lists of the k-fold')
-    nifti_paths_group.add_argument('--image-folders', type=str,
-                                   help='Space-separated modality:path pairs for folder-based multi-modal input '
-                                        '(e.g., "dwi:data/dwi adc:data/adc"). Requires --label-folder.')
 
-    # Additional arguments for folder-based multi-modal mode
-    parser.add_argument('--label-folder', type=str,
-                        help='Path to folder containing label files (required with --image-folders)')
+    # Subject and control patterns for folder-based multi-modal mode
     parser.add_argument('--subject-pattern', type=str, default=r'(sub-\d+)',
                         help='Regex pattern for extracting subject IDs from filenames '
                              '(default: r\'(sub-\\d+)\')')
 
+    parser.add_argument('--control-pattern', type=str, default=r'(ctr-\d+)',
+                        help='Regex pattern for extracting control IDs from filenames '
+                             '(default: r\'(ctr-\\d+)\')')
+
     lesion_paths_group = parser.add_mutually_exclusive_group(required=False)
-    lesion_paths_group.add_argument('-lp', '--lesion_input_path', type=str,
-                                    help='Root folder of the b1000 dataset')
+    lesion_paths_group.add_argument(
+        '-lp', '--lesion_input_path',
+        type=str,
+        nargs='*',
+        help='Label folder path(s). Single path: one label class. '
+             'Multiple paths: multi-class labels (use -lmn to name classes, default: a, b, c, ...)'
+    )
     lesion_paths_group.add_argument('-lli', '--lesion_input_list', type=str,
                                     help='Text file containing the list of b1000')
 
     control_paths_group = parser.add_mutually_exclusive_group(required=False)
-    control_paths_group.add_argument('-ctr', '--controls_path', type=str,
-                                     help='folder containing the control images (image_prefix not applied)')
+    control_paths_group.add_argument(
+        '-ctr', '--controls_path',
+        type=str,
+        nargs='*',
+        help='Control folder path(s). Single path: one control modality. '
+             'Multiple paths: multi-modal controls (use -cmn to name modalities, default: a, b, c, ...)'
+    )
     control_paths_group.add_argument('-lctr', '--controls_list', type=str,
                                      help='file path of the list of control images (image_prefix not applied)')
     control_paths_group.add_argument('-ctr_psl', '--controls_pretrained_split_list', type=str,
                                    help='File containing split paths lists of the k-fold for the controls')
+
+    # Modality/class naming arguments
+    parser.add_argument(
+        '-imn', '--image_modality_names',
+        type=str,
+        nargs='+',
+        help='Names for image modalities (must match -p count). Example: dwi adc flair. '
+             'Default: alphabetic suffixes (a, b, c, ...)'
+    )
+    parser.add_argument(
+        '-lmn', '--label_modality_names',
+        type=str,
+        nargs='+',
+        help='Names for label classes (must match -lp count). Example: lesion edema. '
+             'Default: alphabetic suffixes (a, b, c, ...)'
+    )
+    parser.add_argument(
+        '-cmn', '--control_modality_names',
+        type=str,
+        nargs='+',
+        help='Names for control modalities (must match -ctr count). Example: dwi adc. '
+             'Default: alphabetic suffixes (a, b, c, ...)'
+    )
+
     # Tranformation
     parser.add_argument('-trs', '--transform_dict', type=str,
                         help='file path to a json dictionary of transformations')
@@ -178,6 +378,10 @@ def main():
     parser.add_argument('-din', '--debug_img_num', type=int, help='Number of images from the input list')
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args()
+
+    # Validate multi-modal argument combinations
+    args = validate_multimodal_arguments(args)
+
     kwargs = {}
 
     # Gather input data and setup based on script arguments
@@ -292,11 +496,94 @@ def main_worker(local_rank, args, kwargs):
         cache_dir = Path(output_root, 'cache')
     utils.print_rank_0('loading input dwi path list', dist.get_rank())
     seg_input_dict = {}
+    # Detect if multi-modal mode (multiple paths in any of the input arguments)
+    is_multi_modal = (
+        (args.input_path and len(args.input_path) > 1) or
+        (args.lesion_input_path and len(args.lesion_input_path) > 1) or
+        (args.controls_path and len(args.controls_path) > 1)
+    )
+
     if args.input_path is not None:
-        utils.logging_rank_0(f'Input image directory : {args.input_path}', dist.get_rank())
-        img_list = utils.create_input_path_list_from_root(args.input_path)
-        if args.input_path == args.output:
-            raise ValueError("The output directory CANNOT be the input directory")
+        if is_multi_modal:
+            # Multi-modal folder-per-modality mode
+            utils.logging_rank_0('Using folder-per-modality mode', dist.get_rank())
+
+            # Build modality dictionaries
+            image_folders_dict = build_modality_dict(
+                args.input_path,
+                args.image_modality_names,
+                default_prefix='image'
+            )
+
+            label_folders_dict = build_modality_dict(
+                args.lesion_input_path,
+                args.label_modality_names,
+                default_prefix='label'
+            )
+
+            control_folders_dict = build_modality_dict(
+                args.controls_path,
+                args.control_modality_names,
+                default_prefix='control'
+            )
+
+            # Validate that multi-class labels and multi-modal controls aren't used yet
+            if label_folders_dict and len(label_folders_dict) > 1:
+                raise NotImplementedError(
+                    f"\nMulti-class label segmentation is not yet implemented.\n"
+                    f"You provided {len(label_folders_dict)} label classes: {list(label_folders_dict.keys())}\n"
+                    f"Currently only single-class segmentation is supported.\n\n"
+                    f"To implement multi-class support, the following pipeline components need updates:\n"
+                    f"  - Transform pipeline (how to handle multiple label keys)\n"
+                    f"  - Loss functions (per-class or combined loss)\n"
+                    f"  - Validation metrics (per-class Dice, IoU, etc.)\n"
+                    f"  - Output saving and visualization\n\n"
+                    f"See implementation_docs/FUTURE_WORK.md for details."
+                )
+
+            if control_folders_dict and len(control_folders_dict) > 1:
+                raise NotImplementedError(
+                    f"\nMulti-modal control subjects are not yet implemented.\n"
+                    f"You provided {len(control_folders_dict)} control modalities: {list(control_folders_dict.keys())}\n"
+                    f"Currently only single-modality controls are supported.\n\n"
+                    f"To implement multi-modal control support, the control handling pipeline needs updates.\n"
+                    f"See implementation_docs/FUTURE_WORK.md for details."
+                )
+
+            utils.logging_rank_0(f'Image modalities: {list(image_folders_dict.keys())}', dist.get_rank())
+            if label_folders_dict:
+                utils.logging_rank_0(f'Label classes: {list(label_folders_dict.keys())}', dist.get_rank())
+            if control_folders_dict:
+                utils.logging_rank_0(f'Control modalities: {list(control_folders_dict.keys())}', dist.get_rank())
+            utils.logging_rank_0(f'Subject pattern: {args.subject_pattern}', dist.get_rank())
+            if control_folders_dict:
+                utils.logging_rank_0(f'Control pattern: {args.control_pattern}', dist.get_rank())
+
+            # Call folder converter to get SplitLists
+            img_list = folder_mode_to_split_lists(
+                image_folders=image_folders_dict,
+                label_folders=label_folders_dict,
+                control_folders=control_folders_dict,
+                n_folds=args.folds_number,
+                subject_pattern=args.subject_pattern,
+                control_pattern=args.control_pattern,
+                random_seed=42
+            )
+
+            # Set les_list to None for now (folder mode handles label matching)
+            les_list = None
+            ctr_list = None  # Controls handled in folder mode
+            utils.logging_rank_0(
+                f'Folder mode: matched {sum(len(fold) for fold in img_list)} subjects across {args.folds_number} folds',
+                dist.get_rank()
+            )
+        else:
+            # Single folder scan mode (backward compatible)
+            single_path = args.input_path[0] if isinstance(args.input_path, list) else args.input_path
+            utils.logging_rank_0(f'Input image directory : {single_path}', dist.get_rank())
+            img_list = utils.create_input_path_list_from_root(single_path)
+            if single_path == args.output:
+                raise ValueError("The output directory CANNOT be the input directory")
     # So args.input_list is not None
     elif args.input_list is not None:
         utils.logging_rank_0(f'Input image list : {args.input_list}', dist.get_rank())
@@ -305,43 +592,6 @@ def main_worker(local_rank, args, kwargs):
         with open(args.seg_input_dict, 'r') as f:
             seg_input_dict = json.load(f)
         img_list = [img_path for sublist in seg_input_dict for img_path in sublist]
-    elif args.image_folders is not None:
-        # Folder-based multi-modal mode
-        if args.label_folder is None:
-            raise ValueError("--label-folder is required when using --image-folders")
-
-        utils.logging_rank_0('Using folder-based multi-modal mode', dist.get_rank())
-
-        # Parse image_folders format: "dwi:data/dwi adc:data/adc"
-        image_folders_dict = {}
-        for pair in args.image_folders.split():
-            if ':' not in pair:
-                raise ValueError(
-                    f"Invalid format for --image-folders: '{pair}'. "
-                    f"Expected format: 'modality:path' (e.g., 'dwi:data/dwi')"
-                )
-            modality, folder_path = pair.split(':', 1)
-            image_folders_dict[modality] = Path(folder_path)
-
-        utils.logging_rank_0(f'Image modalities: {list(image_folders_dict.keys())}', dist.get_rank())
-        utils.logging_rank_0(f'Label folder: {args.label_folder}', dist.get_rank())
-        utils.logging_rank_0(f'Subject pattern: {args.subject_pattern}', dist.get_rank())
-
-        # Call folder converter to get SplitLists
-        img_list = folder_mode_to_split_lists(
-            image_folders=image_folders_dict,
-            label_folder=Path(args.label_folder),
-            n_folds=args.folds_number,
-            subject_pattern=args.subject_pattern,
-            random_seed=42
-        )
-
-        # Set les_list to None to signal that img_list is already in SplitLists format
-        les_list = None
-        utils.logging_rank_0(
-            f'Folder mode: matched {sum(len(fold) for fold in img_list)} subjects across {args.folds_number} folds',
-            dist.get_rank()
-        )
     else:
         img_list = utils.open_json(args.pretrained_split_list)
     # TODO not very pretty in the case of pretrained_split_list ...
@@ -350,13 +600,15 @@ def main_worker(local_rank, args, kwargs):
     if args.debug_img_num is not None:
         img_list = img_list[:args.debug_img_num]
 
-    # Skip lesion loading if using folder mode (already matched in SplitLists)
-    if args.image_folders is None:
+    # Skip lesion loading if using multi-modal folder mode (already matched in SplitLists)
+    if not is_multi_modal:
         utils.print_rank_0('loading input lesion label path list', dist.get_rank())
         if args.lesion_input_path is not None:
-            logging.info(f'Input lesion directory : {args.lesion_input_path}')
-            les_list = utils.create_input_path_list_from_root(args.lesion_input_path)
-            if args.lesion_input_path == args.output:
+            # Extract single path from list (nargs='*' always returns list)
+            single_lesion_path = args.lesion_input_path[0] if isinstance(args.lesion_input_path, list) else args.lesion_input_path
+            logging.info(f'Input lesion directory : {single_lesion_path}')
+            les_list = utils.create_input_path_list_from_root(single_lesion_path)
+            if single_lesion_path == args.output:
                 raise ValueError("The output directory CANNOT be the input directory")
         # So args.lesion_input_list is not None
         elif args.lesion_input_list is not None:
@@ -364,20 +616,22 @@ def main_worker(local_rank, args, kwargs):
             les_list = file_to_list(args.lesion_input_list)
         else:
             les_list = None
-    # if args.debug_img_num is not None and les_list is not None:
-    #     img_list = les_list[:args.debug_img_num]
-    if args.controls_path is not None:
-        ctr_list = utils.create_input_path_list_from_root(args.controls_path, pref=args.ctrl_image_prefix)
-        if args.controls_path == args.output:
-            raise ValueError("The output directory CANNOT be the input directory")
-    # So args.lesion_input_list is not None
-    elif args.controls_list is not None:
-        ctr_list = file_to_list(args.controls_list)
-        ctr_list = utils.get_str_path_list(ctr_list, pref=args.ctrl_image_prefix)
-    elif args.controls_pretrained_split_list is not None:
-        ctr_list = utils.open_json(args.controls_pretrained_split_list)
-    else:
-        ctr_list = None
+
+        # Controls for non-multi-modal mode
+        if args.controls_path is not None:
+            # Extract single path from list (nargs='*' always returns list)
+            single_control_path = args.controls_path[0] if isinstance(args.controls_path, list) else args.controls_path
+            ctr_list = utils.create_input_path_list_from_root(single_control_path, pref=args.ctrl_image_prefix)
+            if single_control_path == args.output:
+                raise ValueError("The output directory CANNOT be the input directory")
+        # So args.controls_list is not None
+        elif args.controls_list is not None:
+            ctr_list = file_to_list(args.controls_list)
+            ctr_list = utils.get_str_path_list(ctr_list, pref=args.ctrl_image_prefix)
+        elif args.controls_pretrained_split_list is not None:
+            ctr_list = utils.open_json(args.controls_pretrained_split_list)
+        else:
+            ctr_list = None
     if args.image_prefix is not None:
         b1000_pref = args.image_prefix
     else:

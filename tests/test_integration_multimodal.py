@@ -114,7 +114,7 @@ class TestMultiModalPipelineIntegration:
                 'dwi': temp_multimodal_dataset['dwi_folder'],
                 'adc': temp_multimodal_dataset['adc_folder']
             },
-            label_folder=temp_multimodal_dataset['label_folder'],
+            label_folders={'lesion': temp_multimodal_dataset['label_folder']},
             n_folds=3,
             subject_pattern=r'(sub-\d+)',
             random_seed=42
@@ -129,7 +129,7 @@ class TestMultiModalPipelineIntegration:
             for subject in fold:
                 assert 'image_adc' in subject
                 assert 'image_dwi' in subject
-                assert 'label' in subject
+                assert 'label_lesion' in subject
                 assert len(subject) == 3  # Exactly 3 keys
 
         # Step 2: Create a transform dict
@@ -147,25 +147,32 @@ class TestMultiModalPipelineIntegration:
         # Verify transform adaptation
         first_transform = adapted_dict['first_transform']
 
-        # LoadImaged should have image_adc, image_dwi, label
+        # LoadImaged should have image_adc, image_dwi, label_lesion (all expanded from patterns)
         load_keys = first_transform[0]['LoadImaged']['keys']
         assert 'image_adc' in load_keys
         assert 'image_dwi' in load_keys
-        assert 'label' in load_keys
-        assert 'image' not in load_keys  # Original 'image' replaced
+        assert 'label_lesion' in load_keys  # Pattern 'label' expanded to 'label_lesion'
+        assert 'image' not in load_keys  # Original 'image' pattern replaced
+        assert 'label' not in load_keys  # Original 'label' pattern replaced
 
-        # EnsureChannelFirstd should also have both image keys
+        # EnsureChannelFirstd should also have both image keys and label key
         ensure_keys = first_transform[1]['EnsureChannelFirstd']['keys']
         assert 'image_adc' in ensure_keys
         assert 'image_dwi' in ensure_keys
+        assert 'label_lesion' in ensure_keys
 
         # ConcatItemsd should be inserted at index 2
         assert 'ConcatItemsd' in first_transform[2]
         assert first_transform[2]['ConcatItemsd']['name'] == 'image'
         assert set(first_transform[2]['ConcatItemsd']['keys']) == {'image_adc', 'image_dwi'}
 
-        # NormalizeIntensityd should still use 'image' (concatenated result)
-        assert first_transform[3]['NormalizeIntensityd']['keys'] == ['image']
+        # CopyItemsd should be at index 3 (creates 'label' alias from 'label_lesion')
+        assert 'CopyItemsd' in first_transform[3]
+        assert first_transform[3]['CopyItemsd']['keys'] == 'label_lesion'
+        assert first_transform[3]['CopyItemsd']['names'] == 'label'
+
+        # NormalizeIntensityd should still use 'image' (concatenated result) - now at index 4
+        assert first_transform[4]['NormalizeIntensityd']['keys'] == ['image']
 
         # Step 4: Extract model config
         model_config = extract_model_config(split_lists)
@@ -179,7 +186,7 @@ class TestMultiModalPipelineIntegration:
         # Step 1: Convert folders to split_lists (single modality)
         split_lists = folder_mode_to_split_lists(
             image_folders={'t1': temp_single_modality_dataset['img_folder']},
-            label_folder=temp_single_modality_dataset['label_folder'],
+            label_folders={'lesion': temp_single_modality_dataset['label_folder']},
             n_folds=2,
             subject_pattern=r'(sub-\d+)',
             random_seed=42
@@ -193,7 +200,7 @@ class TestMultiModalPipelineIntegration:
         for fold in split_lists:
             for subject in fold:
                 assert 'image_t1' in subject  # Single modality with identifier
-                assert 'label' in subject
+                assert 'label_lesion' in subject
                 assert len(subject) == 2
 
         # Step 2: Transform dict
@@ -204,13 +211,15 @@ class TestMultiModalPipelineIntegration:
             ]
         }
 
-        # Step 3: Adapt transforms (should handle single modality)
+        # Step 3: Adapt transforms (should handle single modality with named label)
         adapted_dict = adapt_transforms_for_multimodal(transform_dict, split_lists)
 
-        # Verify LoadImaged uses image_t1
+        # Verify LoadImaged uses image_t1 and label_lesion (both patterns expanded)
         load_keys = adapted_dict['first_transform'][0]['LoadImaged']['keys']
         assert 'image_t1' in load_keys
-        assert 'label' in load_keys
+        assert 'label_lesion' in load_keys  # Pattern 'label' expanded to 'label_lesion'
+        assert 'image' not in load_keys  # Pattern replaced
+        assert 'label' not in load_keys  # Pattern replaced
 
         # Verify NO ConcatItemsd is added (single modality doesn't need concat)
         transform_names = [list(t.keys())[0] for t in adapted_dict['first_transform']]
@@ -252,7 +261,7 @@ class TestMultiModalPipelineIntegration:
         # Full pipeline test
         split_lists = folder_mode_to_split_lists(
             image_folders={'flair': flair_folder, 'dwi': dwi_folder, 'adc': adc_folder},
-            label_folder=label_folder,
+            label_folders={'lesion': label_folder},
             n_folds=2,
             subject_pattern=r'(sub-\d+)'
         )
@@ -262,7 +271,7 @@ class TestMultiModalPipelineIntegration:
         assert 'image_adc' in first_subject
         assert 'image_dwi' in first_subject
         assert 'image_flair' in first_subject
-        assert 'label' in first_subject
+        assert 'label_lesion' in first_subject
 
         # Verify model config
         model_config = extract_model_config(split_lists)
@@ -287,6 +296,62 @@ class TestMultiModalPipelineIntegration:
         # Verify alphabetical ordering
         assert concat_keys == ['image_adc', 'image_dwi', 'image_flair']
 
+    def test_label_key_expansion(self, temp_multimodal_dataset):
+        """Test that 'label' pattern is expanded to actual label keys."""
+        # Create split_lists with named label
+        split_lists = folder_mode_to_split_lists(
+            image_folders={
+                'dwi': temp_multimodal_dataset['dwi_folder'],
+                'adc': temp_multimodal_dataset['adc_folder']
+            },
+            label_folders={'stroke': temp_multimodal_dataset['label_folder']},
+            n_folds=2,
+            subject_pattern=r'(sub-\d+)'
+        )
+
+        # Verify data has named label
+        first_subject = split_lists[0][0]
+        assert 'label_stroke' in first_subject
+
+        # Create transform dict with pattern keys
+        transform_dict = {
+            'first_transform': [
+                {'LoadImaged': {'keys': ['image', 'label']}},
+                {'EnsureChannelFirstd': {'keys': ['image', 'label']}},
+                {'NormalizeIntensityd': {'keys': ['image']}},
+                {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
+            ]
+        }
+
+        # Adapt transforms
+        adapted_dict = adapt_transforms_for_multimodal(transform_dict, split_lists)
+        first_transform = adapted_dict['first_transform']
+
+        # LoadImaged: 'label' pattern should be expanded to 'label_stroke'
+        load_keys = first_transform[0]['LoadImaged']['keys']
+        assert 'label_stroke' in load_keys
+        assert 'label' not in load_keys  # Pattern replaced
+
+        # EnsureChannelFirstd: also should have 'label_stroke'
+        ensure_keys = first_transform[1]['EnsureChannelFirstd']['keys']
+        assert 'label_stroke' in ensure_keys
+        assert 'label' not in ensure_keys
+
+        # ConcatItemsd should be at index 2 (for multi-modal images)
+        assert 'ConcatItemsd' in first_transform[2]
+
+        # CopyItemsd should be at index 3 (creates 'label' alias from 'label_stroke')
+        assert 'CopyItemsd' in first_transform[3]
+        assert first_transform[3]['CopyItemsd']['keys'] == 'label_stroke'
+        assert first_transform[3]['CopyItemsd']['names'] == 'label'
+
+        # NormalizeIntensityd at index 4 still uses 'image' (from ConcatItemsd)
+        assert first_transform[4]['NormalizeIntensityd']['keys'] == ['image']
+
+        # Binarized at index 5 uses 'label' (from CopyItemsd alias)
+        binarized_keys = first_transform[5]['Binarized']['keys']
+        assert binarized_keys == ['label']  # Uses alias created by CopyItemsd
+
     def test_file_existence_verification(self, temp_multimodal_dataset):
         """Verify that all files in split_lists actually exist."""
         split_lists = folder_mode_to_split_lists(
@@ -294,7 +359,7 @@ class TestMultiModalPipelineIntegration:
                 'dwi': temp_multimodal_dataset['dwi_folder'],
                 'adc': temp_multimodal_dataset['adc_folder']
             },
-            label_folder=temp_multimodal_dataset['label_folder'],
+            label_folders={'lesion': temp_multimodal_dataset['label_folder']},
             n_folds=3,
             subject_pattern=r'(sub-\d+)'
         )
