@@ -186,6 +186,7 @@ def training(img_path_list: Sequence,
              limit_of_open_files=None,
              debug=False,
              feature_size=None,
+             network_depth=None,
              **kwargs
              ):
     """
@@ -543,6 +544,16 @@ def training(img_path_list: Sequence,
                     hyper_params['feature_size'] = int(feature_size)
                 elif 'feature_size' in kwargs:
                     hyper_params['feature_size'] = int(kwargs['feature_size'])
+
+                # Apply network_depth if specified (for UNETR/SwinUNETR)
+                if network_depth is not None:
+                    # Convert network_depth (4 or 5) to depths list
+                    # Depth 4: [2, 2, 2, 2], Depth 5: [2, 2, 2, 2, 2]
+                    depths_list = [2] * network_depth
+                    hyper_params['depths'] = depths_list
+                elif 'network_depth' in kwargs:
+                    depths_list = [2] * int(kwargs['network_depth'])
+                    hyper_params['depths'] = depths_list
             else:
                 hyper_params = net.default_unet_hyper_params
 

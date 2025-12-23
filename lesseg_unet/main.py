@@ -9,6 +9,8 @@ import re
 from monai.config import print_config
 from lesseg_unet import utils, training, segmentation
 from lesseg_unet.data_utils import folder_mode_to_split_lists
+from lesseg_unet.hardware import get_hardware_profile
+from lesseg_unet.auto_config import AutoConfigurator, DatasetProfile, TrainingConfig
 from bcblib.tools.nifti_utils import file_to_list, overlaps_subfolders, nifti_overlap_images
 import lesseg_unet.data.transform_dicts as tr_dicts
 import nibabel as nib
@@ -376,6 +378,31 @@ def main():
     # DEBUG options
     parser.add_argument('--debug', action='store_true', help='debug mode')
     parser.add_argument('-din', '--debug_img_num', type=int, help='Number of images from the input list')
+
+    # Auto-configuration options
+    parser.add_argument('--auto_config', action='store_true',
+                        help='Enable hardware-aware auto-configuration for training parameters')
+    parser.add_argument('--num_gpus', type=int, default=None,
+                        help='Number of GPUs to use for training (default: 1 if --auto_config, else all available)')
+    parser.add_argument('--network_depth', type=int, choices=[4, 5],
+                        help='Network depth (4 or 5 layers). Auto-configured if --auto_config is set')
+    parser.add_argument('--vram_safety_margin', type=float, default=0.95,
+                        help='VRAM safety margin for auto-configuration (0.0-1.0, default: 0.95)')
+    parser.add_argument('--auto_config_target', type=str, default='balanced', choices=['speed', 'memory', 'balanced'],
+                        help='Auto-configuration optimization target (default: balanced)')
+    parser.add_argument('--no_dryrun', action='store_true',
+                        help='Skip dry-run validation before training (default: perform dry-run)')
+    parser.add_argument('--override_batch_size', type=int,
+                        help='Override auto-configured batch size')
+    parser.add_argument('--override_patch_size', type=str,
+                        help='Override auto-configured patch size (format: H,W,D, e.g., 96,96,96)')
+    parser.add_argument('--override_num_workers', type=int,
+                        help='Override auto-configured num_workers')
+    parser.add_argument('--override_network_depth', type=int, choices=[4, 5],
+                        help='Override auto-configured network depth')
+    parser.add_argument('--override_feature_size', type=int,
+                        help='Override auto-configured feature size')
+
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args()
 
@@ -687,6 +714,164 @@ def main_worker(local_rank, args, kwargs):
     train_val_percentage = None
     if args.train_val is not None:
         train_val_percentage = args.train_val
+
+    # ===== AUTO-CONFIGURATION LOGIC =====
+    if args.auto_config and args.checkpoint is None:
+        utils.logging_rank_0('=' * 70, dist.get_rank())
+        utils.logging_rank_0('Hardware-Aware Auto-Configuration', dist.get_rank())
+        utils.logging_rank_0('=' * 70, dist.get_rank())
+
+        # Detect hardware
+        hw_profile = get_hardware_profile()
+        utils.logging_rank_0(f'Device: {hw_profile.device_type}', dist.get_rank())
+        utils.logging_rank_0(f'GPUs detected: {len(hw_profile.gpus)}', dist.get_rank())
+        for gpu in hw_profile.gpus:
+            utils.logging_rank_0(f'  - {gpu.name}: {gpu.total_memory_mb / 1024:.1f} GB', dist.get_rank())
+        utils.logging_rank_0(f'CPU cores: {hw_profile.cpu.available_cores}', dist.get_rank())
+        utils.logging_rank_0(f'RAM: {hw_profile.cpu.total_ram_gb:.1f} GB', dist.get_rank())
+
+        # Analyze dataset to get median image size
+        utils.logging_rank_0('\nAnalyzing dataset characteristics...', dist.get_rank())
+        import nibabel as nib
+        import numpy as np
+        sample_images = []
+        if isinstance(img_list[0], list):
+            # Split lists format
+            for fold in img_list[:min(3, len(img_list))]:  # Sample first 3 folds
+                sample_images.extend(fold[:min(10, len(fold))])  # Up to 10 images per fold
+        else:
+            # Simple list format
+            sample_images = img_list[:min(30, len(img_list))]  # Sample up to 30 images
+
+        image_shapes = []
+        for img_path in sample_images:
+            try:
+                img = nib.load(img_path)
+                image_shapes.append(img.shape[:3])  # Only spatial dims
+            except Exception as e:
+                utils.logging_rank_0(f'Warning: Could not load {img_path}: {e}', dist.get_rank())
+
+        if not image_shapes:
+            raise ValueError("Could not load any images to analyze dataset")
+
+        median_shape = tuple(int(np.median([s[i] for s in image_shapes])) for i in range(3))
+        utils.logging_rank_0(f'Median image size: {median_shape}', dist.get_rank())
+
+        # Count in_channels from multi-modal setup
+        if is_multi_modal and hasattr(img_list, '__len__') and len(img_list) > 0:
+            if isinstance(img_list[0], dict):
+                in_channels = len(img_list[0])  # Multi-modal dict
+            else:
+                in_channels = 1  # Single modality
+        else:
+            in_channels = 1
+
+        # Count out_channels
+        out_channels = 1  # Default binary segmentation
+        if les_list is not None and isinstance(les_list, list) and len(les_list) > 0:
+            if isinstance(les_list[0], dict):
+                out_channels = len(les_list[0])  # Multi-class
+
+        # Determine storage type (simplified - assume SSD)
+        storage_type = 'ssd'  # Default
+
+        # Create dataset profile
+        dataset_profile = DatasetProfile(
+            median_image_size=median_shape,
+            num_subjects=len(sample_images),
+            in_channels=in_channels,
+            out_channels=out_channels,
+            storage_type=storage_type
+        )
+
+        # Normalize model_type to lowercase
+        model_type_normalized = args.model_type.lower()
+
+        # Create configurator
+        configurator = AutoConfigurator(
+            hardware_profile=hw_profile,
+            dataset_profile=dataset_profile,
+            model_type=model_type_normalized,
+            target=args.auto_config_target,
+            vram_safety_margin=args.vram_safety_margin,
+            num_gpus=args.num_gpus
+        )
+
+        # Parse override_patch_size if provided
+        override_patch_size = None
+        if args.override_patch_size:
+            try:
+                override_patch_size = tuple(int(x) for x in args.override_patch_size.split(','))
+                if len(override_patch_size) != 3:
+                    raise ValueError("Patch size must have 3 dimensions")
+            except Exception as e:
+                raise ValueError(f"Invalid patch size format: {args.override_patch_size}. Use H,W,D (e.g., 96,96,96)")
+
+        # Get suggested configuration
+        auto_config_result = configurator.suggest_config(
+            override_batch_size=args.override_batch_size,
+            override_patch_size=override_patch_size,
+            override_num_workers=args.override_num_workers,
+            override_network_depth=args.override_network_depth,
+            override_feature_size=args.override_feature_size
+        )
+
+        # Display configuration
+        utils.logging_rank_0('\nSuggested Configuration:', dist.get_rank())
+        utils.logging_rank_0(f'  batch_size: {auto_config_result.batch_size}', dist.get_rank())
+        utils.logging_rank_0(f'  patch_size: {auto_config_result.patch_size}', dist.get_rank())
+        utils.logging_rank_0(f'  num_workers: {auto_config_result.num_workers}', dist.get_rank())
+        utils.logging_rank_0(f'  network_depth: {auto_config_result.network_depth}', dist.get_rank())
+        utils.logging_rank_0(f'  feature_size: {auto_config_result.feature_size}', dist.get_rank())
+        utils.logging_rank_0(f'  use_amp: {auto_config_result.use_amp}', dist.get_rank())
+        utils.logging_rank_0(f'  num_gpus: {auto_config_result.num_gpus}', dist.get_rank())
+
+        mem = auto_config_result.memory_estimate
+        utils.logging_rank_0(f'\nMemory Estimate: {mem["total_gb"]:.2f} GB', dist.get_rank())
+        utils.logging_rank_0(f'  Parameters:   {mem["params_mb"]:>8.1f} MB', dist.get_rank())
+        utils.logging_rank_0(f'  Optimizer:    {mem["optimizer_mb"]:>8.1f} MB', dist.get_rank())
+        utils.logging_rank_0(f'  Activations:  {mem["activations_mb"]:>8.1f} MB', dist.get_rank())
+        utils.logging_rank_0(f'  Gradients:    {mem["gradients_mb"]:>8.1f} MB', dist.get_rank())
+
+        if hw_profile.gpus:
+            vram_gb = hw_profile.gpus[0].total_memory_mb / 1024
+            usage_pct = (mem['total_gb'] / vram_gb) * 100
+            utils.logging_rank_0(f'  VRAM Usage: {usage_pct:.1f}% of {vram_gb:.1f} GB', dist.get_rank())
+
+        utils.logging_rank_0('\nReasoning:', dist.get_rank())
+        for key, reason in auto_config_result.reasoning.items():
+            utils.logging_rank_0(f'  {key}: {reason}', dist.get_rank())
+
+        # Apply configuration to args
+        args.batch_size = auto_config_result.batch_size
+        args.num_workers = auto_config_result.num_workers
+        args.network_depth = auto_config_result.network_depth
+        args.feature_size = auto_config_result.feature_size
+        args.disable_mixed_precision = not auto_config_result.use_amp
+
+        # Save configuration
+        training_config = TrainingConfig.from_auto_config(
+            auto_config_result,
+            hardware_profile=hw_profile.to_dict(),
+            command=' '.join(sys.argv),
+            learning_rate=args.learning_rate,
+            num_epochs=args.num_epochs,
+            model_type=args.model_type,
+            user_overrides={
+                'batch_size': args.override_batch_size,
+                'patch_size': override_patch_size,
+                'num_workers': args.override_num_workers,
+                'network_depth': args.override_network_depth,
+                'feature_size': args.override_feature_size
+            } if any([args.override_batch_size, override_patch_size, args.override_num_workers,
+                     args.override_network_depth, args.override_feature_size]) else {}
+        )
+        training_config.save(output_root / 'auto_config.yaml', overwrite=True)
+        utils.logging_rank_0(f'\nConfiguration saved to: {output_root / "auto_config.yaml"}', dist.get_rank())
+        utils.logging_rank_0('=' * 70, dist.get_rank())
+
+    # ===== END AUTO-CONFIGURATION LOGIC =====
+
     if args.checkpoint is None and args.seg_input_dict is None:
         if train_val_percentage is None:
             train_val_percentage = 75
@@ -751,6 +936,7 @@ def main_worker(local_rank, args, kwargs):
                           limit_of_open_files=args.limit_of_open_files,
                           debug=args.debug,
                           feature_size=args.feature_size,
+                          network_depth=args.network_depth if hasattr(args, 'network_depth') else None,
                           **kwargs)
     else:
         if args.checkpoint is None:
