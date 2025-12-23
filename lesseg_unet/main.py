@@ -363,7 +363,7 @@ def main():
     parser.add_argument('-ics', '--image_cut_suffix', type=str,
                         help='Suffix to cut the lesion file name (keep left part) in case the filename without the '
                              '.nii extension cannot be found')
-    parser.add_argument('-nf', '--folds_number', default=1, type=int, help='Set a dropout value for the model')
+    parser.add_argument('-nf', '--folds_number', default=5, type=int, help='Number of folds for cross-validation (default: 5)')
     # Datasets and Loaders parameters
     parser.add_argument('-nw', '--num_workers', default=4, type=int, help='Number of dataloader workers')
     parser.add_argument('-bs', '--batch_size', default=10, type=int, help='Batch size for the training loop')
@@ -929,22 +929,24 @@ def main_worker(local_rank, args, kwargs):
         args.feature_size = auto_config_result.feature_size
         args.disable_mixed_precision = not auto_config_result.use_amp
 
-        # Constrain batch_size by actual fold size (drop_last=True requires batch_size <= dataset size)
-        # Get smallest fold size (conservative - use validation fold as training might be larger)
-        if isinstance(img_list, list) and img_list:
+        # Constrain batch_size by actual training set size (drop_last=True requires batch_size <= dataset size)
+        # In k-fold CV, training uses (k-1) folds, so calculate training set size
+        if isinstance(img_list, list) and img_list and len(img_list) > 1:
             # Multi-modal folder mode returns list of lists (folds)
+            total_subjects = sum(len(fold) for fold in img_list)
             min_fold_size = min(len(fold) for fold in img_list)
-            # Each sample produces num_samples patches (from RandCropByPosNegLabeld)
-            num_samples = 4  # Must match transform_dict default
-            max_patches_per_epoch = min_fold_size * num_samples
+            # Training uses all folds except one (k-1 folds for k-fold CV)
+            training_set_size = total_subjects - min_fold_size
 
-            if args.batch_size > max_patches_per_epoch:
+            # Note: num_samples in RandCropByPosNegLabeld doesn't expand dataset size,
+            # it just determines patches per image during transform. Dataset length = number of images.
+            if args.batch_size > training_set_size:
                 old_batch = args.batch_size
-                args.batch_size = max(1, max_patches_per_epoch)
+                args.batch_size = max(1, training_set_size)
                 utils.logging_rank_0(
-                    f'\nWARNING: Batch size reduced {old_batch}→{args.batch_size} due to small fold size '
-                    f'(fold has {min_fold_size} samples × {num_samples} patches/sample = {max_patches_per_epoch} patches total). '
-                    f'Consider using fewer folds (-nf) or reducing batch size override.',
+                    f'\nWARNING: Batch size reduced {old_batch}→{args.batch_size} due to small training set '
+                    f'(with {args.folds_number}-fold CV, training uses {training_set_size} subjects). '
+                    f'Consider using fewer folds (-nf 2) or override batch size.',
                     dist.get_rank()
                 )
                 # Also reduce validation batch proportionally
