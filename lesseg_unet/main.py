@@ -97,7 +97,11 @@ def validate_multimodal_arguments(args):
     """
     # Validate image modalities
     if args.input_path and len(args.input_path) > 1:
+        # Filter out empty strings from paths
+        args.input_path = [p for p in args.input_path if p]
         if args.image_modality_names:
+            # Filter out empty strings
+            args.image_modality_names = [name for name in args.image_modality_names if name]
             if len(args.image_modality_names) != len(args.input_path):
                 raise ValueError(
                     f"Image modality count mismatch: {len(args.image_modality_names)} names provided "
@@ -108,7 +112,11 @@ def validate_multimodal_arguments(args):
 
     # Validate label classes
     if args.lesion_input_path and len(args.lesion_input_path) > 1:
+        # Filter out empty strings from paths
+        args.lesion_input_path = [p for p in args.lesion_input_path if p]
         if args.label_modality_names:
+            # Filter out empty strings
+            args.label_modality_names = [name for name in args.label_modality_names if name]
             if len(args.label_modality_names) != len(args.lesion_input_path):
                 raise ValueError(
                     f"Label class count mismatch: {len(args.label_modality_names)} names provided "
@@ -120,6 +128,8 @@ def validate_multimodal_arguments(args):
     # Validate control modalities
     if args.controls_path and len(args.controls_path) > 1:
         if args.control_modality_names:
+            # Filter out empty strings
+            args.control_modality_names = [name for name in args.control_modality_names if name]
             if len(args.control_modality_names) != len(args.controls_path):
                 raise ValueError(
                     f"Control modality count mismatch: {len(args.control_modality_names)} names provided "
@@ -747,7 +757,19 @@ def main_worker(local_rank, args, kwargs):
         image_shapes = []
         for img_path in sample_images:
             try:
-                img = nib.load(img_path)
+                # Handle multi-modal dictionaries
+                if isinstance(img_path, dict):
+                    # Extract first image path (not label)
+                    image_keys = [k for k in img_path.keys() if k.startswith('image_')]
+                    if image_keys:
+                        actual_path = img_path[image_keys[0]]
+                    else:
+                        # Fallback to first key if no image_ prefix found
+                        actual_path = list(img_path.values())[0]
+                else:
+                    actual_path = img_path
+
+                img = nib.load(actual_path)
                 image_shapes.append(img.shape[:3])  # Only spatial dims
             except Exception as e:
                 utils.logging_rank_0(f'Warning: Could not load {img_path}: {e}', dist.get_rank())
@@ -760,8 +782,14 @@ def main_worker(local_rank, args, kwargs):
 
         # Count in_channels from multi-modal setup
         if is_multi_modal and hasattr(img_list, '__len__') and len(img_list) > 0:
-            if isinstance(img_list[0], dict):
-                in_channels = len(img_list[0])  # Multi-modal dict
+            # Handle split lists format (list of folds)
+            sample_item = img_list[0]
+            if isinstance(sample_item, list) and len(sample_item) > 0:
+                sample_item = sample_item[0]  # Get first item from first fold
+
+            if isinstance(sample_item, dict):
+                # Count image_ keys only (not labels)
+                in_channels = len([k for k in sample_item.keys() if k.startswith('image_')])
             else:
                 in_channels = 1  # Single modality
         else:
@@ -770,8 +798,16 @@ def main_worker(local_rank, args, kwargs):
         # Count out_channels
         out_channels = 1  # Default binary segmentation
         if les_list is not None and isinstance(les_list, list) and len(les_list) > 0:
-            if isinstance(les_list[0], dict):
-                out_channels = len(les_list[0])  # Multi-class
+            # Handle split lists format (list of folds)
+            sample_label = les_list[0]
+            if isinstance(sample_label, list) and len(sample_label) > 0:
+                sample_label = sample_label[0]  # Get first item from first fold
+
+            if isinstance(sample_label, dict):
+                # Count label_ keys only
+                out_channels = len([k for k in sample_label.keys() if k.startswith('label_')])
+                if out_channels == 0:
+                    out_channels = 1  # Fallback
 
         # Determine storage type (simplified - assume SSD)
         storage_type = 'ssd'  # Default

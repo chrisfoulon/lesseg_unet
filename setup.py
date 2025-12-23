@@ -8,7 +8,7 @@ def read(fname):
 
 setup(
     name='lesseg_unet',        # This is the name of your PyPI-package.
-    version='2.0.0',     # Updated for PyTorch 2.7 migration
+    version='2.0.1',     # Fixed multi-modal auto-config dataset analysis
     python_requires='>=3.11',  # Required by scipy 1.16.3
     zip_safe=True,
     include_package_data=True,
