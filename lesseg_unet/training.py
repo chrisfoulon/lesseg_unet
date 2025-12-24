@@ -545,6 +545,14 @@ def training(img_path_list: Sequence,
                 elif 'feature_size' in kwargs:
                     hyper_params['feature_size'] = int(kwargs['feature_size'])
 
+                # Apply gradient checkpointing if specified (SwinUNETR only)
+                if model_type.lower() == 'swinunetr' and 'use_checkpoint' in kwargs:
+                    hyper_params['use_checkpoint'] = kwargs['use_checkpoint']
+                    utils.logging_rank_0(
+                        f'SwinUNETR gradient checkpointing: {kwargs["use_checkpoint"]}',
+                        dist.get_rank()
+                    )
+
                 # Apply network_depth if specified (for UNETR/SwinUNETR)
                 if network_depth is not None:
                     # Convert network_depth (4 or 5) to depths list

@@ -510,3 +510,86 @@ def suggest_use_amp(
     )
 
     return all_support_amp
+
+
+def suggest_use_checkpoint(
+    vram_gb: float,
+    model_type: Literal['swinunetr', 'unet'] = 'swinunetr',
+    target: Literal['speed', 'memory', 'balanced'] = 'balanced'
+) -> bool:
+    """Suggest whether to use gradient checkpointing.
+
+    Parameters
+    ----------
+    vram_gb : float
+        Available VRAM per GPU in GB.
+    model_type : {'swinunetr', 'unet'}
+        Model architecture type. Default: 'swinunetr'.
+    target : {'speed', 'memory', 'balanced'}
+        Optimization target. Default: 'balanced'.
+
+    Returns
+    -------
+    bool
+        True if gradient checkpointing should be enabled.
+
+    Notes
+    -----
+    Gradient checkpointing trades compute for memory by recomputing
+    activations during backward pass instead of storing them.
+
+    Trade-offs:
+    - Memory reduction: ~40-50% (activations halved)
+    - Training slowdown: ~15-25% (recomputation cost)
+
+    Recommendations:
+    - SwinUNETR + VRAM < 6 GB: ALWAYS enable (critical for small GPUs)
+    - SwinUNETR + VRAM 6-8 GB: Enable if target='memory'
+    - SwinUNETR + VRAM > 8 GB: Disable (unnecessary overhead)
+    - UNet: Disable (UNet is already memory-efficient)
+
+    Examples
+    --------
+    >>> # Tiny GPU (3.65 GB) with SwinUNETR
+    >>> use_checkpoint = suggest_use_checkpoint(vram_gb=3.65, model_type='swinunetr')
+    >>> print(use_checkpoint)  # True
+
+    >>> # Large GPU (11 GB) with SwinUNETR
+    >>> use_checkpoint = suggest_use_checkpoint(vram_gb=11.0, model_type='swinunetr')
+    >>> print(use_checkpoint)  # False
+
+    >>> # Small GPU with UNet (already efficient)
+    >>> use_checkpoint = suggest_use_checkpoint(vram_gb=4.0, model_type='unet')
+    >>> print(use_checkpoint)  # False
+    """
+    if model_type != 'swinunetr':
+        # UNet is already memory-efficient, checkpointing not needed
+        logger.info(
+            f"Suggested use_checkpoint=False for {model_type} "
+            f"(model is already memory-efficient)"
+        )
+        return False
+
+    # Critical threshold: < 6 GB always needs checkpointing
+    if vram_gb < 6.0:
+        logger.info(
+            f"Suggested use_checkpoint=True for {model_type} "
+            f"({vram_gb:.1f}GB < 6GB threshold - critical for small GPU)"
+        )
+        return True
+
+    # 6-8 GB: depends on target
+    if 6.0 <= vram_gb < 8.0:
+        enable = target == 'memory'
+        logger.info(
+            f"Suggested use_checkpoint={enable} for {model_type} "
+            f"({vram_gb:.1f}GB, target={target})"
+        )
+        return enable
+
+    # > 8 GB: no need for checkpointing (unnecessary slowdown)
+    logger.info(
+        f"Suggested use_checkpoint=False for {model_type} "
+        f"({vram_gb:.1f}GB > 8GB - sufficient memory)"
+    )
+    return False

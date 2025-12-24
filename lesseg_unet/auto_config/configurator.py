@@ -59,6 +59,8 @@ class AutoConfigResult:
         Suggested model feature size.
     use_amp : bool
         Whether to use automatic mixed precision.
+    use_checkpoint : bool
+        Whether to use gradient checkpointing (SwinUNETR only).
     num_gpus : int
         Number of GPUs to use.
     vram_safety_margin : float
@@ -76,6 +78,7 @@ class AutoConfigResult:
     network_depth: int
     feature_size: int
     use_amp: bool
+    use_checkpoint: bool
     num_gpus: int
     vram_safety_margin: float
     reasoning: dict[str, str] = field(default_factory=dict)
@@ -97,6 +100,7 @@ class AutoConfigResult:
             'network_depth': self.network_depth,
             'feature_size': self.feature_size,
             'use_amp': self.use_amp,
+            'use_checkpoint': self.use_checkpoint,
             'num_gpus': self.num_gpus,
             'vram_safety_margin': self.vram_safety_margin,
             'reasoning': self.reasoning,
@@ -243,6 +247,25 @@ class AutoConfigurator:
             else "GPU(s) do not support mixed precision or using CPU"
         )
 
+        # Step 1b: Suggest gradient checkpointing (SwinUNETR memory optimization)
+        vram_gb = self._get_vram_per_gpu()
+        use_checkpoint = heuristics.suggest_use_checkpoint(
+            vram_gb=vram_gb,
+            model_type=self.model_type,
+            target=self.target
+        )
+        if use_checkpoint:
+            self.reasoning['use_checkpoint'] = (
+                f"Enabled gradient checkpointing for {self.model_type} "
+                f"({vram_gb:.1f}GB VRAM < 6GB threshold). "
+                f"Reduces memory ~40-50% at cost of ~20% slower training."
+            )
+        else:
+            self.reasoning['use_checkpoint'] = (
+                f"Disabled gradient checkpointing "
+                f"(sufficient VRAM: {vram_gb:.1f}GB or model is memory-efficient)"
+            )
+
         # Step 2: Suggest network depth
         if override_network_depth is not None:
             network_depth = override_network_depth
@@ -299,7 +322,8 @@ class AutoConfigurator:
             patch_size=patch_size,
             network_depth=network_depth,
             feature_size=feature_size,
-            use_amp=use_amp
+            use_amp=use_amp,
+            use_checkpoint=use_checkpoint
         )
 
         # Step 6: Suggest batch size
@@ -416,6 +440,7 @@ class AutoConfigurator:
             network_depth=network_depth,
             feature_size=feature_size,
             use_amp=use_amp,
+            use_checkpoint=use_checkpoint,
             num_gpus=self.num_gpus,
             vram_safety_margin=self.vram_safety_margin,
             reasoning=self.reasoning,
@@ -513,7 +538,8 @@ class AutoConfigurator:
         patch_size: tuple[int, int, int],
         network_depth: int,
         feature_size: int,
-        use_amp: bool
+        use_amp: bool,
+        use_checkpoint: bool = False
     ):
         """Create appropriate memory calculator.
 
@@ -527,6 +553,8 @@ class AutoConfigurator:
             Model feature size.
         use_amp : bool
             Whether using mixed precision.
+        use_checkpoint : bool
+            Whether using gradient checkpointing (SwinUNETR only).
 
         Returns
         -------
@@ -541,7 +569,8 @@ class AutoConfigurator:
                 out_channels=self.dataset.out_channels,
                 feature_size=feature_size,
                 depths=depths,
-                use_mixed_precision=use_amp
+                use_mixed_precision=use_amp,
+                use_checkpoint=use_checkpoint
             )
         else:  # unet
             # UNet channels based on feature_size

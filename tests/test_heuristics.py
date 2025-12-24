@@ -367,3 +367,80 @@ class TestSuggestUseAmp:
         use_amp = heuristics.suggest_use_amp(gpus, model_type='swinunetr')
 
         assert use_amp is False
+
+
+class TestSuggestUseCheckpoint:
+    """Test suggest_use_checkpoint heuristic."""
+
+    def test_use_checkpoint_tiny_gpu_swinunetr(self):
+        """Test checkpointing enabled for tiny GPU (3.65 GB) with SwinUNETR."""
+        use_checkpoint = heuristics.suggest_use_checkpoint(
+            vram_gb=3.65,
+            model_type='swinunetr'
+        )
+
+        assert use_checkpoint is True
+
+    def test_use_checkpoint_small_gpu_swinunetr(self):
+        """Test checkpointing enabled for small GPU (4 GB) with SwinUNETR."""
+        use_checkpoint = heuristics.suggest_use_checkpoint(
+            vram_gb=4.0,
+            model_type='swinunetr'
+        )
+
+        assert use_checkpoint is True
+
+    def test_use_checkpoint_medium_gpu_balanced(self):
+        """Test checkpointing disabled for medium GPU (7 GB) with balanced target."""
+        use_checkpoint = heuristics.suggest_use_checkpoint(
+            vram_gb=7.0,
+            model_type='swinunetr',
+            target='balanced'
+        )
+
+        assert use_checkpoint is False
+
+    def test_use_checkpoint_medium_gpu_memory_target(self):
+        """Test checkpointing enabled for medium GPU (7 GB) with memory target."""
+        use_checkpoint = heuristics.suggest_use_checkpoint(
+            vram_gb=7.0,
+            model_type='swinunetr',
+            target='memory'
+        )
+
+        assert use_checkpoint is True
+
+    def test_use_checkpoint_large_gpu_swinunetr(self):
+        """Test checkpointing disabled for large GPU (11 GB) with SwinUNETR."""
+        use_checkpoint = heuristics.suggest_use_checkpoint(
+            vram_gb=11.0,
+            model_type='swinunetr'
+        )
+
+        assert use_checkpoint is False
+
+    def test_use_checkpoint_unet_always_false(self):
+        """Test checkpointing disabled for UNet (already memory-efficient)."""
+        # Small GPU
+        use_checkpoint_small = heuristics.suggest_use_checkpoint(
+            vram_gb=3.65,
+            model_type='unet'
+        )
+        assert use_checkpoint_small is False
+
+        # Large GPU
+        use_checkpoint_large = heuristics.suggest_use_checkpoint(
+            vram_gb=24.0,
+            model_type='unet'
+        )
+        assert use_checkpoint_large is False
+
+    def test_use_checkpoint_speed_target(self):
+        """Test checkpointing disabled for speed target (even medium GPU)."""
+        use_checkpoint = heuristics.suggest_use_checkpoint(
+            vram_gb=7.0,
+            model_type='swinunetr',
+            target='speed'
+        )
+
+        assert use_checkpoint is False

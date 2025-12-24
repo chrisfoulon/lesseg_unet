@@ -909,6 +909,7 @@ def main_worker(local_rank, args, kwargs):
         utils.logging_rank_0(f'  network_depth: {auto_config_result.network_depth}', dist.get_rank())
         utils.logging_rank_0(f'  feature_size: {auto_config_result.feature_size}', dist.get_rank())
         utils.logging_rank_0(f'  use_amp: {auto_config_result.use_amp}', dist.get_rank())
+        utils.logging_rank_0(f'  use_checkpoint: {auto_config_result.use_checkpoint}', dist.get_rank())
         utils.logging_rank_0(f'  num_gpus: {auto_config_result.num_gpus}', dist.get_rank())
 
         mem = auto_config_result.memory_estimate
@@ -935,6 +936,14 @@ def main_worker(local_rank, args, kwargs):
         args.network_depth = auto_config_result.network_depth
         args.feature_size = auto_config_result.feature_size
         args.disable_mixed_precision = not auto_config_result.use_amp
+
+        # Pass use_checkpoint to training via kwargs
+        if auto_config_result.use_checkpoint:
+            kwargs['use_checkpoint'] = True
+            utils.logging_rank_0(
+                'Gradient checkpointing enabled (VRAM optimization)',
+                dist.get_rank()
+            )
 
         # Constrain batch_size for small datasets (edge case: toy datasets with k-fold CV)
         # Rule: batch_size ≤ split_size / 2 (ensures minimum 2 batches per epoch with drop_last=True)

@@ -100,6 +100,9 @@ class SwinUNETRMemoryCalculator:
         Number of transformer blocks per stage (default: [2, 2, 2, 2, 2]).
     use_mixed_precision : bool
         Whether mixed precision (AMP) is used (default: True).
+    use_checkpoint : bool
+        Whether gradient checkpointing is enabled (default: False).
+        Reduces activation memory by ~50% at cost of ~20% slower training.
 
     Notes
     -----
@@ -133,7 +136,8 @@ class SwinUNETRMemoryCalculator:
         out_channels: int,
         feature_size: int = 48,
         depths: tuple[int, ...] | list[int] = (2, 2, 2, 2, 2),
-        use_mixed_precision: bool = True
+        use_mixed_precision: bool = True,
+        use_checkpoint: bool = False
     ):
         """Initialize memory calculator."""
         self.img_size = img_size
@@ -142,6 +146,7 @@ class SwinUNETRMemoryCalculator:
         self.feature_size = feature_size
         self.depths = tuple(depths) if isinstance(depths, list) else depths
         self.use_mixed_precision = use_mixed_precision
+        self.use_checkpoint = use_checkpoint
 
         # Bytes per element (mixed precision: avg of FP32 and FP16)
         self.bytes_per_element = 3 if use_mixed_precision else 4
@@ -255,6 +260,12 @@ class SwinUNETRMemoryCalculator:
 
         # Output
         activations_mb += (batch_size * self.out_channels * H * W * D * bytes_per_elem) / (1024 ** 2)
+
+        # Apply gradient checkpointing reduction
+        if self.use_checkpoint:
+            # Gradient checkpointing reduces activation memory by ~50%
+            # (recomputes activations during backward pass instead of storing them)
+            activations_mb = activations_mb * 0.5
 
         return activations_mb
 
