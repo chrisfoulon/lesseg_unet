@@ -286,10 +286,11 @@ class AutoConfigurator:
                 median_image_size=self.dataset.median_image_size,
                 network_depth=network_depth,
                 vram_gb=vram_gb,
-                target=self.target
+                target=self.target,
+                model_type=self.model_type
             )
             self.reasoning['patch_size'] = (
-                f"Patch {patch_size} optimal for median image "
+                f"Patch {patch_size} optimal for {self.model_type}, median image "
                 f"{self.dataset.median_image_size}, depth {network_depth}"
             )
 

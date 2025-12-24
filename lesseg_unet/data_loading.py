@@ -192,7 +192,6 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
     #     train_ds = CacheDataset(train_data_list, transform=train_img_transforms, cache_num=cache_num,
     #                             cache_rate=cache_rate)
     train_ds = Dataset(train_data_list, transform=train_img_transforms)
-    utils.print_rank_0(f'DEBUG: Training dataset created with {len(train_ds)} samples', rank)
     # data_loader_checker_first(train_ds, 'training')
     # define dataset, data loader
     utils.print_rank_0(f'Creating validation monai dataset', rank)

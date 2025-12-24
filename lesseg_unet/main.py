@@ -929,28 +929,42 @@ def main_worker(local_rank, args, kwargs):
         args.feature_size = auto_config_result.feature_size
         args.disable_mixed_precision = not auto_config_result.use_amp
 
-        # Constrain batch_size by actual training set size (drop_last=True requires batch_size <= dataset size)
-        # In k-fold CV, training uses (k-1) folds, so calculate training set size
+        # Constrain batch_size for small datasets (edge case: toy datasets with k-fold CV)
+        # Rule: batch_size ≤ split_size / 2 (ensures minimum 2 batches per epoch with drop_last=True)
+        # This only affects toy datasets; real datasets (1000+ samples) are never constrained.
         if isinstance(img_list, list) and img_list and len(img_list) > 1:
             # Multi-modal folder mode returns list of lists (folds)
             total_subjects = sum(len(fold) for fold in img_list)
             min_fold_size = min(len(fold) for fold in img_list)
-            # Training uses all folds except one (k-1 folds for k-fold CV)
-            training_set_size = total_subjects - min_fold_size
+            max_fold_size = max(len(fold) for fold in img_list)
 
-            # Note: num_samples in RandCropByPosNegLabeld doesn't expand dataset size,
-            # it just determines patches per image during transform. Dataset length = number of images.
-            if args.batch_size > training_set_size:
+            # Training uses (k-1) folds; validation uses 1 fold
+            # Use min_fold_size for training (worst case: largest fold is validation)
+            min_training_size = total_subjects - max_fold_size
+            val_set_size = max_fold_size  # Worst case: largest fold is validation
+
+            # Constrain batch_size ≤ training_set_size / 2
+            max_train_batch = max(1, min_training_size // 2)
+            if args.batch_size > max_train_batch:
                 old_batch = args.batch_size
-                args.batch_size = max(1, training_set_size)
+                args.batch_size = max_train_batch
                 utils.logging_rank_0(
-                    f'\nWARNING: Batch size reduced {old_batch}→{args.batch_size} due to small training set '
-                    f'(with {args.folds_number}-fold CV, training uses {training_set_size} subjects). '
-                    f'Consider using fewer folds (-nf 2) or override batch size.',
+                    f'\nWARNING: Batch size reduced {old_batch}→{args.batch_size} due to small dataset '
+                    f'(with {args.folds_number}-fold CV, training has ~{min_training_size} subjects). '
+                    f'Consider using fewer folds (e.g., -nf 2) to increase training set size.',
                     dist.get_rank()
                 )
-                # Also reduce validation batch proportionally
-                args.val_batch_size = max(1, int(args.val_batch_size * args.batch_size / old_batch))
+
+            # Constrain val_batch_size ≤ val_set_size / 2
+            max_val_batch = max(1, val_set_size // 2)
+            if args.val_batch_size > max_val_batch:
+                old_val_batch = args.val_batch_size
+                args.val_batch_size = max_val_batch
+                utils.logging_rank_0(
+                    f'WARNING: Validation batch size reduced {old_val_batch}→{args.val_batch_size} '
+                    f'due to small validation set (~{val_set_size} subjects).',
+                    dist.get_rank()
+                )
 
         # Update default transform_dict with auto-configured patch_size
         if transform_dict is not None and 'patches' in transform_dict:

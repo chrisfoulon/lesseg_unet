@@ -8,7 +8,7 @@ def read(fname):
 
 setup(
     name='lesseg_unet',        # This is the name of your PyPI-package.
-    version='2.0.4',     # Fixed batch_size constraint for k-fold CV training set size
+    version='2.0.5',     # Fixed SwinUNETR patch_size divisibility (must be divisible by 32, not 16)
     python_requires='>=3.11',  # Required by scipy 1.16.3
     zip_safe=True,
     include_package_data=True,

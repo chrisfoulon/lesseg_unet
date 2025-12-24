@@ -73,7 +73,8 @@ def suggest_patch_size(
     median_image_size: tuple[int, int, int],
     network_depth: int,
     vram_gb: float,
-    target: Literal['speed', 'memory', 'balanced'] = 'balanced'
+    target: Literal['speed', 'memory', 'balanced'] = 'balanced',
+    model_type: Literal['swinunetr', 'unet'] = 'unet'
 ) -> tuple[int, int, int]:
     """Suggest optimal patch size based on image size and network depth.
 
@@ -90,6 +91,8 @@ def suggest_patch_size(
         - 'speed': Larger patches (fewer per image, faster)
         - 'memory': Smaller patches (more per image, memory efficient)
         - 'balanced': Middle ground
+    model_type : {'swinunetr', 'unet'}
+        Model architecture type. Default: 'unet'.
 
     Returns
     -------
@@ -98,17 +101,24 @@ def suggest_patch_size(
 
     Notes
     -----
-    Patch sizes must be divisible by 2^(network_depth-1):
-    - Depth 4: divisible by 8 (2^3)
-    - Depth 5: divisible by 16 (2^4)
+    Patch sizes must be divisible by architecture requirements:
+    - SwinUNETR: divisible by 32 (2^5) - fixed requirement
+    - UNet: divisible by 2^(network_depth-1)
+      - Depth 4: divisible by 8 (2^3)
+      - Depth 5: divisible by 16 (2^4)
 
     Examples
     --------
-    >>> patch = suggest_patch_size((181, 217, 181), network_depth=5, vram_gb=24.0)
+    >>> patch = suggest_patch_size((181, 217, 181), network_depth=5, vram_gb=24.0, model_type='swinunetr')
     >>> print(f"Suggested patch: {patch}")
     """
-    # Divisibility requirement
-    divisor = 2 ** (network_depth - 1)  # Depth 4→8, Depth 5→16
+    # Divisibility requirement (architecture-specific)
+    if model_type == 'swinunetr':
+        # SwinUNETR always requires divisibility by 2^5 = 32
+        divisor = 32
+    else:  # unet
+        # UNet requires divisibility by 2^(depth-1)
+        divisor = 2 ** (network_depth - 1)  # Depth 4→8, Depth 5→16
 
     # Base patch sizes by target
     if target == 'speed':
