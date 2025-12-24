@@ -8,7 +8,7 @@ def read(fname):
 
 setup(
     name='lesseg_unet',        # This is the name of your PyPI-package.
-    version='2.0.6',     # Fixed memory calculator underestimation (added CuDNN workspace, peak/safety factors)
+    version='2.0.7',     # Added wildcard (None) support for tunable transform_dict parameters
     python_requires='>=3.11',  # Required by scipy 1.16.3
     zip_safe=True,
     include_package_data=True,

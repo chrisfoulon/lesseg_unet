@@ -697,14 +697,22 @@ def main_worker(local_rank, args, kwargs):
     else:
         utils.logging_rank_0('Using default transformation dictionary', dist.get_rank())
         # Build default transform_dict from patch_size
-        # Determine patch size from args (could be from auto-config or -ps)
-        if hasattr(args, 'patch_size') and args.patch_size is not None:
+        # Use None (wildcard) if auto-config enabled, otherwise use args.patch_size or fallback
+        if args.auto_config:
+            # Auto-config will tune patch_size - use wildcard (None)
+            roi_size = None
+            utils.logging_rank_0('Created default transform_dict with wildcard patch_size (auto-config will tune)', dist.get_rank())
+        elif hasattr(args, 'patch_size') and args.patch_size is not None:
+            # User specified patch_size via -ps
             if isinstance(args.patch_size, (list, tuple)) and len(args.patch_size) == 3:
                 roi_size = list(args.patch_size)
             else:
                 roi_size = [96, 96, 96]  # Fallback default
+            utils.logging_rank_0(f'Created default transform_dict with user-specified patch_size: {roi_size}', dist.get_rank())
         else:
-            roi_size = [96, 96, 96]  # Fallback default
+            # No auto-config, no user patch_size - use default
+            roi_size = [96, 96, 96]
+            utils.logging_rank_0(f'Created default transform_dict with default patch_size: {roi_size}', dist.get_rank())
 
         # Create minimal default transform dict with patches
         transform_dict = {
@@ -719,7 +727,7 @@ def main_worker(local_rank, args, kwargs):
                 {'RandCropByPosNegLabeld': {
                     'keys': ['image', 'label'],
                     'label_key': 'label',
-                    'spatial_size': roi_size,
+                    'spatial_size': roi_size,  # Can be None (wildcard) or list
                     'pos': 1,
                     'neg': 1,
                     'num_samples': 4}
@@ -727,7 +735,6 @@ def main_worker(local_rank, args, kwargs):
             ],
             'last_transform': []  # Empty last transform for post-processing
         }
-        utils.logging_rank_0(f'Created default transform_dict with patch size: {roi_size}', dist.get_rank())
     # Clamping or not clamping
     if args.clamp_low is not None:
         if args.clamp_high is not None:
@@ -966,17 +973,14 @@ def main_worker(local_rank, args, kwargs):
                     dist.get_rank()
                 )
 
-        # Update default transform_dict with auto-configured patch_size
-        if transform_dict is not None and 'patches' in transform_dict:
-            # Update the spatial_size in the patches transform
-            for transform in transform_dict['patches']:
-                if 'RandCropByPosNegLabeld' in transform:
-                    transform['RandCropByPosNegLabeld']['spatial_size'] = list(auto_config_result.patch_size)
-                    utils.logging_rank_0(
-                        f'Updated default transform_dict with auto-configured patch size: {auto_config_result.patch_size}',
-                        dist.get_rank()
-                    )
-                    break
+        # Fill wildcards in transform_dict with auto-configured values
+        if transform_dict is not None:
+            from lesseg_unet.auto_config import fill_wildcards
+            transform_dict = fill_wildcards(transform_dict, auto_config_result.patch_size)
+            utils.logging_rank_0(
+                f'Filled transform_dict wildcards with auto-configured patch_size: {auto_config_result.patch_size}',
+                dist.get_rank()
+            )
 
         # Save configuration
         training_config = TrainingConfig.from_auto_config(
