@@ -314,7 +314,7 @@ class AutoConfigurator:
                 target_usage=self.vram_safety_margin
             )
             # Estimate memory usage
-            memory_breakdown = memory_calculator.estimate_total_memory(batch_size)
+            memory_breakdown = memory_calculator.estimate_total_memory(batch_size, vram_gb=vram_gb)
             self.reasoning['batch_size'] = (
                 f"Batch {batch_size} uses ~{memory_breakdown.total_gb:.2f}GB / "
                 f"{vram_gb:.2f}GB ({memory_breakdown.total_gb/vram_gb*100:.0f}%)"
@@ -357,7 +357,7 @@ class AutoConfigurator:
                 logger.warning(ram_warning)
                 batch_size = constrained_batch
                 # Update memory estimate with constrained batch size
-                memory_breakdown = memory_calculator.estimate_total_memory(batch_size)
+                memory_breakdown = memory_calculator.estimate_total_memory(batch_size, vram_gb=vram_gb)
                 vram_gb = self._get_vram_per_gpu()
                 self.reasoning['batch_size'] = (
                     f"Batch {batch_size} constrained by DataLoader RAM "

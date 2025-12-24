@@ -8,7 +8,7 @@ def read(fname):
 
 setup(
     name='lesseg_unet',        # This is the name of your PyPI-package.
-    version='2.0.5',     # Fixed SwinUNETR patch_size divisibility (must be divisible by 32, not 16)
+    version='2.0.6',     # Fixed memory calculator underestimation (added CuDNN workspace, peak/safety factors)
     python_requires='>=3.11',  # Required by scipy 1.16.3
     zip_safe=True,
     include_package_data=True,

@@ -29,6 +29,8 @@ class MemoryBreakdown:
         Forward pass activations in MB.
     gradients_mb : float
         Backward pass gradients in MB.
+    cudnn_workspace_mb : float
+        CuDNN workspace for convolutions in MB.
     overhead_mb : float
         PyTorch/CUDA overhead in MB.
     fragmentation_mb : float
@@ -41,6 +43,7 @@ class MemoryBreakdown:
     optimizer_mb: float
     activations_mb: float
     gradients_mb: float
+    cudnn_workspace_mb: float
     overhead_mb: float
     fragmentation_mb: float
     total_mb: float
@@ -69,6 +72,7 @@ class MemoryBreakdown:
             'optimizer_mb': self.optimizer_mb,
             'activations_mb': self.activations_mb,
             'gradients_mb': self.gradients_mb,
+            'cudnn_workspace_mb': self.cudnn_workspace_mb,
             'overhead_mb': self.overhead_mb,
             'fragmentation_mb': self.fragmentation_mb,
             'total_mb': self.total_mb,
@@ -274,6 +278,40 @@ class SwinUNETRMemoryCalculator:
         """
         return self.calculate_activation_memory(batch_size)
 
+    def calculate_cudnn_workspace(self, batch_size: int) -> float:
+        """Calculate CuDNN workspace memory in MB.
+
+        Parameters
+        ----------
+        batch_size : int
+            Batch size.
+
+        Returns
+        -------
+        float
+            CuDNN workspace memory in MB.
+
+        Notes
+        -----
+        CuDNN allocates workspace for convolution operations.
+        Size depends on algorithm choice and input dimensions.
+        Conservative estimate: base + input-dependent component.
+        """
+        H, W, D = self.img_size
+        voxels = H * W * D
+
+        # Base workspace: ~500 MB for algorithm selection and caching
+        base_workspace = 500
+
+        # Input-dependent workspace scales with batch×voxels×features
+        # Empirically, workspace ≈ 50% of (batch × voxels × feature_dim × 4 bytes)
+        input_dependent = (batch_size * voxels * self.feature_size * 4) / (1024 ** 2) * 0.5
+
+        # Cap total workspace at 2 GB (typical CuDNN limit)
+        workspace_mb = min(base_workspace + input_dependent, 2000)
+
+        return workspace_mb
+
     def calculate_optimizer_memory(self) -> float:
         """Calculate optimizer state memory in MB.
 
@@ -293,23 +331,33 @@ class SwinUNETRMemoryCalculator:
         # 2× parameters (momentum + variance), 4 bytes each (FP32)
         return (params * 2 * 4) / (1024 ** 2)
 
-    def estimate_total_memory(self, batch_size: int) -> MemoryBreakdown:
+    def estimate_total_memory(self, batch_size: int, vram_gb: float = None) -> MemoryBreakdown:
         """Estimate total memory usage for given batch size.
 
         Parameters
         ----------
         batch_size : int
             Batch size.
+        vram_gb : float, optional
+            Available VRAM in GB. Used to apply safety multiplier for small GPUs.
+            If None, no safety multiplier is applied.
 
         Returns
         -------
         MemoryBreakdown
             Detailed memory breakdown.
 
+        Notes
+        -----
+        Applies conservative estimates including:
+        - CuDNN workspace for convolutions
+        - Peak memory factor (backward pass spikes)
+        - Safety multiplier for small GPUs (< 6 GB VRAM)
+
         Examples
         --------
         >>> calc = SwinUNETRMemoryCalculator((96, 96, 96), 2, 1)
-        >>> mem = calc.estimate_total_memory(batch_size=4)
+        >>> mem = calc.estimate_total_memory(batch_size=4, vram_gb=8.0)
         >>> print(f"Total: {mem.total_gb:.2f} GB")
         >>> print(f"  Params: {mem.params_mb:.0f} MB")
         >>> print(f"  Activations: {mem.activations_mb:.0f} MB")
@@ -327,21 +375,40 @@ class SwinUNETRMemoryCalculator:
         # 4. Backward gradients (≈ activations)
         gradients_mb = self.calculate_gradient_memory(batch_size)
 
-        # 5. PyTorch overhead
-        overhead_mb = 400  # CUDA context, allocator, kernel cache
+        # 5. CuDNN workspace (CRITICAL - often 500 MB - 2 GB)
+        cudnn_workspace_mb = self.calculate_cudnn_workspace(batch_size)
 
-        # 6. Fragmentation
-        allocated_mb = params_mb + optimizer_mb + activations_mb + gradients_mb
-        fragmentation_mb = allocated_mb * 0.08  # 8% overhead
+        # 6. PyTorch overhead (increased from 400 MB to 600 MB)
+        # Includes: CUDA context, allocator, kernel cache, loss functions
+        overhead_mb = 600
 
-        # Total
-        total_mb = params_mb + optimizer_mb + activations_mb + gradients_mb + overhead_mb + fragmentation_mb
+        # 7. Fragmentation
+        allocated_mb = params_mb + optimizer_mb + activations_mb + gradients_mb + cudnn_workspace_mb
+        fragmentation_mb = allocated_mb * 0.10  # 10% overhead (increased from 8%)
+
+        # Subtotal before peak/safety factors
+        subtotal_mb = params_mb + optimizer_mb + activations_mb + gradients_mb + cudnn_workspace_mb + overhead_mb + fragmentation_mb
+
+        # 8. Peak memory factor (backward pass creates temporary tensors)
+        # Peak can be 30% higher than steady-state during backprop
+        peak_factor = 1.30
+        total_mb = subtotal_mb * peak_factor
+
+        # 9. Safety multiplier for small GPUs
+        # Theoretical estimates often underestimate for small VRAM
+        # due to less efficient memory allocation and higher fragmentation
+        if vram_gb is not None and vram_gb < 6.0:
+            # Apply 1.2x safety multiplier for GPUs < 6 GB
+            safety_multiplier = 1.20
+            total_mb = total_mb * safety_multiplier
+            logger.debug(f"Applied {safety_multiplier}x safety multiplier for {vram_gb:.1f} GB VRAM")
 
         return MemoryBreakdown(
             params_mb=params_mb,
             optimizer_mb=optimizer_mb,
             activations_mb=activations_mb,
             gradients_mb=gradients_mb,
+            cudnn_workspace_mb=cudnn_workspace_mb,
             overhead_mb=overhead_mb,
             fragmentation_mb=fragmentation_mb,
             total_mb=total_mb
@@ -386,7 +453,7 @@ class SwinUNETRMemoryCalculator:
         while low <= high:
             mid = (low + high) // 2
 
-            memory = self.estimate_total_memory(batch_size=mid)
+            memory = self.estimate_total_memory(batch_size=mid, vram_gb=vram_gb)
 
             if memory.total_mb <= vram_mb:
                 best_batch = mid
@@ -537,13 +604,15 @@ class UNetMemoryCalculator:
         params = self.calculate_model_parameters() * 1e6
         return (params * 2 * 4) / (1024 ** 2)
 
-    def estimate_total_memory(self, batch_size: int) -> MemoryBreakdown:
+    def estimate_total_memory(self, batch_size: int, vram_gb: float = None) -> MemoryBreakdown:
         """Estimate total memory usage for given batch size.
 
         Parameters
         ----------
         batch_size : int
             Batch size.
+        vram_gb : float, optional
+            Available VRAM in GB. Used to apply safety multiplier for small GPUs.
 
         Returns
         -------
@@ -556,18 +625,32 @@ class UNetMemoryCalculator:
         optimizer_mb = self.calculate_optimizer_memory()
         activations_mb = self.calculate_activation_memory(batch_size)
         gradients_mb = self.calculate_gradient_memory(batch_size)
-        overhead_mb = 400
 
-        allocated_mb = params_mb + optimizer_mb + activations_mb + gradients_mb
-        fragmentation_mb = allocated_mb * 0.08
+        # CuDNN workspace (simpler for UNet than SwinUNETR)
+        H, W, D = self.img_size
+        voxels = H * W * D
+        cudnn_workspace_mb = min(300 + (batch_size * voxels * 32 * 4) / (1024 ** 2) * 0.3, 1500)
 
-        total_mb = params_mb + optimizer_mb + activations_mb + gradients_mb + overhead_mb + fragmentation_mb
+        # Increased overhead from 400 to 600 MB
+        overhead_mb = 600
+
+        allocated_mb = params_mb + optimizer_mb + activations_mb + gradients_mb + cudnn_workspace_mb
+        fragmentation_mb = allocated_mb * 0.10
+
+        # Peak memory factor
+        subtotal_mb = params_mb + optimizer_mb + activations_mb + gradients_mb + cudnn_workspace_mb + overhead_mb + fragmentation_mb
+        total_mb = subtotal_mb * 1.30  # 30% peak factor
+
+        # Safety multiplier for small GPUs
+        if vram_gb is not None and vram_gb < 6.0:
+            total_mb = total_mb * 1.20
 
         return MemoryBreakdown(
             params_mb=params_mb,
             optimizer_mb=optimizer_mb,
             activations_mb=activations_mb,
             gradients_mb=gradients_mb,
+            cudnn_workspace_mb=cudnn_workspace_mb,
             overhead_mb=overhead_mb,
             fragmentation_mb=fragmentation_mb,
             total_mb=total_mb
@@ -603,7 +686,7 @@ class UNetMemoryCalculator:
         while low <= high:
             mid = (low + high) // 2
 
-            memory = self.estimate_total_memory(batch_size=mid)
+            memory = self.estimate_total_memory(batch_size=mid, vram_gb=vram_gb)
 
             if memory.total_mb <= vram_mb:
                 best_batch = mid
