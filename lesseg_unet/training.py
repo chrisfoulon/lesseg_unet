@@ -516,7 +516,7 @@ def training(img_path_list: Sequence,
         SET MODEL PARAM AND CREATE / LOAD MODEL OBJECT
         """
         utils.logging_rank_0(f'Creating monai {model_type}', dist.get_rank())
-        scaler = torch.cuda.amp.GradScaler() if enable_amp else None
+        scaler = torch.amp.GradScaler('cuda') if enable_amp else None
         starting_epoch = 0
         if checkpoint_to_share is not None:
             starting_epoch = checkpoint_to_share[0]['epoch']

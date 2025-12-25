@@ -59,13 +59,14 @@ def _check_cuda_availability():
                 UserWarning,
                 stacklevel=2
             )
+        # Only log on first import (debug mode only)
         elif cuda_available:
-            logging.info(
+            logging.debug(
                 f"GPU acceleration enabled: {torch.cuda.device_count()} GPU(s) detected "
                 f"(CUDA {cuda_version})"
             )
         elif cuda_version is None:
-            logging.info("CPU-only mode: PyTorch compiled without CUDA support")
+            logging.debug("CPU-only mode: PyTorch compiled without CUDA support")
 
     except ImportError:
         # PyTorch not installed yet (during setup)
