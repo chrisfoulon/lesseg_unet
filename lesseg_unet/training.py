@@ -524,7 +524,7 @@ def training(img_path_list: Sequence,
             hyper_params = checkpoint['hyper_params']
             model = utils.load_model_from_checkpoint(checkpoint, device, hyper_params, model_name=model_type)
             if torch.cuda.is_available():
-                model.to(dist.get_rank())
+                model.to(device)
             optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
             optimizer.load_state_dict(checkpoint['optim_dict'])
             if scaler is not None and checkpoint.get('scaler_dict') is not None:
@@ -605,7 +605,7 @@ def training(img_path_list: Sequence,
                 utils.print_rank_0('Model on CPU (single process, no DDP)', dist.get_rank())
         else:
             # GPU: move to specific GPU rank, use device_ids
-            model.to(dist.get_rank())
+            model.to(device)
             model = DistributedDataParallel(model, device_ids=[rank], output_device=dist.get_rank(),
                                             find_unused_parameters=False)
             utils.print_rank_0('Model sent to GPU ranks with DDP', dist.get_rank())
