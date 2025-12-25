@@ -8,7 +8,7 @@ from diffusion-weighted MRI (DWI) scans.
 import logging
 import warnings
 
-__version__ = "2.0.10"
+__version__ = "2.0.11"
 
 # Configure logging
 logging.basicConfig(
