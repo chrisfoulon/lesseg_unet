@@ -87,9 +87,6 @@ def create_training_data_loader(train_ds: monai.data.Dataset,
     # persistent_workers requires num_workers > 0
     use_persistent = persistent_workers and dataloader_workers > 0
 
-    # Use spawn context to avoid file descriptor inheritance issues in DDP
-    mp_context = 'spawn' if dataloader_workers > 0 else None
-
     train_loader = DataLoader(
         train_ds,
         batch_size=batch_size,
@@ -100,7 +97,6 @@ def create_training_data_loader(train_ds: monai.data.Dataset,
         # pin_memory=torch.cuda.is_available(),
         persistent_workers=use_persistent,
         sampler=sampler,
-        multiprocessing_context=mp_context,
         # Reduce prefetch to lower memory/fd pressure
         prefetch_factor=2 if dataloader_workers > 0 else None
     )
@@ -116,14 +112,10 @@ def create_validation_data_loader(val_ds: monai.data.Dataset,
     # persistent_workers requires num_workers > 0
     use_persistent = dataloader_workers > 0
 
-    # Use spawn context to avoid file descriptor inheritance issues in DDP
-    mp_context = 'spawn' if dataloader_workers > 0 else None
-
     val_loader = DataLoader(val_ds, batch_size=batch_size, num_workers=dataloader_workers,
                             pin_memory=False,
                             # pin_memory=torch.cuda.is_available(),
                             persistent_workers=use_persistent,
-                            multiprocessing_context=mp_context,
                             sampler=sampler)
     return val_loader
 
