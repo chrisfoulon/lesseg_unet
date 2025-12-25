@@ -12,27 +12,92 @@ This project provides automated segmentation of acute ischemic stroke lesions fr
 
 ## Installation
 
-1.
+### Prerequisites
 
-   1. Clone the repository and navigate to its directory:
+- Python >= 3.11
+- CUDA-capable GPU (optional, for GPU training)
+- CUDA Toolkit 11.8, 12.6, or 12.8 (if using GPU)
 
-   ```bash
-   git clone <repository-url>
-   cd lesseg_unet
-   ```
+### Step 1: Clone the repository
 
-2. Create a new Conda environment and activate it:
+```bash
+git clone <repository-url>
+cd lesseg_unet
+```
 
-   ```bash
-   conda create -n lesseg_unet_env python=3.8
-   conda activate lesseg_unet_env
-   ```
+### Step 2: Create a virtual environment
 
-3. Install the dependencies from `requirements.txt` using Conda:
+```bash
+# Using conda (recommended)
+conda create -n lesseg_unet_env python=3.11
+conda activate lesseg_unet_env
 
-   ```bash
-   conda install --file requirements.txt
-   ```
+# OR using venv
+python -m venv lesseg_unet_env
+source lesseg_unet_env/bin/activate  # On Windows: lesseg_unet_env\Scripts\activate
+```
+
+### Step 3: Install PyTorch with CUDA support
+
+**IMPORTANT**: Install PyTorch BEFORE installing the package to ensure CUDA support.
+
+#### Option A: Automated Installation (Recommended)
+
+Use the provided helper script that auto-detects your CUDA version:
+
+```bash
+python install_pytorch_cuda.py
+```
+
+This will:
+- Auto-detect your CUDA version from nvidia-smi
+- Install the correct PyTorch build
+- Verify GPU accessibility
+
+#### Option B: Manual Installation
+
+First, check your CUDA version:
+```bash
+nvidia-smi  # Look for "CUDA Version: X.X"
+```
+
+Then install PyTorch with the matching CUDA version:
+
+```bash
+# For CUDA 12.8 (most recent)
+pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu128
+
+# For CUDA 12.6
+pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu126
+
+# For CUDA 11.8
+pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu118
+
+# For CPU-only (no GPU)
+pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cpu
+```
+
+Verify PyTorch can see your GPU:
+```bash
+python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+# Should print: CUDA available: True
+```
+
+### Step 4: Install the package
+
+```bash
+pip install -e .
+```
+
+**Note**: If you install the package without GPU-enabled PyTorch, you'll see a warning on first import with instructions to fix it.
+
+### Troubleshooting
+
+If you get CUDA errors despite nvidia-smi working:
+1. Check PyTorch version: `python -c "import torch; print(torch.__version__)"`
+   - If it shows `2.7.0+cpu`, you have the CPU-only version
+   - Reinstall with the correct `--index-url` (see Step 3)
+2. See `/tmp/cuda_diagnostics.md` for detailed troubleshooting
 
 ## Usage
 

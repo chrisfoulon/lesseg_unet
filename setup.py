@@ -35,6 +35,7 @@ setup(
         'einops==0.8.1',  # Required for UNETR/SwinUNETR
         'python-dateutil==2.9.0.post0',
         'dask==2025.12.0',
+        'psutil>=5.9.0',  # Required for hardware detection (CPU/RAM info)
         # Custom package
         'bcblib>=0.3.4.3',
     ],
