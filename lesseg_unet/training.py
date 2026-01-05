@@ -1296,6 +1296,15 @@ def training(img_path_list: Sequence,
             torch.distributed.broadcast_object_list(flag_to_share, src=0)
             stop_epoch = flag_to_share[0]
             dist.barrier()
+
+            # Strategic garbage collection to reduce memory fragmentation
+            # Only every 10 epochs to minimize overhead
+            if (epoch + 1) % 10 == 0:
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                utils.logging_rank_0(f'Epoch {epoch + 1}: Memory cleanup performed', dist.get_rank())
+
             if stop_epoch:
                 break
                 # utils.save_checkpoint(model, epoch + 1, optimizer, output_dir)

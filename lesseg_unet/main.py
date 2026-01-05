@@ -386,6 +386,10 @@ def main():
     # add a parameter to increase the number of open files
     parser.add_argument('-loof', '--limit_of_open_files', type=int,
                         help='Limit of open files allowed (ulimit)')
+    # Memory management
+    parser.add_argument('--disable-expandable-segments', action='store_true',
+                        help='Disable CUDA expandable segments memory management '
+                             '(default: enabled; use this flag if experiencing H100/A100 compatibility issues)')
     # DEBUG options
     parser.add_argument('--debug', action='store_true', help='debug mode')
     parser.add_argument('-din', '--debug_img_num', type=int, help='Number of images from the input list')
@@ -419,6 +423,18 @@ def main():
 
     # Validate multi-modal argument combinations
     args = validate_multimodal_arguments(args)
+
+    # Configure CUDA memory management (must be before any CUDA operations)
+    if not args.disable_expandable_segments and torch.cuda.is_available():
+        try:
+            # Enable expandable segments to reduce memory fragmentation
+            # This helps prevent OOM errors during long training runs
+            # See: https://pytorch.org/docs/stable/notes/cuda.html
+            torch.cuda.memory._set_allocator_settings('expandable_segments:True')
+            print("✓ Enabled CUDA expandable_segments for memory management")
+            print("  (Use --disable-expandable-segments if you experience compatibility issues)")
+        except Exception as e:
+            logging.warning(f"Could not enable expandable_segments: {e}")
 
     kwargs = {}
 

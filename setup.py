@@ -8,7 +8,7 @@ def read(fname):
 
 setup(
     name='lesseg_unet',        # This is the name of your PyPI-package.
-    version='2.0.12',     # Fixed DDP device mismatch and DataLoader persistent_workers
+    version='2.0.13',     # Added CUDA memory management (expandable_segments + GC)
     python_requires='>=3.11',  # Required by scipy 1.16.3
     zip_safe=True,
     include_package_data=True,
