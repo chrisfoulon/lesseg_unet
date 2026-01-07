@@ -368,12 +368,20 @@ def main():
     parser.add_argument('-nw', '--num_workers', default=4, type=int, help='Number of dataloader workers')
     parser.add_argument('-bs', '--batch_size', default=10, type=int, help='Batch size for the training loop')
     parser.add_argument('-vbs', '--val_batch_size', default=10, type=int, help='Batch size for the validation loop')
-    parser.add_argument('-cache', '--cache', action='store_true',
-                        help='Cache the non-random transformation in cache in output directory')
-    parser.add_argument('-cn', '--cache_num', type=int, default=0,
-                        help='Number of images to be cached with CacheDataset (default)')
-    parser.add_argument('-cr', '--cache_rate', type=int, default=0,
-                        help='Rate cached images with CacheDataset (default)')
+
+    # Cache mode arguments
+    parser.add_argument('--cache-mode', type=str, choices=['none', 'ram', 'disk'],
+                        help='Cache mode for both training and validation datasets')
+    parser.add_argument('--cache-training-mode', type=str, choices=['none', 'ram', 'disk'],
+                        help='Cache mode for training set only (overrides --cache-mode)')
+    parser.add_argument('--cache-validation-mode', type=str, choices=['none', 'ram', 'disk'],
+                        help='Cache mode for validation set only (overrides --cache-mode)')
+
+    # Cache parameters (apply to both datasets unless overridden)
+    parser.add_argument('-cn', '--cache_num', type=int, default=None,
+                        help='Absolute number of samples to cache (overrides rate, for RAM mode)')
+    parser.add_argument('-cr', '--cache_rate', type=float, default=1.0,
+                        help='Fraction of dataset to cache (0.0-1.0, for RAM mode)')
     # Epochs parameters
     parser.add_argument('-ne', '--num_epochs', default=50, type=int, help='Number of epochs')
     parser.add_argument('-sbe', '--stop_best_epoch', type=int, help='Number of epochs without improvement before it '
@@ -545,9 +553,18 @@ def main_worker(local_rank, args, kwargs):
     output_root = Path(args.output)
     if not output_root.is_dir():
         raise ValueError('{} is not an existing directory and could not be created'.format(output_root))
+    # Cache mode resolution logic
+    base_cache_mode = args.cache_mode or 'none'
+
+    # Setup cache directory if disk mode is used
     cache_dir = None
-    if args.cache:
+    if base_cache_mode == 'disk' or args.cache_training_mode == 'disk' or args.cache_validation_mode == 'disk':
         cache_dir = Path(output_root, 'cache')
+
+    # Per-dataset cache mode (overrides base mode)
+    cache_training_mode = args.cache_training_mode or base_cache_mode
+    cache_validation_mode = args.cache_validation_mode or base_cache_mode
+
     utils.print_rank_0('loading input dwi path list', dist.get_rank())
     seg_input_dict = {}
     # Detect if multi-modal mode (multiple paths in any of the input arguments)
@@ -1118,9 +1135,12 @@ def main_worker(local_rank, args, kwargs):
                           folds_number=args.folds_number,
                           dropout=args.dropout,
                           cache_dir=cache_dir,
+                          cache_training_mode=cache_training_mode,
+                          cache_validation_mode=cache_validation_mode,
+                          cache_rate=args.cache_rate,
+                          cache_num=args.cache_num,
                           world_size=args.world_size,
                           rank=local_rank,
-                          cache_num=args.cache_num,
                           enable_amp=not args.disable_mixed_precision,
                           learning_rate=args.learning_rate,
                           weight_decay=args.weight_decay,

@@ -172,6 +172,9 @@ def training(img_path_list: Sequence,
              folds_number=1,
              dropout=0,
              cache_dir=None,
+             cache_training_mode='none',
+             cache_validation_mode='none',
+             cache_rate=1.0,
              save_every_decent_best_epoch=True,
              rank=0,
              world_size=1,
@@ -624,8 +627,13 @@ def training(img_path_list: Sequence,
         if ctr_split_lists is None or delayed_control_training:
             train_loader, val_loader = data_loading.create_fold_dataloaders(
                 split_lists, fold, train_img_transforms,
-                val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
-                world_size=world_size, rank=dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num
+                val_img_transforms, batch_size, dataloader_workers, val_batch_size,
+                cache_training_mode=cache_training_mode,
+                cache_validation_mode=cache_validation_mode,
+                cache_dir=cache_dir,
+                cache_rate=cache_rate,
+                cache_num=cache_num,
+                world_size=world_size, rank=dist.get_rank(), shuffle_training=shuffle_training
             )
 
         # Register objects for cleanup on Ctrl+C
@@ -691,8 +699,13 @@ def training(img_path_list: Sequence,
                 split_lists_with_ctr = split_lists_with_ctr_to_share[0]
                 train_loader, val_loader = data_loading.create_fold_dataloaders(
                     split_lists_with_ctr, fold, train_img_transforms,
-                    val_img_transforms, batch_size, dataloader_workers, val_batch_size, cache_dir,
-                    world_size=world_size, rank=dist.get_rank(), shuffle_training=shuffle_training, cache_num=cache_num,
+                    val_img_transforms, batch_size, dataloader_workers, val_batch_size,
+                    cache_training_mode=cache_training_mode,
+                    cache_validation_mode=cache_validation_mode,
+                    cache_dir=cache_dir,
+                    cache_rate=cache_rate,
+                    cache_num=cache_num,
+                    world_size=world_size, rank=dist.get_rank(), shuffle_training=shuffle_training,
                     training_persistent_workers=False
                 )
                 # Update cleanup context with new loaders

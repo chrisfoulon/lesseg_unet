@@ -92,6 +92,9 @@ def segmentation(img_path_list: Sequence,
                  ensemble_operation='mean',
                  **kwargs
                  ):
+    """
+    WARNING: This function has not been fully implemented/tested yet! SHOULD NOT BE USED FOR NOW.
+    """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:

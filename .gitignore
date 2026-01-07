@@ -128,3 +128,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 .idea/
+
+# LAD framework (static reference and working folders)
+.lad/
+.lad_work/
