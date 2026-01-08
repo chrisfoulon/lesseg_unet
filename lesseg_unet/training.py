@@ -1337,14 +1337,65 @@ def training(img_path_list: Sequence,
             del _cleanup_context['optimizer']
         if 'scaler' in _cleanup_context and _cleanup_context['scaler'] is not None:
             del _cleanup_context['scaler']
+        # DIAGNOSTIC: Log memory before cleanup
+        if rank == 0:
+            import psutil
+            process = psutil.Process()
+            mem_before = process.memory_info().rss / 1024**3  # GB
+            utils.logging_rank_0(f'[DIAGNOSTIC] RAM before cleanup: {mem_before:.2f} GB', rank)
+
+        # Explicitly shut down DataLoader workers before deletion
         if 'train_loader' in _cleanup_context:
+            try:
+                # Shutdown workers if they exist
+                if hasattr(_cleanup_context['train_loader'], '_iterator') and _cleanup_context['train_loader']._iterator is not None:
+                    _cleanup_context['train_loader']._iterator._shutdown_workers()
+                    utils.logging_rank_0(f'[DIAGNOSTIC] Train loader workers shut down', rank)
+            except Exception as e:
+                utils.logging_rank_0(f'[DIAGNOSTIC] Train loader shutdown warning: {e}', rank)
+
+            # Delete the underlying dataset explicitly
+            if hasattr(_cleanup_context['train_loader'], 'dataset'):
+                del _cleanup_context['train_loader'].dataset
+
             del _cleanup_context['train_loader']
+            utils.logging_rank_0(f'[DIAGNOSTIC] Train loader deleted', rank)
+
         if 'val_loader' in _cleanup_context:
+            try:
+                # Shutdown workers if they exist
+                if hasattr(_cleanup_context['val_loader'], '_iterator') and _cleanup_context['val_loader']._iterator is not None:
+                    _cleanup_context['val_loader']._iterator._shutdown_workers()
+                    utils.logging_rank_0(f'[DIAGNOSTIC] Val loader workers shut down', rank)
+            except Exception as e:
+                utils.logging_rank_0(f'[DIAGNOSTIC] Val loader shutdown warning: {e}', rank)
+
+            # Delete the underlying dataset explicitly
+            if hasattr(_cleanup_context['val_loader'], 'dataset'):
+                del _cleanup_context['val_loader'].dataset
+                utils.logging_rank_0(f'[DIAGNOSTIC] Val dataset deleted', rank)
+
             del _cleanup_context['val_loader']
+            utils.logging_rank_0(f'[DIAGNOSTIC] Val loader deleted', rank)
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
-        gc.collect()
+
+        # Force multiple GC passes to catch circular references
+        utils.logging_rank_0(f'[DIAGNOSTIC] Running garbage collection...', rank)
+        for _ in range(3):
+            gc.collect()
+
+        # DIAGNOSTIC: Log memory after cleanup
+        if rank == 0:
+            mem_after = process.memory_info().rss / 1024**3  # GB
+            mem_freed = mem_before - mem_after
+            utils.logging_rank_0(f'[DIAGNOSTIC] RAM after cleanup: {mem_after:.2f} GB (freed {mem_freed:.2f} GB)', rank)
+
         utils.logging_rank_0(f'Memory cleaned up after fold {fold}', rank)
+
+        # Add a small delay to ensure GC completes
+        time.sleep(2)
+        utils.logging_rank_0(f'[DIAGNOSTIC] Waited 2s for GC to complete', rank)
     dist.destroy_process_group()
