@@ -460,16 +460,53 @@ def get_fname_from_sorted_images(root_dir, pref='', split_suff=None):
 
 
 def get_best_epoch_from_folder(folder):
-    # best_epoch_time = 0
-    # best_epoch_path = ''
-    # for p in [pp for pp in Path(folder).iterdir() if pp.name.endswith('.pth')]:
-    #     t = p.stat().st_ctime
-    #     if best_epoch_time < t:
-    #         best_epoch_time = t
-    #         best_epoch_path = str(p)
+    """
+    Find the best (most recent) checkpoint in a folder.
+
+    For cross-validation runs with fold_X subdirectories:
+    1. Find the latest fold (highest fold number)
+    2. Get the checkpoint with highest epoch number from that fold
+
+    For single runs (no fold subdirectories):
+    1. Get the checkpoint with highest epoch number from the folder itself
+
+    Returns the checkpoint path or None if not found.
+    """
+    folder_path = Path(folder)
+
+    # Check if there are fold subdirectories (fold_0, fold_1, etc.)
+    fold_dirs = sorted([d for d in folder_path.iterdir() if d.is_dir() and d.name.startswith('fold_')])
+
+    # Determine which directory to search
+    if fold_dirs:
+        # Folds run sequentially (fold_0, fold_1, ...), so find the latest fold
+        # Extract fold numbers and get the highest
+        fold_numbers = []
+        for fold_dir in fold_dirs:
+            try:
+                fold_num = int(fold_dir.name.split('fold_')[1])
+                fold_numbers.append((fold_num, fold_dir))
+            except (ValueError, IndexError):
+                continue
+
+        if not fold_numbers:
+            logging.warning(f"Found fold directories but couldn't parse fold numbers: {[d.name for d in fold_dirs]}")
+            return None
+
+        # Sort by fold number and take the highest
+        fold_numbers.sort(key=lambda x: x[0])
+        latest_fold_num, latest_fold_dir = fold_numbers[-1]
+        search_dir = latest_fold_dir
+        logging.info(f"Found {len(fold_dirs)} fold directories, using latest: {search_dir.name}")
+    else:
+        # No fold directories, search in the folder itself
+        search_dir = folder_path
+
+    # Find the checkpoint with the highest epoch number in the selected directory
     best_epoch_number = 0
     best_epoch_path = None
-    for p in [pp for pp in Path(folder).iterdir() if pp.name.endswith('.pth')]:
+
+    for p in [pp for pp in search_dir.iterdir() if pp.name.endswith('.pth')]:
         checkpoint_suffix = p.name.split('.pth')[0].split('_')[-1]
         if not checkpoint_suffix.isdigit():
             continue
@@ -477,6 +514,12 @@ def get_best_epoch_from_folder(folder):
         if best_epoch_number < epoch_number:
             best_epoch_number = epoch_number
             best_epoch_path = str(p)
+
+    if best_epoch_path:
+        logging.info(f"Found checkpoint at epoch {best_epoch_number}: {best_epoch_path}")
+    else:
+        logging.warning(f"No checkpoints found in {search_dir}")
+
     return best_epoch_path
 
 

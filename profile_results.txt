@@ -1,0 +1,95 @@
+Traceback (most recent call last):
+  File "/home/chrisfoulon/neuro_apps/lesseg_unet/profile_actual_resources.py", line 373, in main
+    vram_results = profile_model_vram()
+                   ^^^^^^^^^^^^^^^^^^^^
+  File "/home/chrisfoulon/neuro_apps/lesseg_unet/profile_actual_resources.py", line 72, in profile_model_vram
+    model = SwinUNETR(
+            ^^^^^^^^^^
+TypeError: SwinUNETR.__init__() got an unexpected keyword argument 'img_size'
+
+================================================================================
+ACTUAL RESOURCE USAGE PROFILER
+================================================================================
+
+This measures REAL VRAM and RAM usage for your p96 training setup.
+
+================================================================================
+PART 1: VRAM PROFILING - SwinUNETR Model
+================================================================================
+
+Baseline GPU memory: 0.00 MB
+
+Creating SwinUNETR:
+  in_channels: 2
+  out_channels: 1
+  img_size: [96, 96, 96]
+  feature_size: 36
+
+ERROR in VRAM profiling: SwinUNETR.__init__() got an unexpected keyword argument 'img_size'
+
+================================================================================
+PART 2: RAM PROFILING - CacheDataset (514 images)
+================================================================================
+
+Baseline RAM: 0.72 GB
+
+Patch specifications:
+  Shape: (2, 96, 96, 96) (channels, H, W, D)
+  Voxels: 1,769,472
+  Size: 6.75 MB per patch
+
+Cache size calculation:
+  Images: 514
+  Patches per image: 4
+  Total patches: 2056
+  Estimated cache size: 13878.00 MB = 13.55 GB
+
+Allocating memory to simulate cache...
+  Progress: 24.3% (500/2056 patches) - RAM: 4.02 GB (+3.30 GB)
+  Progress: 48.6% (1000/2056 patches) - RAM: 7.31 GB (+6.59 GB)
+  Progress: 73.0% (1500/2056 patches) - RAM: 10.60 GB (+9.88 GB)
+  Progress: 97.3% (2000/2056 patches) - RAM: 13.90 GB (+13.18 GB)
+  Progress: 100.0% (2056/2056 patches) - RAM: 14.27 GB (+13.55 GB)
+
+================================================================================
+RAM CACHE SUMMARY:
+  Baseline RAM: 0.72 GB
+  Final RAM: 14.27 GB
+  Cache overhead: 13.55 GB
+  Estimated cache: 13.55 GB
+  Actual vs Estimated: 100.0%
+================================================================================
+
+================================================================================
+PART 3: DATALOADER WORKERS DIAGNOSTIC
+================================================================================
+
+Creating dummy CacheDataset...
+Loading dataset:   0%|          | 0/10 [00:00<?, ?it/s]Loading dataset: 100%|██████████| 10/10 [00:00<00:00, 16777.22it/s]
+2026-01-08 19:06:25,224 - root - WARNING - CacheDataset/PersistentDataset detected with num_workers=16. Forcing num_workers=0 to prevent per-worker cache duplication. This is expected and will not slow down validation (data is already cached).
+  Dataset type: CacheDataset
+  Is CacheDataset: True
+
+Testing create_validation_data_loader with num_workers=16...
+
+  Output captured:
+    STDOUT: Creating validation data loader
+
+
+  Actual num_workers: 0
+  ✅ GOOD: num_workers correctly set to 0 for CacheDataset
+
+================================================================================
+FINAL SUMMARY
+================================================================================
+
+RAM (CacheDataset with 514 images):
+  Cache size: 13.55 GB
+  Total patches cached: 2056
+
+DataLoader workers:
+  ✅ Correctly forcing num_workers=0 for CacheDataset
+
+================================================================================
+PROFILING COMPLETE
+================================================================================
