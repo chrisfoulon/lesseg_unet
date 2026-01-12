@@ -704,7 +704,7 @@ def folder_mode_to_split_lists(
 
     # Step 6: Build SubjectDict entries for patients
     subject_list = []
-    for subject_id in complete_patients:
+    for subject_id in sorted(complete_patients):  # Sort for reproducible split order
         subject_dict = {}
 
         # Add all image modalities
@@ -722,7 +722,7 @@ def folder_mode_to_split_lists(
 
     # Step 7: Build SubjectDict entries for controls (if provided)
     if control_folders is not None:
-        for control_id in complete_controls:
+        for control_id in sorted(complete_controls):  # Sort for reproducible split order
             control_dict = {}
 
             # Add all control modalities
