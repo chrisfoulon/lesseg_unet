@@ -1107,6 +1107,49 @@ def main_worker(local_rank, args, kwargs):
                 pretrained_point = str(Path(args.pretrained_point))
         else:
             pretrained_point = None
+
+        # Auto-load split_lists.json when resuming to prevent data leakage
+        if pretrained_point is not None:
+            checkpoint_path = Path(pretrained_point)
+            # Checkpoint is at: output_dir/fold_X/checkpoint.pth
+            # split_lists.json is at: output_dir/split_lists.json
+            output_dir_from_checkpoint = checkpoint_path.parent.parent
+            split_lists_json_path = output_dir_from_checkpoint / 'split_lists.json'
+
+            if split_lists_json_path.exists():
+                utils.logging_rank_0(
+                    f'Resume mode: Loading splits from {split_lists_json_path}',
+                    dist.get_rank()
+                )
+
+                # Load pre-existing splits
+                img_list = utils.open_json(str(split_lists_json_path))
+
+                # Set les_list to None to trigger pre-split mode in training.py line 365-367
+                # This prevents re-shuffling and split recreation
+                les_list = None
+
+                # Also handle controls if they exist
+                control_split_lists_json_path = output_dir_from_checkpoint / 'control_split_lists.json'
+                if control_split_lists_json_path.exists():
+                    ctr_list = utils.open_json(str(control_split_lists_json_path))
+                    utils.logging_rank_0(
+                        f'Resume mode: Loaded control splits from {control_split_lists_json_path}',
+                        dist.get_rank()
+                    )
+
+                utils.logging_rank_0(
+                    f'Loaded {len(img_list)} folds from existing split_lists.json',
+                    dist.get_rank()
+                )
+            else:
+                # Backward compatibility: old checkpoints without split_lists.json
+                utils.logging_rank_0(
+                    f'Warning: split_lists.json not found at {split_lists_json_path}. '
+                    f'Using provided input paths (splits will be recreated).',
+                    dist.get_rank()
+                )
+
         training.training(img_path_list=img_list,
                           lbl_path_list=les_list,
                           output_dir=output_root,
