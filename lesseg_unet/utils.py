@@ -523,6 +523,123 @@ def get_best_epoch_from_folder(folder):
     return best_epoch_path
 
 
+def get_best_epoch_from_events(fold_dir: Union[str, Path],
+                               metric: str = 'val_mean_dice',
+                               minimize: bool = False) -> Union[int, None]:
+    """
+    Extract the epoch with best metric from tensorboard event file.
+
+    This enables resuming training with correct early stopping state
+    without modifying checkpoint format. Reads tensorboard events to
+    find when the validation metric peaked.
+
+    Parameters
+    ----------
+    fold_dir : str or Path
+        Directory containing tensorboard event files (e.g., fold_0/)
+    metric : str, default='val_mean_dice'
+        Metric name to track. Common values:
+        - 'val_mean_dice': Validation dice coefficient (maximize)
+        - 'val_distance': Validation Hausdorff distance (minimize)
+    minimize : bool, default=False
+        If True, find minimum value (for distance metrics)
+        If False, find maximum value (for dice metrics)
+
+    Returns
+    -------
+    int or None
+        Epoch number (step) where best metric was achieved, or None if:
+        - Event files not found
+        - Tensorboard not installed
+        - Metric not in events
+        - Error reading events
+
+    Examples
+    --------
+    Restore best dice epoch on resume:
+
+    >>> best_dice_epoch = get_best_epoch_from_events(
+    ...     '/path/to/output/fold_0',
+    ...     metric='val_mean_dice'
+    ... )
+    >>> if best_dice_epoch is not None:
+    ...     print(f"Best dice at epoch {best_dice_epoch}")
+
+    Restore best distance epoch:
+
+    >>> best_dist_epoch = get_best_epoch_from_events(
+    ...     '/path/to/output/fold_0',
+    ...     metric='val_distance',
+    ...     minimize=True  # Lower distance is better
+    ... )
+
+    Notes
+    -----
+    - Falls back gracefully if tensorboard not installed or events missing
+    - Uses latest event file by modification time
+    - Logs warnings for missing dependencies or data
+    - Returns None on any error (backward compatible)
+    """
+    try:
+        from tensorboard.backend.event_processing import event_accumulator
+    except ImportError:
+        logging.warning(
+            "tensorboard not installed, cannot restore early stopping state from events. "
+            "Early stopping counter will reset. Install with: pip install tensorboard"
+        )
+        return None
+
+    fold_path = Path(fold_dir)
+    if not fold_path.exists():
+        logging.debug(f"Fold directory not found: {fold_path}")
+        return None
+
+    # Find tensorboard event files
+    event_files = list(fold_path.glob('events.out.tfevents.*'))
+    if not event_files:
+        logging.debug(f"No tensorboard event files found in {fold_path}")
+        return None
+
+    # Use the latest event file by modification time
+    latest_event = sorted(event_files, key=lambda x: x.stat().st_mtime)[-1]
+
+    try:
+        # Load events
+        ea = event_accumulator.EventAccumulator(str(latest_event))
+        ea.Reload()
+
+        # Check if metric exists
+        if metric not in ea.Tags()['scalars']:
+            logging.warning(
+                f"Metric '{metric}' not found in tensorboard events. "
+                f"Available metrics: {ea.Tags()['scalars']}"
+            )
+            return None
+
+        # Get all events for this metric
+        events = ea.Scalars(metric)
+        if not events:
+            logging.debug(f"No events found for metric '{metric}'")
+            return None
+
+        # Find best epoch
+        if minimize:
+            best_event = min(events, key=lambda x: x.value)
+        else:
+            best_event = max(events, key=lambda x: x.value)
+
+        logging.info(
+            f"Restored early stopping state from tensorboard events: "
+            f"best {metric}={best_event.value:.6f} at epoch {best_event.step}"
+        )
+
+        return best_event.step
+
+    except Exception as e:
+        logging.warning(f"Failed to read tensorboard events: {e}")
+        return None
+
+
 def compare_img_to_cluster(img, cluster, comp_meth='dice', cluster_thr=None, flip=False):
     if is_nifti(img):
         img = load_nifti(img)

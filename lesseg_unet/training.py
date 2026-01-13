@@ -535,7 +535,43 @@ def training(img_path_list: Sequence,
             utils.logging_rank_0(f'{model_type} created and succesfully loaded from {pretrained_point} with '
                                  f'hyper parameters: {hyper_params}',
                                  dist.get_rank())
+
+            # Restore early stopping state from tensorboard events
+            # This preserves the early stopping counter across resume, preventing wasted computation
+            best_metric_epoch_from_events = None
+            best_metric_dist_epoch_from_events = None
+
+            if dist.get_rank() == 0:
+                # Determine fold directory
+                fold_dir_for_events = output_dir if folds_number == 1 else Path(output_dir, f'fold_{fold}')
+
+                # Try to restore best dice epoch from events
+                best_metric_epoch_from_events = utils.get_best_epoch_from_events(
+                    fold_dir_for_events,
+                    metric='val_mean_dice',
+                    minimize=False
+                )
+
+                # If using distance metric, restore that too
+                if 'dist' in val_loss_fct.lower():
+                    best_metric_dist_epoch_from_events = utils.get_best_epoch_from_events(
+                        fold_dir_for_events,
+                        metric='val_distance',
+                        minimize=True
+                    )
+
+            # Broadcast early stopping state to all ranks (for DDP)
+            events_state_to_share = [best_metric_epoch_from_events, best_metric_dist_epoch_from_events]
+            torch.distributed.broadcast_object_list(events_state_to_share, src=0)
+            best_metric_epoch_from_events = events_state_to_share[0]
+            best_metric_dist_epoch_from_events = events_state_to_share[1]
         else:
+            # Not resuming, initialize to None (will use default -1 later)
+            best_metric_epoch_from_events = None
+            best_metric_dist_epoch_from_events = None
+
+        # Continue with model creation if not resuming
+        if checkpoint_to_share is None:
             if model_type.lower() == 'unetr' or model_type.lower() == 'swinunetr':
                 if model_type.lower() == 'unetr':
                     hyper_params = net.default_unetr_hyper_params
@@ -662,8 +698,12 @@ def training(img_path_list: Sequence,
         best_dice_with_dist = 0
         # only for the first epoch
         best_dist = 1000
-        best_metric_epoch = -1
-        best_metric_dist_epoch = -1
+
+        # Initialize early stopping counters
+        # Use values from tensorboard events if resuming, otherwise start fresh
+        best_metric_epoch = best_metric_epoch_from_events if best_metric_epoch_from_events is not None else -1
+        best_metric_dist_epoch = best_metric_dist_epoch_from_events if best_metric_dist_epoch_from_events is not None else -1
+
         img_dir = Path(output_dir, 'image_dir')
         if display_training:
             if dist.get_rank() == 0:
