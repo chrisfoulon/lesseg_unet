@@ -816,9 +816,6 @@ def validation_loop_split_lists(
     first_image_key = next(k for k in first_subject.keys() if k.startswith('image'))
     val_output_affine = utils.nifti_affine_from_dataset(first_subject[first_image_key])
 
-    # Build metadata key name (for multi-modal: 'image_dwi_meta_dict', not 'image_meta_dict')
-    image_meta_key = f'{first_image_key}_meta_dict'
-
     if transform_dict is None:
         transform_dict = checkpoint['transform_dict']
 
@@ -899,8 +896,9 @@ def validation_loop_split_lists(
         input_output_paths_dict = {}
         for val_data in tqdm(val_loader, desc='Validation '):
             inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
+            # Access filename from MetaTensor's .meta attribute (works regardless of MONAI config)
             input_filename = Path(
-                val_data[image_meta_key]['filename_or_obj'][0]
+                val_data['image'].meta['filename_or_obj'][0]
             ).name.split('.nii')[0]
 
             with torch.amp.autocast(device_type='cuda', enabled=not cpu_device):
@@ -1011,7 +1009,7 @@ def validation_loop_split_lists(
                     output_path_list = [str(out_input_path)]
                 img_count += 1
             img_vol_dict[output_path_list[-1]] = vol_output
-            for i, input_image_path in enumerate(val_data[image_meta_key]['filename_or_obj']):
+            for input_image_path in val_data['image'].meta['filename_or_obj']:
                 input_output_paths_dict[input_image_path] = output_path_list[-1]
             save_json(
                 Path(output_dir, '__input_output_paths_dict.json'), input_output_paths_dict
