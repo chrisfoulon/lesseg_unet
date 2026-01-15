@@ -37,6 +37,8 @@ Multi-modal imaging:
 """
 
 import re
+import json
+import warnings
 import numpy as np
 from pathlib import Path
 from typing import TypeAlias
@@ -61,6 +63,534 @@ Fold: TypeAlias = list[SubjectDict]
 
 SplitLists: TypeAlias = list[Fold]
 """Multiple folds for cross-validation (canonical data format)."""
+
+
+# ============================================================================
+# Stage 0: Loading Functions
+# ============================================================================
+
+def read_folder(
+    folder: str | Path,
+    pattern: str | None = None,
+    recursive: bool = False
+) -> list[Path]:
+    """List NIfTI files from a folder with optional glob filtering.
+
+    This is a Stage 0 loading function that returns a flat list of file paths.
+    Use this to load files before matching across modalities.
+
+    Parameters
+    ----------
+    folder : str | Path
+        Directory to scan for NIfTI files.
+    pattern : str | None, optional
+        Glob-style pattern to filter files (e.g., 'patient*', '*dwi*').
+        If None, all NIfTI files are returned.
+    recursive : bool, optional
+        If True, search recursively in subdirectories.
+        Default: False.
+
+    Returns
+    -------
+    list[Path]
+        Sorted list of NIfTI file paths (.nii or .nii.gz).
+
+    Raises
+    ------
+    ValueError
+        If folder doesn't exist or contains no matching NIfTI files.
+
+    Examples
+    --------
+    >>> # List all NIfTI files
+    >>> paths = read_folder('/data/dwi')
+
+    >>> # Filter by pattern
+    >>> paths = read_folder('/data/images', pattern='patient*')
+
+    >>> # Recursive search
+    >>> paths = read_folder('/data/bids', recursive=True)
+    """
+    folder = Path(folder)
+
+    # Validate folder exists
+    if not folder.exists():
+        raise ValueError(f"Folder does not exist: {folder}")
+    if not folder.is_dir():
+        raise ValueError(f"Path is not a directory: {folder}")
+
+    # Helper to check if file is NIfTI
+    def is_nifti(path: Path) -> bool:
+        name = path.name.lower()
+        return name.endswith('.nii') or name.endswith('.nii.gz')
+
+    # List files based on pattern and recursion
+    if pattern:
+        # Use glob with pattern
+        if recursive:
+            # rglob for recursive
+            all_paths = list(folder.rglob(pattern))
+        else:
+            # glob for non-recursive
+            all_paths = list(folder.glob(pattern))
+        # Filter to only NIfTI files
+        nifti_paths = [p for p in all_paths if p.is_file() and is_nifti(p)]
+    else:
+        # No pattern - list all NIfTI files
+        if recursive:
+            nifti_paths = [p for p in folder.rglob('*') if p.is_file() and is_nifti(p)]
+        else:
+            nifti_paths = [p for p in folder.iterdir() if p.is_file() and is_nifti(p)]
+
+    # Validate we found files
+    if not nifti_paths:
+        if pattern:
+            raise ValueError(
+                f"No NIfTI files found in '{folder}' matching pattern '{pattern}'"
+            )
+        else:
+            raise ValueError(f"No NIfTI files found in '{folder}'")
+
+    # Return sorted list
+    return sorted(nifti_paths)
+
+
+def read_list_file(
+    filepath: str | Path,
+    check_exists: bool = True
+) -> list[Path]:
+    """Read file paths from a text file.
+
+    This is a Stage 0 loading function that reads paths from a list file.
+    Each line in the file should contain one file path.
+
+    Parameters
+    ----------
+    filepath : str | Path
+        Path to text file containing one file path per line.
+    check_exists : bool, optional
+        If True, verify each path exists (default: True).
+
+    Returns
+    -------
+    list[Path]
+        List of file paths in the order they appear in the file.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the list file doesn't exist.
+    ValueError
+        If the list file is empty or contains only comments.
+        If check_exists=True and any listed path doesn't exist.
+
+    Notes
+    -----
+    - Empty lines are skipped
+    - Lines starting with '#' are treated as comments
+    - Leading/trailing whitespace is stripped from paths
+
+    Examples
+    --------
+    >>> # paths.txt contains:
+    >>> # /data/patient001.nii.gz
+    >>> # /data/patient002.nii.gz
+    >>> paths = read_list_file('paths.txt')
+    """
+    filepath = Path(filepath)
+
+    # Check list file exists
+    if not filepath.exists():
+        raise FileNotFoundError(f"List file not found: {filepath}")
+
+    # Read and parse lines
+    paths = []
+    with open(filepath, 'r') as f:
+        for line in f:
+            line = line.strip()
+            # Skip empty lines and comments
+            if not line or line.startswith('#'):
+                continue
+            paths.append(Path(line))
+
+    # Validate we have paths
+    if not paths:
+        raise ValueError(f"No paths found in list file: {filepath}")
+
+    # Optionally validate paths exist
+    if check_exists:
+        for path in paths:
+            if not path.exists():
+                raise ValueError(f"Path does not exist: {path}")
+
+    return paths
+
+
+def read_list_dicts(
+    filepath: str | Path,
+    check_exists: bool = True
+) -> list[dict[str, Path]]:
+    """Read pre-matched subject dictionaries from a JSON file.
+
+    This is a Stage 0 loading function for pre-matched data.
+    Use this when users provide already-matched subject data.
+
+    Parameters
+    ----------
+    filepath : str | Path
+        Path to JSON file containing list of subject dicts.
+        Format: [{"image_dwi": "/path/dwi.nii", "label": "/path/mask.nii"}, ...]
+    check_exists : bool, optional
+        If True, verify each path in dicts exists (default: True).
+
+    Returns
+    -------
+    list[dict[str, Path]]
+        List of subject dictionaries with Path values.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the JSON file doesn't exist.
+    ValueError
+        If JSON format is invalid (not a list, empty, or parse error).
+        If check_exists=True and any path doesn't exist.
+
+    Examples
+    --------
+    >>> # subjects.json contains:
+    >>> # [{"image": "/data/img1.nii", "label": "/data/mask1.nii"}, ...]
+    >>> subjects = read_list_dicts('subjects.json')
+    """
+    filepath = Path(filepath)
+
+    # Check file exists
+    if not filepath.exists():
+        raise FileNotFoundError(f"JSON file not found: {filepath}")
+
+    # Parse JSON
+    try:
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON in {filepath}: {e}")
+
+    # Validate structure
+    if not isinstance(data, list):
+        raise ValueError(
+            f"Expected JSON list of dicts, got {type(data).__name__} in {filepath}"
+        )
+
+    if not data:
+        raise ValueError(f"Empty list in JSON file: {filepath}")
+
+    # Convert string paths to Path objects
+    result = []
+    for subject_dict in data:
+        converted = {key: Path(value) for key, value in subject_dict.items()}
+        result.append(converted)
+
+    # Optionally validate paths exist
+    if check_exists:
+        for subject_dict in result:
+            for key, path in subject_dict.items():
+                if not path.exists():
+                    raise ValueError(f"Path does not exist: {path} (key: {key})")
+
+    return result
+
+
+def read_presplit_json(
+    filepath: str | Path,
+    check_exists: bool = True
+) -> list[list[dict[str, Path]]]:
+    """Read pre-split subject lists from a JSON file.
+
+    This is a Stage 0 loading function for pre-split data.
+    Use this when users provide already-split cross-validation folds.
+
+    Parameters
+    ----------
+    filepath : str | Path
+        Path to JSON file containing split lists.
+        Format: [[{fold0_subj1}, {fold0_subj2}], [{fold1_subj1}, ...], ...]
+    check_exists : bool, optional
+        If True, verify each path in dicts exists (default: True).
+
+    Returns
+    -------
+    list[list[dict[str, Path]]]
+        Nested list: folds -> subjects -> {key: Path}.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the JSON file doesn't exist.
+    ValueError
+        If JSON format is invalid (not nested lists, empty folds).
+        If check_exists=True and any path doesn't exist.
+
+    Examples
+    --------
+    >>> # split_lists.json contains:
+    >>> # [[{"image": "/data/img1.nii"}, {"image": "/data/img2.nii"}], ...]
+    >>> folds = read_presplit_json('split_lists.json')
+    >>> len(folds)  # Number of folds
+    5
+    """
+    filepath = Path(filepath)
+
+    # Check file exists
+    if not filepath.exists():
+        raise FileNotFoundError(f"JSON file not found: {filepath}")
+
+    # Parse JSON
+    try:
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON in {filepath}: {e}")
+
+    # Validate top-level structure
+    if not isinstance(data, list):
+        raise ValueError(
+            f"Expected JSON list of folds, got {type(data).__name__} in {filepath}"
+        )
+
+    if not data:
+        raise ValueError(f"Empty list in JSON file: {filepath}")
+
+    # Validate nested structure and convert
+    result = []
+    for fold_idx, fold in enumerate(data):
+        if not isinstance(fold, list):
+            raise ValueError(
+                f"Expected fold {fold_idx} to be a list of dicts, "
+                f"got {type(fold).__name__}. Format should be: "
+                f"[[{{subj1}}, {{subj2}}], [{{subj3}}, ...], ...]"
+            )
+
+        if not fold:
+            raise ValueError(f"Empty fold at index {fold_idx} in {filepath}")
+
+        # Convert each subject dict
+        converted_fold = []
+        for subject_dict in fold:
+            if not isinstance(subject_dict, dict):
+                raise ValueError(
+                    f"Expected dict in fold {fold_idx}, got {type(subject_dict).__name__}"
+                )
+            converted = {key: Path(value) for key, value in subject_dict.items()}
+            converted_fold.append(converted)
+
+        result.append(converted_fold)
+
+    # Optionally validate paths exist
+    if check_exists:
+        for fold_idx, fold in enumerate(result):
+            for subj_idx, subject_dict in enumerate(fold):
+                for key, path in subject_dict.items():
+                    if not path.exists():
+                        raise ValueError(
+                            f"Path does not exist: {path} "
+                            f"(fold {fold_idx}, subject {subj_idx}, key: {key})"
+                        )
+
+    return result
+
+
+# ============================================================================
+# Stage 1: Matching Functions
+# ============================================================================
+
+def match_lists_to_dicts(
+    image_lists: dict[str, list[Path]],
+    label_lists: dict[str, list[Path]] | None = None,
+    control_lists: dict[str, list[Path]] | None = None,
+    strip_pattern: str | dict[str, str] | None = None,
+    extract_pattern: str | None = None,
+    control_strip_pattern: str | dict[str, str] | None = None,
+    control_extract_pattern: str | None = None
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """Match files across modalities to create subject dictionaries.
+
+    Two matching mechanisms are available (mutually exclusive):
+
+    1. Default (no patterns): Exact filename match across folders
+    2. STRIP: Remove pattern from filename, match by residual
+    3. EXTRACT: Extract pattern from filename as matching key
+
+    Parameters
+    ----------
+    image_lists : dict[str, list[Path]]
+        Dictionary mapping modality names to lists of file paths.
+    label_lists : dict[str, list[Path]] | None, optional
+        Dictionary mapping label class names to lists of file paths.
+    control_lists : dict[str, list[Path]] | None, optional
+        Dictionary mapping control modality names to lists of file paths.
+    strip_pattern : str | dict[str, str] | None, optional
+        Pattern to REMOVE from filenames for residual matching.
+        - None (default): exact filename match
+        - str: same pattern applied to all modalities
+        - dict: {modality: pattern} for per-modality patterns
+    extract_pattern : str | None, optional
+        Regex pattern to EXTRACT from filenames as matching key.
+        Cannot be used together with strip_pattern.
+    control_strip_pattern : str | dict[str, str] | None, optional
+        Strip pattern for controls. Default: use control modality names.
+    control_extract_pattern : str | None, optional
+        Extract pattern for controls.
+
+    Returns
+    -------
+    tuple[list[dict], list[dict]]
+        (subject_dicts, control_dicts) where each dict has format:
+        {'image_<modality>': path, 'label_<class>': path, ...}
+    """
+    from collections import defaultdict
+
+    # Validate: can't use both strip and extract for subjects
+    if strip_pattern is not None and extract_pattern is not None:
+        raise ValueError(
+            "Cannot use both strip_pattern and extract_pattern. "
+            "Choose one matching mechanism."
+        )
+
+    # Validate: can't use both strip and extract for controls
+    if control_strip_pattern is not None and control_extract_pattern is not None:
+        raise ValueError(
+            "Cannot use both control_strip_pattern and control_extract_pattern."
+        )
+
+    def get_key_func(pattern, extract_pat, modality):
+        """Create key extraction function based on pattern type."""
+        if extract_pat is not None:
+            # EXTRACT: extract pattern as key
+            def get_key(path: Path) -> str:
+                match = re.search(extract_pat, path.name)
+                if not match:
+                    raise ValueError(
+                        f"Extract pattern '{extract_pat}' not found in '{path.name}'"
+                    )
+                return match.group(0)
+            return get_key
+
+        elif pattern is not None:
+            # STRIP: get pattern for this modality
+            if isinstance(pattern, dict):
+                mod_pattern = pattern.get(modality, modality)
+            else:
+                mod_pattern = pattern
+
+            def get_key(path: Path) -> str:
+                return re.sub(mod_pattern, '', path.name, count=1)
+            return get_key
+
+        else:
+            # DEFAULT: exact filename match
+            def get_key(path: Path) -> str:
+                return path.name
+            return get_key
+
+    def build_key_mapping(lists, pattern, extract_pat, key_prefix):
+        """Build {key: {modality: path}} mapping."""
+        by_key = defaultdict(dict)
+
+        for modality, paths in lists.items():
+            get_key = get_key_func(pattern, extract_pat, modality)
+
+            for path in paths:
+                key = get_key(path)
+                if modality in by_key[key]:
+                    raise ValueError(
+                        f"Duplicate key '{key}' for {key_prefix} '{modality}': "
+                        f"both '{by_key[key][modality]}' and '{path}'"
+                    )
+                by_key[key][modality] = path
+
+        return by_key
+
+    # Build mappings for images
+    image_by_key = build_key_mapping(
+        image_lists, strip_pattern, extract_pattern, 'image'
+    )
+
+    # Build mappings for labels (if provided)
+    label_by_key = {}
+    if label_lists:
+        label_by_key = build_key_mapping(
+            label_lists, strip_pattern, extract_pattern, 'label'
+        )
+
+    # Find complete subject matches
+    all_image_modalities = set(image_lists.keys())
+    all_label_classes = set(label_lists.keys()) if label_lists else set()
+
+    subject_dicts = []
+    for key, modalities_found in image_by_key.items():
+        # Check all image modalities present
+        if set(modalities_found.keys()) != all_image_modalities:
+            continue  # Incomplete, skip
+
+        # Check all labels present (if required)
+        if label_lists:
+            if key not in label_by_key:
+                continue
+            labels_found = label_by_key[key]
+            if set(labels_found.keys()) != all_label_classes:
+                continue  # Incomplete labels
+
+        # Build subject dict
+        subject_dict = {}
+        for mod, path in sorted(modalities_found.items()):
+            subject_dict[f'image_{mod}'] = str(path)
+
+        if label_lists and key in label_by_key:
+            for cls, path in sorted(label_by_key[key].items()):
+                subject_dict[f'label_{cls}'] = str(path)
+
+        subject_dicts.append(subject_dict)
+
+    # Handle controls separately
+    control_dicts = []
+    if control_lists:
+        ctrl_pattern = control_strip_pattern
+        ctrl_extract = control_extract_pattern
+
+        control_by_key = build_key_mapping(
+            control_lists, ctrl_pattern, ctrl_extract, 'control'
+        )
+
+        all_control_modalities = set(control_lists.keys())
+
+        for key, modalities_found in control_by_key.items():
+            if set(modalities_found.keys()) != all_control_modalities:
+                continue
+
+            control_dict = {}
+            for mod, path in sorted(modalities_found.items()):
+                control_dict[f'control_{mod}'] = str(path)
+
+            control_dicts.append(control_dict)
+
+    # Error if no matches found
+    if not subject_dicts and image_lists:
+        first_mod = next(iter(image_lists.keys()))
+        first_file = image_lists[first_mod][0] if image_lists[first_mod] else "unknown"
+        pattern_desc = (
+            f"extract_pattern='{extract_pattern}'" if extract_pattern
+            else f"strip_pattern='{strip_pattern}'" if strip_pattern
+            else "exact filename match"
+        )
+        raise ValueError(
+            f"No complete matches found using {pattern_desc}.\n"
+            f"  First file: '{first_file}'\n"
+            f"  Total files: {sum(len(v) for v in image_lists.values())}\n"
+            f"  Hint: Check that filenames match across modalities, "
+            f"or provide a strip_pattern/extract_pattern."
+        )
+
+    return subject_dicts, control_dicts
 
 
 def parse_key(key: str) -> tuple[str, str | None]:
@@ -402,6 +932,695 @@ def _build_subject_to_file_mapping(
     return mapping
 
 
+def _validate_entity_completeness(
+    entity_ids: set[str],
+    modality_mappings: dict[str, dict[str, str]],
+    label_mappings: dict[str, dict[str, str]] | None = None,
+    key_prefix: str = 'image'
+) -> tuple[list[str], list[tuple[str, list[str]]]]:
+    """Validate that entities have all required modalities and labels.
+
+    Parameters
+    ----------
+    entity_ids : set[str]
+        Set of entity IDs to validate (subjects or controls)
+    modality_mappings : dict[str, dict[str, str]]
+        Modality name to entity-to-file mappings
+    label_mappings : dict[str, dict[str, str]] or None
+        Label class to entity-to-file mappings (only for subjects)
+    key_prefix : str
+        Prefix for missing item names ('image' or 'control')
+
+    Returns
+    -------
+    complete_entities : list[str]
+        List of entity IDs with complete data
+    incomplete_entities : list[tuple[str, list[str]]]
+        List of (entity_id, missing_items) tuples
+    """
+    all_modalities = set(modality_mappings.keys())
+    all_labels = set(label_mappings.keys()) if label_mappings is not None else set()
+
+    complete_entities = []
+    incomplete_entities = []
+
+    for entity_id in entity_ids:
+        missing_items = []
+
+        # Check modalities
+        for modality in all_modalities:
+            if entity_id not in modality_mappings[modality]:
+                missing_items.append(f"{key_prefix}_{modality}")
+
+        # Check labels (if provided)
+        if label_mappings is not None:
+            for label_class in all_labels:
+                if entity_id not in label_mappings[label_class]:
+                    missing_items.append(f"label_{label_class}")
+
+        if missing_items:
+            incomplete_entities.append((entity_id, missing_items))
+        else:
+            complete_entities.append(entity_id)
+
+    return complete_entities, incomplete_entities
+
+
+def _build_entity_dicts(
+    entity_ids: list[str],
+    modality_mappings: dict[str, dict[str, str]],
+    label_mappings: dict[str, dict[str, str]] | None = None,
+    key_prefix: str = 'image'
+) -> list[dict[str, str]]:
+    """Build entity dictionaries with sorted keys.
+
+    Parameters
+    ----------
+    entity_ids : list[str]
+        List of entity IDs (should be sorted for reproducibility)
+    modality_mappings : dict[str, dict[str, str]]
+        Modality name to entity-to-file mappings
+    label_mappings : dict[str, dict[str, str]] or None
+        Label class to entity-to-file mappings
+    key_prefix : str
+        Prefix for keys ('image' or 'control')
+
+    Returns
+    -------
+    entity_dicts : list[dict[str, str]]
+        List of dictionaries with sorted keys
+    """
+    all_modalities = set(modality_mappings.keys())
+    all_labels = set(label_mappings.keys()) if label_mappings is not None else set()
+
+    entity_dicts = []
+    for entity_id in entity_ids:
+        entity_dict = {}
+
+        # Add modalities (sorted for consistent ordering)
+        for modality in sorted(all_modalities):
+            key = f"{key_prefix}_{modality}"
+            entity_dict[key] = modality_mappings[modality][entity_id]
+
+        # Add labels (if provided, sorted for consistent ordering)
+        if label_mappings is not None:
+            for label_class in sorted(all_labels):
+                key = f"label_{label_class}"
+                entity_dict[key] = label_mappings[label_class][entity_id]
+
+        entity_dicts.append(entity_dict)
+
+    return entity_dicts
+
+
+def _build_no_valid_subjects_error(
+    all_modalities: set[str],
+    all_label_classes: set[str],
+    incomplete_subjects_count: int,
+    all_control_modalities: set[str] | None = None,
+    incomplete_controls_count: int = 0
+) -> str:
+    """Build error message when no valid subjects are found."""
+    error_parts = ["No valid subjects found."]
+
+    if all_label_classes:
+        error_parts.append(f"Image modalities required: {sorted(all_modalities)}")
+        error_parts.append(f"Label classes required: {sorted(all_label_classes)}")
+    else:
+        error_parts.append(f"Image modalities required: {sorted(all_modalities)}")
+
+    if all_control_modalities is not None:
+        error_parts.append(f"Control modalities required: {sorted(all_control_modalities)}")
+
+    error_parts.append(f"Subjects with incomplete data: {incomplete_subjects_count}")
+    if all_control_modalities is not None:
+        error_parts.append(f"Controls with incomplete data: {incomplete_controls_count}")
+
+    return '\n'.join(error_parts)
+
+
+def _build_incomplete_data_error(
+    incomplete_subjects: list[tuple[str, list[str]]],
+    incomplete_controls: list[tuple[str, list[str]]]
+) -> str:
+    """Build error message for incomplete subjects/controls."""
+    error_parts = ["Some subjects have incomplete data:"]
+
+    if incomplete_subjects:
+        error_parts.append(f"\nPatients missing data ({len(incomplete_subjects)} total):")
+        for subj_id, missing in incomplete_subjects[:10]:  # Show first 10
+            error_parts.append(f"  - {subj_id}: missing {missing}")
+        if len(incomplete_subjects) > 10:
+            error_parts.append(f"  ... and {len(incomplete_subjects) - 10} more")
+
+    if incomplete_controls:
+        error_parts.append(f"\nControls missing data ({len(incomplete_controls)} total):")
+        for ctrl_id, missing in incomplete_controls[:10]:
+            error_parts.append(f"  - {ctrl_id}: missing {missing}")
+        if len(incomplete_controls) > 10:
+            error_parts.append(f"  ... and {len(incomplete_controls) - 10} more")
+
+    return '\n'.join(error_parts)
+
+
+def validate_subject_dicts(
+    subject_dicts: list[dict[str, str | Path]],
+    check_loadable: bool = False,
+    min_size: int = 100
+) -> None:
+    """Validate that all paths in subject dictionaries exist and are loadable.
+
+    Parameters
+    ----------
+    subject_dicts : list[dict[str, str or Path]]
+        List of subject dictionaries to validate.
+        Each value should be a file path (str or Path).
+
+        Example:
+            [
+                {'image_dwi': '/data/sub-001.nii.gz', 'label': '/labels/sub-001.nii.gz'},
+                {'image_dwi': '/data/sub-002.nii.gz', 'label': '/labels/sub-002.nii.gz'}
+            ]
+
+    check_loadable : bool, default=False
+        If True, attempt to load each file with nibabel to verify it's valid NIfTI.
+        If False, only check file existence and size.
+
+    min_size : int, default=100
+        Minimum file size in bytes. Files smaller than this are considered
+        potentially corrupt. Set to 0 to disable size checking.
+
+    Raises
+    ------
+    ValueError
+        If any file does not exist, is too small, or cannot be loaded (if check_loadable=True).
+
+    Notes
+    -----
+    - Validates on first error (fails fast)
+    - Accepts both str and Path objects
+    - Empty list is valid (nothing to check)
+    - Loadability check uses nibabel.load()
+
+    Examples
+    --------
+    Basic existence check:
+
+    >>> subject_dicts = [
+    ...     {'image': '/data/sub-001.nii.gz'},
+    ...     {'image': '/data/sub-002.nii.gz'}
+    ... ]
+    >>> validate_subject_dicts(subject_dicts, check_loadable=False)
+
+    With loadability check:
+
+    >>> validate_subject_dicts(subject_dicts, check_loadable=True, min_size=1000)
+    """
+    import nibabel as nib  # Import here to avoid dependency for non-validation use
+
+    for subject_dict in subject_dicts:
+        for key, file_path in subject_dict.items():
+            # Convert to Path for consistent handling
+            path = Path(file_path)
+
+            # Check existence
+            if not path.exists():
+                raise ValueError(
+                    f"File for key '{key}' does not exist: {path}"
+                )
+
+            # Check size
+            if min_size > 0:
+                file_size = path.stat().st_size
+                if file_size < min_size:
+                    raise ValueError(
+                        f"File for key '{key}' is too small ({file_size} bytes < {min_size} bytes): {path}. "
+                        f"This may indicate a corrupt or incomplete file."
+                    )
+
+            # Check loadability
+            if check_loadable:
+                try:
+                    nib.load(path)
+                except Exception as e:
+                    raise ValueError(
+                        f"File for key '{key}' cannot be loaded with nibabel: {path}. "
+                        f"Error: {e}"
+                    ) from e
+
+
+def _validate_nonempty_modality_mappings(
+    modality_mappings: dict[str, dict[str, str]],
+    folder_paths: dict[str, Path | str],
+    pattern: str,
+    mapping_type: str = "image"
+) -> None:
+    """Validate that modality mappings are not empty.
+
+    Parameters
+    ----------
+    modality_mappings : dict[str, dict[str, str]]
+        Dictionary of modality-to-subject mappings to validate
+    folder_paths : dict[str, Path | str]
+        Original folder paths for error messages
+    pattern : str
+        Regex pattern used for error messages
+    mapping_type : str
+        Type of mapping for error messages ('image', 'label', or 'control')
+
+    Raises
+    ------
+    ValueError
+        If any modality mapping is empty (no files found)
+    """
+    for modality, mapping in modality_mappings.items():
+        if not mapping:
+            raise ValueError(
+                f"No NIfTI files found in {folder_paths[modality]} matching pattern '{pattern}'"
+            )
+
+
+def list_nifti_from_folders(
+    folders: dict[str, Path | str],
+    pattern: str
+) -> dict[str, dict[str, str]]:
+    """List NIfTI files from multiple folders organized by modality.
+
+    This function performs Stage 0→1 transformation in the input pipeline:
+    converts folder paths into subject-to-file mappings.
+
+    Parameters
+    ----------
+    folders : dict[str, Path or str]
+        Dictionary mapping modality names to folder paths.
+        Format: {modality_name: folder_path}
+
+        Example:
+            {
+                'dwi': Path('/data/dwi'),
+                'adc': '/data/adc',
+                'flair': Path('/data/flair')
+            }
+
+    pattern : str
+        Regex pattern to extract subject ID from filenames.
+        Must contain exactly one capture group.
+
+        Example:
+            r'(sub-\\d+)' matches 'sub-001' in 'sub-001_dwi.nii.gz'
+
+    Returns
+    -------
+    modality_mappings : dict[str, dict[str, str]]
+        Dictionary mapping modality names to subject-to-file mappings.
+        Format: {modality: {subject_id: absolute_path}}
+
+        Example:
+            {
+                'dwi': {
+                    'sub-001': '/data/dwi/sub-001_dwi.nii.gz',
+                    'sub-002': '/data/dwi/sub-002_dwi.nii.gz'
+                },
+                'adc': {
+                    'sub-001': '/data/adc/sub-001_adc.nii.gz',
+                    'sub-002': '/data/adc/sub-002_adc.nii.gz'
+                }
+            }
+
+    Raises
+    ------
+    ValueError
+        If any folder does not exist or is not a directory.
+
+    Notes
+    -----
+    - Finds both .nii and .nii.gz files
+    - Returns absolute paths
+    - Empty folders return empty subject mappings (not an error)
+    - Uses _build_subject_to_file_mapping() internally
+
+    Examples
+    --------
+    List files from multiple modality folders:
+
+    >>> folders = {
+    ...     'dwi': '/data/images/dwi',
+    ...     'adc': '/data/images/adc'
+    ... }
+    >>> pattern = r'(sub-\\d+)'
+    >>> mappings = list_nifti_from_folders(folders, pattern)
+    >>> 'dwi' in mappings
+    True
+    >>> 'sub-001' in mappings['dwi']
+    True
+
+    .. deprecated:: 3.0
+        Use :func:`read_folder` for loading and :func:`match_lists_to_dicts`
+        for matching instead.
+    """
+    warnings.warn(
+        "list_nifti_from_folders() is deprecated and will be removed in v3.0. "
+        "Use read_folder() for loading and match_lists_to_dicts() for matching.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    modality_mappings = {}
+
+    for modality_name, folder_path in folders.items():
+        # Convert to Path object if str
+        folder = Path(folder_path)
+
+        # Validate folder exists
+        if not folder.exists():
+            raise ValueError(
+                f"Folder for modality '{modality_name}' does not exist: {folder}"
+            )
+
+        if not folder.is_dir():
+            raise ValueError(
+                f"Path for modality '{modality_name}' is not a directory: {folder}"
+            )
+
+        # List files and build subject mapping
+        subject_mapping = _build_subject_to_file_mapping(folder, pattern)
+        modality_mappings[modality_name] = subject_mapping
+
+    return modality_mappings
+
+
+def shuffle_and_split_subjects(
+    subject_dicts: list[dict[str, str]],
+    n_folds: int,
+    shuffle: bool = True,
+    random_seed: int = 42
+) -> list[list[dict[str, str]]]:
+    """Shuffle and split subject dictionaries into cross-validation folds.
+
+    This function performs Stage 2→3 transformation in the input pipeline:
+    converts a flat list of subject dictionaries into nested fold lists.
+
+    Parameters
+    ----------
+    subject_dicts : list[dict[str, str]]
+        Flat list of subject dictionaries to split.
+        Each dict contains paths for one subject.
+
+        Example:
+            [
+                {'image_dwi': '/data/sub-001.nii.gz', 'label': '/labels/sub-001.nii.gz'},
+                {'image_dwi': '/data/sub-002.nii.gz', 'label': '/labels/sub-002.nii.gz'},
+                ...
+            ]
+
+    n_folds : int
+        Number of folds to split into. Must be >= 1.
+        If n_folds > len(subject_dicts), some folds will be empty.
+
+    shuffle : bool, default=True
+        If True, randomly shuffle subjects before splitting.
+        If False, preserve original order.
+
+    random_seed : int, default=42
+        Random seed for reproducible shuffling.
+        Only used when shuffle=True.
+
+    Returns
+    -------
+    split_lists : list[list[dict[str, str]]]
+        Nested list of subject dictionaries organized by fold.
+        Format: [[fold0_dicts], [fold1_dicts], ...]
+
+        Example (2 subjects, 2 folds):
+            [
+                [{'image_dwi': '/data/sub-001.nii.gz', ...}],  # Fold 0
+                [{'image_dwi': '/data/sub-002.nii.gz', ...}]   # Fold 1
+            ]
+
+    Raises
+    ------
+    ValueError
+        If subject_dicts is empty.
+
+    Notes
+    -----
+    - Uses numpy.array_split for even distribution across folds
+    - With 10 subjects and 3 folds: fold sizes will be [4, 3, 3]
+    - Empty folds possible when n_folds > len(subject_dicts)
+    - Maintains dict structure within subjects
+    - Same random_seed produces same splits (reproducible)
+
+    Examples
+    --------
+    Basic split with shuffle:
+
+    >>> subjects = [
+    ...     {'image': '/data/sub-001.nii.gz'},
+    ...     {'image': '/data/sub-002.nii.gz'},
+    ...     {'image': '/data/sub-003.nii.gz'}
+    ... ]
+    >>> splits = shuffle_and_split_subjects(subjects, n_folds=2, shuffle=True, random_seed=42)
+    >>> len(splits)
+    2
+    >>> sum(len(fold) for fold in splits)
+    3
+
+    Split without shuffle (preserves order):
+
+    >>> splits = shuffle_and_split_subjects(subjects, n_folds=2, shuffle=False)
+    >>> splits[0][0]
+    {'image': '/data/sub-001.nii.gz'}
+    """
+    # Validate input
+    if not subject_dicts:
+        raise ValueError("Cannot split empty subject list.")
+
+    # Shuffle if requested
+    if shuffle:
+        np.random.seed(random_seed)
+        shuffled_indices = np.random.permutation(len(subject_dicts))
+        subjects_to_split = [subject_dicts[idx] for idx in shuffled_indices]
+    else:
+        subjects_to_split = subject_dicts
+
+    # Split into folds using numpy's array_split for even distribution
+    split_arrays = np.array_split(np.array(subjects_to_split, dtype=object), n_folds)
+    split_lists = [list(fold) for fold in split_arrays]
+
+    return split_lists
+
+
+def match_modalities_by_subject(
+    image_modalities: dict[str, dict[str, str]],
+    label_classes: dict[str, dict[str, str]] | None = None,
+    control_modalities: dict[str, dict[str, str]] | None = None,
+    require_all: bool = True
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """Match imaging modalities and labels by subject ID.
+
+    This function performs Stage 1→2 transformation in the input pipeline:
+    converts subject-to-file mappings into complete subject dictionaries.
+
+    Each subject must have ALL required modalities and labels (if labels
+    provided). Controls are matched separately and returned in a separate list.
+
+    Parameters
+    ----------
+    image_modalities : dict[str, dict[str, str]]
+        Dictionary mapping modality names to subject-to-file mappings.
+        Format: {modality: {subject_id: absolute_path}}
+
+        Example:
+            {
+                'dwi': {'sub-001': '/data/dwi/sub-001.nii.gz', ...},
+                'adc': {'sub-001': '/data/adc/sub-001.nii.gz', ...}
+            }
+
+    label_classes : dict[str, dict[str, str]] or None, optional
+        Dictionary mapping label class names to subject-to-file mappings.
+        Format: {label_class: {subject_id: absolute_path}}
+
+        Example:
+            {'stroke': {'sub-001': '/data/labels/sub-001.nii.gz', ...}}
+
+        If None, creates subject dicts without labels (for segmentation).
+
+    control_modalities : dict[str, dict[str, str]] or None, optional
+        Dictionary mapping control modality names to control-to-file mappings.
+        Format: {modality: {control_id: absolute_path}}
+
+        Controls are healthy subjects without labels. Returned separately
+        from patient subjects.
+
+    require_all : bool, default=True
+        If True, raises ValueError if any subject is missing modalities/labels.
+        If False, incomplete subjects are silently excluded.
+
+    Returns
+    -------
+    subject_dicts : list[dict[str, str]]
+        List of subject dictionaries with keys:
+        - 'image_{modality}' for each image modality (sorted alphabetically)
+        - 'label_{class}' for each label class (sorted alphabetically)
+
+        Example:
+            [
+                {
+                    'image_adc': '/data/adc/sub-001.nii.gz',
+                    'image_dwi': '/data/dwi/sub-001.nii.gz',
+                    'label_stroke': '/data/labels/sub-001.nii.gz'
+                },
+                ...
+            ]
+
+    control_dicts : list[dict[str, str]]
+        List of control dictionaries with keys:
+        - 'control_{modality}' for each control modality (sorted alphabetically)
+
+        Example:
+            [
+                {'control_dwi': '/data/controls/ctr-001.nii.gz'},
+                ...
+            ]
+
+    Raises
+    ------
+    ValueError
+        If require_all=True and any subject has incomplete data (missing
+        modality or label). Error message lists all incomplete subjects.
+
+    ValueError
+        If no valid subjects found (all subjects are incomplete).
+
+    Notes
+    -----
+    - Subject IDs are sorted alphabetically for reproducible output
+    - Modality keys are sorted alphabetically for consistent key ordering
+    - Label keys are sorted alphabetically for consistent key ordering
+    - Controls are returned separately from subjects
+
+    Examples
+    --------
+    Basic two-modality matching:
+
+    >>> image_mods = {
+    ...     'dwi': {'sub-001': '/data/dwi/sub-001.nii.gz'},
+    ...     'adc': {'sub-001': '/data/adc/sub-001.nii.gz'}
+    ... }
+    >>> label_cls = {
+    ...     'stroke': {'sub-001': '/data/labels/sub-001.nii.gz'}
+    ... }
+    >>> subjects, controls = match_modalities_by_subject(image_mods, label_cls)
+    >>> subjects[0]
+    {
+        'image_adc': '/data/adc/sub-001.nii.gz',
+        'image_dwi': '/data/dwi/sub-001.nii.gz',
+        'label_stroke': '/data/labels/sub-001.nii.gz'
+    }
+
+    Segmentation mode (no labels):
+
+    >>> subjects, _ = match_modalities_by_subject(image_mods, label_classes=None)
+    >>> subjects[0]
+    {'image_adc': '/data/adc/sub-001.nii.gz', 'image_dwi': '/data/dwi/sub-001.nii.gz'}
+
+    With controls:
+
+    >>> control_mods = {
+    ...     'dwi': {'ctr-001': '/data/controls/ctr-001.nii.gz'}
+    ... }
+    >>> subjects, controls = match_modalities_by_subject(
+    ...     image_mods, label_cls, control_mods
+    ... )
+    >>> controls[0]
+    {'control_dwi': '/data/controls/ctr-001.nii.gz'}
+
+    .. deprecated:: 3.0
+        Use :func:`match_lists_to_dicts` instead.
+    """
+    warnings.warn(
+        "match_modalities_by_subject() is deprecated and will be removed in v3.0. "
+        "Use match_lists_to_dicts() which supports residual matching.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    # Step 1: Identify all required modalities and labels
+    all_modalities = set(image_modalities.keys())
+    all_label_classes = set(label_classes.keys()) if label_classes is not None else set()
+
+    # Step 2: Find all subject IDs to check
+    subjects_to_check = set()
+    for modality_mapping in image_modalities.values():
+        subjects_to_check.update(modality_mapping.keys())
+    if label_classes is not None:
+        for label_mapping in label_classes.values():
+            subjects_to_check.update(label_mapping.keys())
+
+    # Step 3: Validate subjects completeness
+    complete_subjects, incomplete_subjects = _validate_entity_completeness(
+        entity_ids=subjects_to_check,
+        modality_mappings=image_modalities,
+        label_mappings=label_classes,
+        key_prefix='image'
+    )
+
+    # Step 4: Validate controls completeness (if provided)
+    complete_controls = []
+    incomplete_controls = []
+    all_control_modalities = None
+
+    if control_modalities is not None:
+        all_control_modalities = set(control_modalities.keys())
+        controls_to_check = set()
+        for modality_mapping in control_modalities.values():
+            controls_to_check.update(modality_mapping.keys())
+
+        complete_controls, incomplete_controls = _validate_entity_completeness(
+            entity_ids=controls_to_check,
+            modality_mappings=control_modalities,
+            label_mappings=None,
+            key_prefix='control'
+        )
+
+    # Step 5: Check if any valid subjects found
+    if not complete_subjects and not complete_controls:
+        error_msg = _build_no_valid_subjects_error(
+            all_modalities=all_modalities,
+            all_label_classes=all_label_classes,
+            incomplete_subjects_count=len(incomplete_subjects),
+            all_control_modalities=all_control_modalities,
+            incomplete_controls_count=len(incomplete_controls)
+        )
+        raise ValueError(error_msg)
+
+    # Step 6: Raise error if require_all and incomplete subjects exist
+    if require_all and (incomplete_subjects or incomplete_controls):
+        error_msg = _build_incomplete_data_error(
+            incomplete_subjects=incomplete_subjects,
+            incomplete_controls=incomplete_controls
+        )
+        raise ValueError(error_msg)
+
+    # Step 7: Build subject dictionaries (sorted for reproducibility)
+    subject_dicts = _build_entity_dicts(
+        entity_ids=sorted(complete_subjects),
+        modality_mappings=image_modalities,
+        label_mappings=label_classes,
+        key_prefix='image'
+    )
+
+    # Step 8: Build control dictionaries (sorted for reproducibility)
+    control_dicts = []
+    if control_modalities is not None:
+        control_dicts = _build_entity_dicts(
+            entity_ids=sorted(complete_controls),
+            modality_mappings=control_modalities,
+            label_mappings=None,
+            key_prefix='control'
+        )
+
+    return subject_dicts, control_dicts
+
+
 def folder_mode_to_split_lists(
     image_folders: dict[str, Path | str],
     label_folders: dict[str, Path | str] | None = None,
@@ -539,7 +1758,18 @@ def folder_mode_to_split_lists(
     - Subjects are randomly shuffled before splitting (controlled by random_seed)
     - If n_subjects % n_folds != 0, later folds may have one fewer subject
     - Only subjects with ALL modalities AND label are included
+
+    .. deprecated:: 3.0
+        Use explicit pipeline in main.py with :func:`read_folder`,
+        :func:`match_lists_to_dicts`, and :func:`shuffle_and_split_subjects`.
     """
+    warnings.warn(
+        "folder_mode_to_split_lists() is deprecated and will be removed in v3.0. "
+        "The staged pipeline is now explicit in main.py using read_folder(), "
+        "match_lists_to_dicts(), and shuffle_and_split_subjects().",
+        DeprecationWarning,
+        stacklevel=2
+    )
     # Validate current limitations (multi-class/multi-modal not yet implemented)
     if label_folders is not None and len(label_folders) > 1:
         raise NotImplementedError(
@@ -553,193 +1783,48 @@ def folder_mode_to_split_lists(
             f"Received {len(control_folders)} control modalities: {list(control_folders.keys())}"
         )
 
-    # Convert paths to Path objects
-    image_folders = {
-        modality: Path(folder) for modality, folder in image_folders.items()
-    }
+    # Step 1: List NIfTI files from folders (Stage 0→1)
+    image_modalities = list_nifti_from_folders(image_folders, subject_pattern)
+    _validate_nonempty_modality_mappings(image_modalities, image_folders, subject_pattern)
 
+    # List label files (if provided)
+    label_classes = None
     if label_folders is not None:
-        label_folders = {
-            label_class: Path(folder) for label_class, folder in label_folders.items()
-        }
+        label_classes = list_nifti_from_folders(label_folders, subject_pattern)
+        _validate_nonempty_modality_mappings(label_classes, label_folders, subject_pattern)
 
+    # List control files (if provided)
+    control_modalities = None
     if control_folders is not None:
-        control_folders = {
-            modality: Path(folder) for modality, folder in control_folders.items()
-        }
+        control_modalities = list_nifti_from_folders(control_folders, control_pattern)
+        _validate_nonempty_modality_mappings(control_modalities, control_folders, control_pattern)
 
-    # Step 1: Build subject-to-file mappings for each image modality
-    modality_files = {}
-    for modality, folder in image_folders.items():
-        mapping = _build_subject_to_file_mapping(folder, subject_pattern)
-        if not mapping:
-            raise ValueError(
-                f"No NIfTI files found in {folder} matching pattern '{subject_pattern}'"
-            )
-        modality_files[modality] = mapping
+    # Step 2: Match modalities by subject ID (Stage 1→2)
+    try:
+        subject_dicts, control_dicts = match_modalities_by_subject(
+            image_modalities=image_modalities,
+            label_classes=label_classes,
+            control_modalities=control_modalities,
+            require_all=True
+        )
+    except ValueError as e:
+        # Add pattern hint to error message if no valid subjects
+        error_msg = str(e)
+        if 'No valid subjects found' in error_msg:
+            error_msg += f"\nCheck that filenames match patterns: subject='{subject_pattern}', control='{control_pattern}'"
+        raise ValueError(error_msg) from e
 
-    # Step 2: Build subject-to-file mapping for each label class (if provided)
-    label_class_files = {}
-    if label_folders is not None:
-        for label_class, folder in label_folders.items():
-            mapping = _build_subject_to_file_mapping(folder, subject_pattern)
-            if not mapping:
-                raise ValueError(
-                    f"No NIfTI files found in {folder} matching pattern '{subject_pattern}'"
-                )
-            label_class_files[label_class] = mapping
+    # Step 3: Merge subjects and controls into single list for shuffling
+    # Controls must be merged BEFORE shuffle to maintain backward compatibility
+    subject_list = subject_dicts + control_dicts
 
-    # Step 3: Build control-to-file mapping for each control modality (if provided)
-    control_modality_files = {}
-    if control_folders is not None:
-        for modality, folder in control_folders.items():
-            mapping = _build_subject_to_file_mapping(folder, control_pattern)
-            if not mapping:
-                raise ValueError(
-                    f"No NIfTI files found in {folder} matching pattern '{control_pattern}'"
-                )
-            control_modality_files[modality] = mapping
-
-    # Step 4: Find patients with complete data (all image modalities + all label classes)
-    all_modalities = set(image_folders.keys())
-    all_label_classes = set(label_class_files.keys()) if label_folders is not None else set()
-
-    complete_patients = []
-    incomplete_patients = []
-
-    # Determine which subjects to check - get all subjects with images
-    subjects_to_check = set()
-    for modality_mapping in modality_files.values():
-        subjects_to_check.update(modality_mapping.keys())
-
-    # Also include subjects with labels (in case they're missing images)
-    if label_folders is not None:
-        for label_mapping in label_class_files.values():
-            subjects_to_check.update(label_mapping.keys())
-
-    for subject_id in subjects_to_check:
-        missing_items = []
-
-        # Check if subject has all image modalities
-        for modality in all_modalities:
-            if subject_id not in modality_files[modality]:
-                missing_items.append(f"image_{modality}")
-
-        # Check if subject has all label classes (if labels required)
-        if label_folders is not None:
-            for label_class in all_label_classes:
-                if subject_id not in label_class_files[label_class]:
-                    missing_items.append(f"label_{label_class}")
-
-        if missing_items:
-            incomplete_patients.append((subject_id, missing_items))
-        else:
-            complete_patients.append(subject_id)
-
-    # Step 5: Find controls with complete data (all control modalities)
-    complete_controls = []
-    incomplete_controls = []
-
-    if control_folders is not None:
-        all_control_modalities = set(control_folders.keys())
-
-        # Get all control IDs
-        controls_to_check = set()
-        for modality_mapping in control_modality_files.values():
-            controls_to_check.update(modality_mapping.keys())
-
-        for control_id in controls_to_check:
-            missing_modalities = []
-
-            # Check if control has all modalities
-            for modality in all_control_modalities:
-                if control_id not in control_modality_files[modality]:
-                    missing_modalities.append(f"control_{modality}")
-
-            if missing_modalities:
-                incomplete_controls.append((control_id, missing_modalities))
-            else:
-                complete_controls.append(control_id)
-
-    # Check if no valid subjects found
-    if not complete_patients and not complete_controls:
-        error_parts = ["No valid subjects found."]
-
-        if label_folders is not None:
-            error_parts.append(f"Image modalities required: {list(all_modalities)}")
-            error_parts.append(f"Label classes required: {list(all_label_classes)}")
-        else:
-            error_parts.append(f"Image modalities required: {list(all_modalities)}")
-
-        if control_folders is not None:
-            error_parts.append(f"Control modalities required: {list(all_control_modalities)}")
-
-        error_parts.append(f"Subjects with incomplete data: {len(incomplete_patients)}")
-        if control_folders is not None:
-            error_parts.append(f"Controls with incomplete data: {len(incomplete_controls)}")
-
-        error_parts.append(f"Check that filenames match patterns: subject='{subject_pattern}', control='{control_pattern}'")
-
-        raise ValueError('\n'.join(error_parts))
-
-    # Warn about incomplete subjects (if any)
-    if incomplete_patients or incomplete_controls:
-        error_parts = ["Some subjects have incomplete data:"]
-
-        if incomplete_patients:
-            error_parts.append(f"\nPatients missing data ({len(incomplete_patients)} total):")
-            for subj_id, missing in incomplete_patients[:10]:  # Show first 10
-                error_parts.append(f"  - {subj_id}: missing {missing}")
-            if len(incomplete_patients) > 10:
-                error_parts.append(f"  ... and {len(incomplete_patients) - 10} more")
-
-        if incomplete_controls:
-            error_parts.append(f"\nControls missing data ({len(incomplete_controls)} total):")
-            for ctrl_id, missing in incomplete_controls[:10]:
-                error_parts.append(f"  - {ctrl_id}: missing {missing}")
-            if len(incomplete_controls) > 10:
-                error_parts.append(f"  ... and {len(incomplete_controls) - 10} more")
-
-        raise ValueError('\n'.join(error_parts))
-
-    # Step 6: Build SubjectDict entries for patients
-    subject_list = []
-    for subject_id in sorted(complete_patients):  # Sort for reproducible split order
-        subject_dict = {}
-
-        # Add all image modalities
-        for modality in sorted(all_modalities):  # Sort for consistent ordering
-            key = f'image_{modality}'
-            subject_dict[key] = modality_files[modality][subject_id]
-
-        # Add all label classes (if provided)
-        if label_folders is not None:
-            for label_class in sorted(all_label_classes):  # Sort for consistent ordering
-                key = f'label_{label_class}'
-                subject_dict[key] = label_class_files[label_class][subject_id]
-
-        subject_list.append(subject_dict)
-
-    # Step 7: Build SubjectDict entries for controls (if provided)
-    if control_folders is not None:
-        for control_id in sorted(complete_controls):  # Sort for reproducible split order
-            control_dict = {}
-
-            # Add all control modalities
-            for modality in sorted(all_control_modalities):  # Sort for consistent ordering
-                key = f'control_{modality}'
-                control_dict[key] = control_modality_files[modality][control_id]
-
-            subject_list.append(control_dict)
-
-    # Step 8: Shuffle and split into folds
-    np.random.seed(random_seed)
-    shuffled_indices = np.random.permutation(len(subject_list))
-    shuffled_subjects = [subject_list[idx] for idx in shuffled_indices]
-
-    # Use numpy's array_split for even distribution (same as existing codebase)
-    split_arrays = np.array_split(np.array(shuffled_subjects, dtype=object), n_folds)
-    split_lists = [list(fold) for fold in split_arrays]
+    # Step 4: Shuffle and split into folds (Stage 2→3)
+    split_lists = shuffle_and_split_subjects(
+        subject_dicts=subject_list,
+        n_folds=n_folds,
+        shuffle=True,
+        random_seed=random_seed
+    )
 
     return split_lists
 

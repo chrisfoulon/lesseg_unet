@@ -1,7 +1,7 @@
 import os
 import json
 from pathlib import Path
-from typing import Sequence, Union, List
+from typing import Sequence, Union, List, Dict, Any
 from copy import deepcopy
 import logging
 import shutil
@@ -13,11 +13,11 @@ from lesseg_unet.utils import save_tensor_to_nifti
 from tqdm import tqdm
 import torch
 from bcblib.tools.general_utils import save_json
-from lesseg_unet import data_loading, utils, net, transformations
+from lesseg_unet import data_loading, data_utils, utils, net, transformations
 from monai.transforms.utils import allow_missing_keys_mode
 from monai.metrics import DiceMetric, HausdorffDistanceMetric
 from monai.inferers import sliding_window_inference
-from monai.data import decollate_batch, list_data_collate
+from monai.data import decollate_batch, list_data_collate, Dataset
 from monai.transforms import (
     Activations,
     Activationsd,
@@ -726,3 +726,323 @@ def validation_loop(img_path_list: Sequence,
     # loop_df_columns = ['core_filename', 'dice_metric', 'volume', 'distance', 'distance_ratio']
     loop_df = pd.DataFrame().from_records(loop_dicts_list)
     loop_df.to_csv(Path(output_dir, 'val_perf_individual_measures.csv'))  # , columns=loop_df_columns)
+
+
+def validation_loop_split_lists(
+    subject_dicts: List[Dict[str, Any]],
+    output_dir: Union[str, bytes, os.PathLike],
+    checkpoint_path: Union[str, bytes, os.PathLike],
+    transform_dict: dict = None,
+    device: str = None,
+    batch_size: int = 1,
+    dataloader_workers: int = 8,
+    bad_dice_threshold: float = 0,
+    clamping: tuple = None,
+    segmentation_area: bool = True,
+    only_save_seg: bool = False,
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    Run validation loop on pre-matched subject dictionaries with embedded labels.
+
+    This function is designed for the staged input pipeline where images and labels
+    are already matched and stored in subject dictionaries. It handles multi-modal
+    data (multiple image modalities) automatically.
+
+    Parameters
+    ----------
+    subject_dicts : List[Dict[str, Any]]
+        Flat list of subject dictionaries, each containing paths like:
+        - Single modality: {'image': path, 'label': path}
+        - Multi-modal: {'image_dwi': path, 'image_adc': path, 'label_lesion': path}
+    output_dir : path-like
+        Directory to save validation outputs (segmentations, metrics CSV files)
+    checkpoint_path : path-like
+        Path to the model checkpoint file
+    transform_dict : dict, optional
+        Transform configuration dictionary. If None, uses transforms from checkpoint.
+    device : str, optional
+        Torch device (e.g., 'cuda', 'cpu'). If None, auto-detects CUDA availability.
+    batch_size : int, default=1
+        Batch size for validation (typically 1 for sliding window inference)
+    dataloader_workers : int, default=8
+        Number of data loading workers
+    bad_dice_threshold : float, default=0
+        Dice scores below this threshold are saved to 'trash_val_images' folder
+    clamping : tuple, optional
+        Intensity clamping range (min, max) for input images
+    segmentation_area : bool, default=True
+        If True, categorize outputs by segmentation area (requires LesionAreaFinder)
+    only_save_seg : bool, default=False
+        If True, only save segmentation outputs (not input images or labels)
+    **kwargs
+        Additional arguments (for compatibility)
+
+    Returns
+    -------
+    Dict[str, Any]
+        Dictionary containing validation metrics:
+        - 'mean_dice': Mean Dice score across all subjects
+        - 'mean_distance': Mean Hausdorff distance
+        - 'individual_metrics': List of per-subject metrics
+
+    Notes
+    -----
+    This function differs from validation_loop() in that:
+    1. It accepts pre-matched subject dictionaries (no img_pref, image_cut_* params)
+    2. It automatically adapts transforms for multi-modal data
+    3. Labels are embedded in the subject dicts, not passed separately
+
+    Examples
+    --------
+    >>> subject_dicts = [
+    ...     {'image_dwi': '/data/s1_dwi.nii', 'image_adc': '/data/s1_adc.nii',
+    ...      'label_lesion': '/data/s1_lesion.nii'},
+    ...     {'image_dwi': '/data/s2_dwi.nii', 'image_adc': '/data/s2_adc.nii',
+    ...      'label_lesion': '/data/s2_lesion.nii'},
+    ... ]
+    >>> results = validation_loop_split_lists(subject_dicts, '/output', '/model.pth')
+    """
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        device = torch.device(device)
+    cpu_device = device.type == 'cpu'
+
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+
+    # Get first image key to determine affine (handles multi-modal keys)
+    first_subject = subject_dicts[0]
+    first_image_key = next(k for k in first_subject.keys() if k.startswith('image'))
+    val_output_affine = utils.nifti_affine_from_dataset(first_subject[first_image_key])
+
+    if transform_dict is None:
+        transform_dict = checkpoint['transform_dict']
+
+    # Wrap in split_lists format for adapt_transforms_for_multimodal
+    # Format: [[subject1, subject2, ...]] - single "fold" containing all subjects
+    split_lists = [subject_dicts]
+
+    # Adapt transforms for multi-modal data if needed
+    # This replaces 'image' with ['image_dwi', 'image_adc'] and adds ConcatItemsd
+    adapted_transform_dict = data_utils.adapt_transforms_for_multimodal(
+        transform_dict, split_lists
+    )
+
+    # Create validation transforms (no augmentation)
+    val_img_transforms = transformations.val_transformd(adapted_transform_dict, clamping)
+
+    # Create dataset directly from subject dicts
+    # Convert paths to strings for MONAI Dataset compatibility
+    file_list = []
+    for subject in subject_dicts:
+        file_dict = {k: str(v) for k, v in subject.items()}
+        file_list.append(file_dict)
+
+    val_ds = Dataset(file_list, transform=val_img_transforms)
+    val_loader = data_loading.create_validation_data_loader(
+        val_ds, batch_size=batch_size, dataloader_workers=dataloader_workers
+    )
+
+    training_img_size = transformations.find_param_from_hyper_dict(
+        transform_dict, 'spatial_size', find_last=True
+    )
+    if training_img_size is None:
+        training_img_size = utils.get_img_size(first_subject[first_image_key])
+
+    model = utils.load_model_from_checkpoint(
+        checkpoint, device, checkpoint['hyper_params'],
+        model_name=checkpoint['model_name']
+    )
+    model.to(device)
+    dice_metric = DiceMetric(include_background=True, reduction="mean")
+    hausdorff_metric = HausdorffDistanceMetric(
+        include_background=True, reduction="mean", percentile=95
+    )
+    dist_ratio = DistanceRatioMetric(include_background=True, reduction="mean")
+    post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
+
+    # Calculate max_distance for fixing zero dice/distance cases
+    max_coord = [axis - 1 for axis in training_img_size]
+    max_distance = np.sqrt(np.sum((np.array([0, 0, 0]) - max_coord) ** 2))
+
+    les_area_finder = None
+    if segmentation_area:
+        les_area_finder = utils.LesionAreaFinder()
+
+    # Setup output directories
+    val_images_dir = Path(output_dir, 'val_images')
+    trash_val_images_dir = Path(output_dir, 'trash_val_images')
+    if not val_images_dir.is_dir():
+        val_images_dir.mkdir(exist_ok=True)
+    for f in val_images_dir.iterdir():
+        if f.is_dir():
+            shutil.rmtree(f)
+        else:
+            os.remove(f)
+    if not trash_val_images_dir.is_dir():
+        trash_val_images_dir.mkdir(exist_ok=True)
+    for f in trash_val_images_dir.iterdir():
+        os.remove(f)
+
+    loop_dicts_list = []
+    img_vol_dict = {}
+    model.eval()
+    with torch.no_grad():
+        img_count = 0
+        trash_count = 0
+        val_score_list = []
+        val_dist_list = []
+        input_output_paths_dict = {}
+        for val_data in tqdm(val_loader, desc='Validation '):
+            inputs, labels = val_data['image'].to(device), val_data['label'].to(device)
+            input_filename = Path(
+                val_data['image_meta_dict']['filename_or_obj'][0]
+            ).name.split('.nii')[0]
+
+            with torch.amp.autocast(device_type='cuda', enabled=not cpu_device):
+                masks_only_val_labels = labels[:, :1, :, :, :]
+                val_outputs = sliding_window_inference(
+                    inputs, training_img_size, 1, model, overlap=0.8
+                )
+                val_outputs_list = decollate_batch(val_outputs)
+                val_output_convert = [
+                    post_trans(val_pred_tensor) for val_pred_tensor in val_outputs_list
+                ]
+                dice_metric(y_pred=val_output_convert, y=masks_only_val_labels)
+                dice = dice_metric.aggregate().item()
+                hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
+                dist = hausdorff_metric.aggregate().item()
+                dist = fix_zero_dice_distance(dice, dist, max_distance)
+                distance_ratio = np.NAN
+
+            output_dict_data = deepcopy(val_data)
+            val_score_list.append(dice)
+            val_dist_list.append(dist)
+            val_data['image'] = val_data['image'].to(device)[0]
+            val_data['label'] = val_data['label'].to(device)[0]
+            output_dict_data['image'] = deepcopy(val_data['image'])
+            output_dict_data['label'] = deepcopy(val_output_convert[0])
+
+            dice_metric.reset()
+            hausdorff_metric.reset()
+
+            second_tr = deepcopy(val_ds.transform)
+            output_dict_data['label'].applied_operations = deepcopy(
+                val_data['label'].applied_operations
+            )
+            output_dict_data['image'].applied_operations = deepcopy(
+                val_data['image'].applied_operations
+            )
+            second_tr.transforms = val_ds.transform.transforms
+            inverted_dict = val_ds.transform.inverse(val_data)
+            inv_inputs, inv_labels = inverted_dict['image'], inverted_dict['label']
+            with allow_missing_keys_mode(second_tr):
+                inv_outputs = second_tr.inverse(output_dict_data)['label']
+            inputs_np = (
+                inv_inputs[0, :, :, :].cpu().detach().numpy()
+                if isinstance(inv_inputs, torch.Tensor)
+                else inv_inputs[0, :, :, :]
+            )
+            labels_np = (
+                inv_labels[0, :, :, :].cpu().detach().numpy()
+                if isinstance(inv_labels, torch.Tensor)
+                else inv_labels[0, :, :, :]
+            )
+            outputs_np = (
+                inv_outputs[0, :, :, :].cpu().detach().numpy()
+                if isinstance(inv_outputs, torch.Tensor)
+                else inv_outputs[0, :, :, :]
+            )
+            vol_output = len(outputs_np[np.where(outputs_np)])
+            input_filename += f'_v{vol_output}v'
+            loop_dicts_list.append({
+                'core_filename': input_filename.split('input_')[-1],
+                'dice_metric': dice,
+                'volume': vol_output,
+                'distance': dist,
+                'distance_ratio': distance_ratio
+            })
+
+            if dice < bad_dice_threshold:
+                trash_count += 1
+                if les_area_finder is not None:
+                    if vol_output == 0:
+                        output_subdir = Path(val_images_dir, 'empty_prediction')
+                    else:
+                        cluster_name = les_area_finder.get_img_area(outputs_np)
+                        output_subdir = Path(trash_val_images_dir, cluster_name)
+                    os.makedirs(output_subdir, exist_ok=True)
+                else:
+                    output_subdir = trash_val_images_dir
+                if not only_save_seg:
+                    output_path_list = utils.save_img_lbl_seg_to_nifti(
+                        inputs_np, labels_np, outputs_np, output_subdir, val_output_affine,
+                        '{}_{}'.format(str(input_filename), str(trash_count))
+                    )
+                else:
+                    out_input_path = Path(output_dir, 'input_{}.nii.gz'.format(str(trash_count)))
+                    save_tensor_to_nifti(outputs_np, out_input_path, val_output_affine)
+                    output_path_list = [str(out_input_path)]
+            else:
+                if les_area_finder is not None:
+                    if vol_output == 0:
+                        output_subdir = Path(val_images_dir, 'empty_prediction')
+                    else:
+                        cluster_name = les_area_finder.get_img_area(outputs_np)
+                        output_subdir = Path(val_images_dir, cluster_name)
+                    os.makedirs(output_subdir, exist_ok=True)
+                else:
+                    output_subdir = val_images_dir
+
+                if not only_save_seg:
+                    output_path_list = utils.save_img_lbl_seg_to_nifti(
+                        inputs_np, labels_np, outputs_np, output_subdir, val_output_affine,
+                        '{}_{}'.format(str(input_filename), str(img_count))
+                    )
+                else:
+                    out_input_path = Path(
+                        output_subdir, f'output_{input_filename}_{trash_count}.nii.gz'
+                    )
+                    save_tensor_to_nifti(outputs_np, out_input_path, val_output_affine)
+                    output_path_list = [str(out_input_path)]
+                img_count += 1
+            img_vol_dict[output_path_list[-1]] = vol_output
+            for i, input_image_path in enumerate(val_data['image_meta_dict']['filename_or_obj']):
+                input_output_paths_dict[input_image_path] = output_path_list[-1]
+            save_json(
+                Path(output_dir, '__input_output_paths_dict.json'), input_output_paths_dict
+            )
+
+        mean_metric = np.mean(np.array(val_score_list))
+        median = np.median(np.array(val_score_list))
+        std = np.std(np.array(val_score_list))
+        min_score = np.min(np.array(val_score_list))
+        max_score = np.max(np.array(val_score_list))
+        df = pd.DataFrame.from_dict({
+            'val_mean_dice': mean_metric,
+            'val_mean_dist': np.mean(val_dist_list),
+            'val_mean_dist_ratio': np.mean([d['distance_ratio'] for d in loop_dicts_list]),
+            'pred_volume': vol_output,
+            'val_median_dice': median,
+            'val_std_dice': std,
+            'trash_img_nb': trash_count,
+            'val_min_dice': min_score,
+            'val_max_dice': max_score,
+            'val_best_mean_dice': 0
+        }, orient='index')
+
+    with open(Path(output_dir, '__output_image_volumes.json'), 'w+') as j:
+        json.dump(img_vol_dict, j, indent=4)
+    pd.DataFrame().from_dict(img_vol_dict, orient='index').to_csv(
+        Path(output_dir, '__output_image_volumes.csv')
+    )
+    df.to_csv(Path(output_dir, 'val_perf_global_measures.csv'))
+    loop_df = pd.DataFrame().from_records(loop_dicts_list)
+    loop_df.to_csv(Path(output_dir, 'val_perf_individual_measures.csv'))
+
+    return {
+        'mean_dice': mean_metric,
+        'mean_distance': np.mean(val_dist_list),
+        'individual_metrics': loop_dicts_list
+    }

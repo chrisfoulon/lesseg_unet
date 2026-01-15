@@ -9,7 +9,16 @@ import re
 
 from monai.config import print_config
 from lesseg_unet import utils, training, segmentation
-from lesseg_unet.data_utils import folder_mode_to_split_lists
+from lesseg_unet.data_utils import (
+    # Legacy functions (deprecated)
+    folder_mode_to_split_lists,
+    list_nifti_from_folders,
+    match_modalities_by_subject,
+    # New staged pipeline functions
+    read_folder,
+    match_lists_to_dicts,
+    shuffle_and_split_subjects,
+)
 from lesseg_unet.hardware import get_hardware_profile
 from lesseg_unet.auto_config import AutoConfigurator, DatasetProfile, TrainingConfig
 from bcblib.tools.nifti_utils import file_to_list, overlaps_subfolders, nifti_overlap_images
@@ -215,14 +224,47 @@ def main():
     nifti_paths_group.add_argument('-psl', '--pretrained_split_list', type=str,
                                    help='File containing split paths lists of the k-fold')
 
-    # Subject and control patterns for folder-based multi-modal mode
-    parser.add_argument('--subject-pattern', type=str, default=r'(sub-\d+)',
-                        help='Regex pattern for extracting subject IDs from filenames '
-                             '(default: r\'(sub-\\d+)\')')
+    # Matching patterns for folder-based multi-modal mode
+    # Two mechanisms: STRIP (remove what differs) or EXTRACT (find what's the same)
+    parser.add_argument(
+        '--strip-pattern', type=str, default=None,
+        help='Pattern to REMOVE from filenames for residual matching. '
+             'After stripping, files with identical residuals are matched. '
+             'Can be literal string or regex. Example: --strip-pattern "dwi" '
+             'Default: None (exact filename matching - filenames must be identical)'
+    )
+    parser.add_argument(
+        '--extract-pattern', type=str, default=None,
+        help='Regex pattern to EXTRACT from filenames as matching key. '
+             'Files with identical extracted keys are matched. '
+             'Example: --extract-pattern "sub-\\d+" extracts "sub-001" from "scan_sub-001_dwi.nii". '
+             'Cannot be used together with --strip-pattern.'
+    )
+    parser.add_argument(
+        '--control-strip-pattern', type=str, default=None,
+        help='Strip pattern for control files. Default: same as --strip-pattern'
+    )
+    parser.add_argument(
+        '--control-extract-pattern', type=str, default=None,
+        help='Extract pattern for control files. Cannot be used with --control-strip-pattern.'
+    )
 
-    parser.add_argument('--control-pattern', type=str, default=r'(ctr-\d+)',
-                        help='Regex pattern for extracting control IDs from filenames '
-                             '(default: r\'(ctr-\\d+)\')')
+    # Filter patterns for loading files
+    parser.add_argument(
+        '--image-filter', type=str, nargs='*', default=None,
+        help='Glob pattern(s) to filter image files during loading. '
+             'If 1 pattern: applied to all image modalities. '
+             'If N patterns: must match N image modalities (one per folder). '
+             'Example: --image-filter "patient*" or --image-filter "*dwi*" "*adc*"'
+    )
+    parser.add_argument(
+        '--label-filter', type=str, nargs='*', default=None,
+        help='Glob pattern(s) to filter label files. Same rules as --image-filter.'
+    )
+    parser.add_argument(
+        '--control-filter', type=str, nargs='*', default=None,
+        help='Glob pattern(s) to filter control files. Same rules as --image-filter.'
+    )
 
     lesion_paths_group = parser.add_mutually_exclusive_group(required=False)
     lesion_paths_group.add_argument(
@@ -621,33 +663,121 @@ def main_worker(local_rank, args, kwargs):
                     f"See implementation_docs/FUTURE_WORK.md for details."
                 )
 
+            # ===== STAGE 0: LOGGING =====
             utils.logging_rank_0(f'Image modalities: {list(image_folders_dict.keys())}', dist.get_rank())
             if label_folders_dict:
                 utils.logging_rank_0(f'Label classes: {list(label_folders_dict.keys())}', dist.get_rank())
             if control_folders_dict:
                 utils.logging_rank_0(f'Control modalities: {list(control_folders_dict.keys())}', dist.get_rank())
-            utils.logging_rank_0(f'Subject pattern: {args.subject_pattern}', dist.get_rank())
-            if control_folders_dict:
-                utils.logging_rank_0(f'Control pattern: {args.control_pattern}', dist.get_rank())
 
-            # Call folder converter to get SplitLists
-            img_list = folder_mode_to_split_lists(
-                image_folders=image_folders_dict,
-                label_folders=label_folders_dict,
-                control_folders=control_folders_dict,
-                n_folds=args.folds_number,
-                subject_pattern=args.subject_pattern,
-                control_pattern=args.control_pattern,
-                random_seed=42
+            # Log matching pattern info
+            if args.strip_pattern:
+                utils.logging_rank_0(f'Strip pattern: {args.strip_pattern}', dist.get_rank())
+            elif args.extract_pattern:
+                utils.logging_rank_0(f'Extract pattern: {args.extract_pattern}', dist.get_rank())
+            else:
+                utils.logging_rank_0('Matching mode: exact filename match', dist.get_rank())
+
+            # ===== STAGE 0: LOADING FILES =====
+            # Helper to load files with optional filter pattern
+            def load_modality_files(folders_dict, filters, type_name):
+                """Load NIfTI files from folders with optional filtering."""
+                modality_lists = {}
+                modalities = list(folders_dict.keys())
+
+                # Determine filter to use for each modality
+                if filters is None:
+                    # No filtering, load all NIfTI files
+                    for mod in modalities:
+                        modality_lists[mod] = read_folder(folders_dict[mod])
+                elif len(filters) == 1:
+                    # Same filter for all modalities
+                    for mod in modalities:
+                        modality_lists[mod] = read_folder(folders_dict[mod], pattern=filters[0])
+                elif len(filters) == len(modalities):
+                    # One filter per modality
+                    for mod, filt in zip(modalities, filters):
+                        modality_lists[mod] = read_folder(folders_dict[mod], pattern=filt)
+                else:
+                    raise ValueError(
+                        f"Filter count mismatch for {type_name}: got {len(filters)} filters "
+                        f"for {len(modalities)} {type_name}s. Provide 0, 1, or {len(modalities)} filters."
+                    )
+
+                return modality_lists
+
+            # Load image files
+            image_lists = load_modality_files(
+                image_folders_dict, args.image_filter, 'image modality'
             )
 
-            # Set les_list to None for now (folder mode handles label matching)
-            les_list = None
-            ctr_list = None  # Controls handled in folder mode
+            # Load label files (if provided)
+            label_lists = None
+            if label_folders_dict:
+                label_lists = load_modality_files(
+                    label_folders_dict, args.label_filter, 'label class'
+                )
+
+            # Load control files (if provided)
+            control_lists = None
+            if control_folders_dict:
+                control_lists = load_modality_files(
+                    control_folders_dict, args.control_filter, 'control modality'
+                )
+
+            # ===== STAGE 1: MATCHING =====
+            # Determine control pattern (default to subject pattern if not specified)
+            ctrl_strip = args.control_strip_pattern or args.strip_pattern
+            ctrl_extract = args.control_extract_pattern or args.extract_pattern
+
+            subject_dicts, control_dicts = match_lists_to_dicts(
+                image_lists=image_lists,
+                label_lists=label_lists,
+                control_lists=control_lists,
+                strip_pattern=args.strip_pattern,
+                extract_pattern=args.extract_pattern,
+                control_strip_pattern=ctrl_strip,
+                control_extract_pattern=ctrl_extract
+            )
+
             utils.logging_rank_0(
-                f'Folder mode: matched {sum(len(fold) for fold in img_list)} subjects across {args.folds_number} folds',
+                f'Matched {len(subject_dicts)} subjects, {len(control_dicts)} controls',
                 dist.get_rank()
             )
+
+            # ===== STAGE 2: SPLIT (training) or FLAT LIST (inference) =====
+            is_training = args.checkpoint is None
+
+            if is_training:
+                # Training mode: combine subjects + controls, then shuffle and split
+                all_subjects = subject_dicts + control_dicts
+                img_list = shuffle_and_split_subjects(
+                    subject_dicts=all_subjects,
+                    n_folds=args.folds_number,
+                    shuffle=True,
+                    random_seed=42
+                )
+
+                les_list = None  # Labels embedded in subject dicts
+                ctr_list = None  # Controls embedded in subject dicts
+                utils.logging_rank_0(
+                    f'Training mode: {len(all_subjects)} subjects split into {args.folds_number} folds',
+                    dist.get_rank()
+                )
+            else:
+                # Inference mode: flat list, no shuffle
+                utils.logging_rank_0('Inference mode: listing files without shuffling', dist.get_rank())
+
+                # Format: [dict1, dict2, ...] NOT [[fold0], [fold1], ...]
+                img_list = subject_dicts + control_dicts
+
+                les_list = None  # Labels embedded in subject dicts
+                ctr_list = None  # Controls embedded in subject dicts
+
+                utils.logging_rank_0(
+                    f'Inference mode: {len(img_list)} subjects (order preserved)',
+                    dist.get_rank()
+                )
         else:
             # Single folder scan mode (backward compatible)
             single_path = args.input_path[0] if isinstance(args.input_path, list) else args.input_path
@@ -1218,7 +1348,23 @@ def main_worker(local_rank, args, kwargs):
             if les_list is not None:
                 raise ValueError('seg_input_dict cannot be used for the Validation')
 
-        if les_list is None:
+        # Detect if labels are embedded in img_list (multi-modal folder mode with labels)
+        has_embedded_labels = False
+        if isinstance(img_list, list) and len(img_list) > 0:
+            # img_list can be:
+            # - Split lists: [[fold0_subjects], [fold1_subjects], ...] (training)
+            # - Flat list: [dict1, dict2, ...] (inference)
+            # Get first subject from appropriate format
+            first_item = img_list[0]
+            if isinstance(first_item, list) and len(first_item) > 0:
+                # Split lists format - get first subject from first fold
+                first_item = first_item[0]
+
+            # Check if it's a dictionary with label keys
+            if isinstance(first_item, dict):
+                has_embedded_labels = any(k.startswith('label_') for k in first_item.keys())
+
+        if les_list is None and not has_embedded_labels:
             if seg_input_dict:
                 for sub_folder in seg_input_dict:
                     logging.info(f'Input image subfolder : {sub_folder}')
@@ -1266,22 +1412,37 @@ def main_worker(local_rank, args, kwargs):
 
         else:
             logging.info(f'Output validation folder : {output_root}')
-            segmentation.validation_loop(img_list, les_list,
-                                         output_root,
-                                         checkpoint,
-                                         b1000_pref,
-                                         image_cut_prefix=args.image_cut_prefix,
-                                         image_cut_suffix=args.image_cut_suffix,
-                                         transform_dict=transform_dict,
-                                         device=args.torch_device,
-                                         dataloader_workers=args.num_workers,
-                                         # train_val_percentage=train_val_percentage,
-                                         # default_label=args.default_label
-                                         clamping=clamp_tuple,
-                                         segmentation_area=args.segmentation_area,
-                                         use_parent_folder=args.use_parent_folder,
-                                         only_save_seg=args.only_save_seg,
-                                         **kwargs)
+            if has_embedded_labels:
+                # Multi-modal folder mode: labels embedded in subject dicts
+                # Use new function that handles dict format directly
+                segmentation.validation_loop_split_lists(
+                    img_list,  # Already contains subject dicts with embedded labels
+                    output_root,
+                    checkpoint,
+                    transform_dict=transform_dict,
+                    device=args.torch_device,
+                    dataloader_workers=args.num_workers,
+                    clamping=clamp_tuple,
+                    segmentation_area=args.segmentation_area,
+                    only_save_seg=args.only_save_seg,
+                    **kwargs
+                )
+            else:
+                # Legacy mode: separate img_list and les_list
+                segmentation.validation_loop(img_list, les_list,
+                                             output_root,
+                                             checkpoint,
+                                             b1000_pref,
+                                             image_cut_prefix=args.image_cut_prefix,
+                                             image_cut_suffix=args.image_cut_suffix,
+                                             transform_dict=transform_dict,
+                                             device=args.torch_device,
+                                             dataloader_workers=args.num_workers,
+                                             clamping=clamp_tuple,
+                                             segmentation_area=args.segmentation_area,
+                                             use_parent_folder=args.use_parent_folder,
+                                             only_save_seg=args.only_save_seg,
+                                             **kwargs)
             if args.overlap:
                 nib.save(nifti_overlap_images(output_root, 'output_', recursive=True),
                          Path(output_root, 'overlap_segmentation.nii'))
