@@ -603,7 +603,7 @@ def validation_loop(img_path_list: Sequence,
                 # dist_ratio(y_pred=val_output_convert, y=masks_only_val_labels)
                 # distance_ratio = dist_ratio.aggregate().item()
                 # TODO make it work ...
-                distance_ratio = np.NAN
+                distance_ratio = np.nan
 
             # if 'entropy' in kwargs and (kwargs['entropy'] == 'True' or kwargs['entropy'] == 1):
             #     input_filename += f'_e{utils.entropy_metric(val_outputs_list[0], sigmoid=True)}e'
@@ -915,7 +915,7 @@ def validation_loop_split_lists(
                 hausdorff_metric(y_pred=val_output_convert, y=masks_only_val_labels)
                 dist = hausdorff_metric.aggregate().item()
                 dist = fix_zero_dice_distance(dice, dist, max_distance)
-                distance_ratio = np.NAN
+                distance_ratio = np.nan
 
             output_dict_data = deepcopy(val_data)
             val_score_list.append(dice)
