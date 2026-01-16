@@ -839,15 +839,14 @@ def main_worker(local_rank, args, kwargs):
         b1000_pref = None
 
     if args.transform_dict is not None:
-        if callable(transform_dict):
-            td = args.transform_dict()
-        else:
-            td = args.transform_dict
+        td = args.transform_dict
         if Path(td).is_file():
             transform_dict = utils.load_json_transform_dict(td)
         else:
             if td in dir(tr_dicts):
                 transform_dict = getattr(tr_dicts, td)
+                if callable(transform_dict):
+                    transform_dict = transform_dict()
             else:
                 transform_dict = None
                 for d in dir(tr_dicts):
