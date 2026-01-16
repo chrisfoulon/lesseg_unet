@@ -41,7 +41,7 @@ import json
 import warnings
 import numpy as np
 from pathlib import Path
-from typing import TypeAlias
+from typing import List, TypeAlias
 from copy import deepcopy
 
 # Type definitions for multi-modal data structures
@@ -1837,7 +1837,8 @@ def adapt_transforms_for_multimodal(transform_dict: dict, split_lists: SplitList
     1. Detecting all image modalities and label classes from the first subject
     2. Replacing 'image' key with list of image_* keys in early transforms
     3. Replacing 'label' key with list of label_* keys in early transforms
-    4. Inserting ConcatItemsd after LoadImaged to merge image modalities into single tensor
+    4. Expanding 'modality_intensity' transforms to per-modality versions (if present)
+    5. Inserting expanded transforms and ConcatItemsd in correct order
 
     If single modality is detected, returns unchanged (backward compatible).
 
@@ -1845,7 +1846,7 @@ def adapt_transforms_for_multimodal(transform_dict: dict, split_lists: SplitList
     ----------
     transform_dict : dict
         Transform dictionary with structure like:
-        {'first_transform': [...], 'monai_transform': [...], ...}
+        {'first_transform': [...], 'modality_intensity': [...], 'monai_transform': [...], ...}
     split_lists : SplitLists
         Cross-validation fold splits containing SubjectDict entries
 
@@ -1870,12 +1871,15 @@ def adapt_transforms_for_multimodal(transform_dict: dict, split_lists: SplitList
     >>> adapted = adapt_transforms_for_multimodal(transform_dict, split_lists)
     >>> # Replaces 'image' with ['image_adc', 'image_dwi'] and adds ConcatItemsd
     >>> # Replaces 'label' with ['label_stroke']
+    >>> # Expands modality_intensity transforms to per-modality versions
 
     Notes
     -----
     - Image keys are sorted alphabetically for consistent ordering
     - Label keys are sorted alphabetically for consistent ordering
-    - ConcatItemsd is inserted after LoadImaged in first_transform (for images only)
+    - If 'modality_intensity' section exists, it's expanded via expand_per_modality_transforms
+    - Expanded modality transforms are inserted BEFORE ConcatItemsd
+    - ConcatItemsd is inserted after modality transforms in first_transform
     - Output from ConcatItemsd is named 'image' (standard key)
     - Single label classes are not concatenated (just renamed)
     - Multi-label concatenation is not yet implemented (raises NotImplementedError)
@@ -1905,6 +1909,10 @@ def adapt_transforms_for_multimodal(transform_dict: dict, split_lists: SplitList
 
     # Step 4: Deep copy to avoid modifying original
     adapted_dict = deepcopy(transform_dict)
+
+    # Step 4b: Expand modality_intensity transforms if present
+    if 'modality_intensity' in adapted_dict and len(image_keys) > 1:
+        adapted_dict = expand_per_modality_transforms(adapted_dict, image_keys_sorted)
 
     # Step 5: Find insertion point and replace pattern keys in early transforms
     # Only LoadImaged and EnsureChannelFirstd need actual modality/label keys (they load raw files)
@@ -1936,8 +1944,18 @@ def adapt_transforms_for_multimodal(transform_dict: dict, split_lists: SplitList
                             new_keys.append(key)
                     params['keys'] = new_keys
 
-    # Step 6: Insert ConcatItemsd after the last early transform (for multi-modal images)
+    # Step 6: Insert expanded modality transforms and ConcatItemsd
     if 'first_transform' in adapted_dict and len(image_keys) > 1 and insertion_index is not None:
+        current_insert_index = insertion_index + 1
+
+        # Insert expanded modality_intensity transforms (if any)
+        if 'expanded_modality_intensity' in adapted_dict:
+            expanded_transforms = adapted_dict.pop('expanded_modality_intensity')
+            for transform in expanded_transforms:
+                adapted_dict['first_transform'].insert(current_insert_index, transform)
+                current_insert_index += 1
+
+        # Insert ConcatItemsd after modality transforms
         concat_transform = {
             'ConcatItemsd': {
                 'keys': image_keys_sorted,
@@ -1945,8 +1963,11 @@ def adapt_transforms_for_multimodal(transform_dict: dict, split_lists: SplitList
                 'dim': 0  # Concatenate along channel dimension
             }
         }
-        # Insert after the last transform that was updated
-        adapted_dict['first_transform'].insert(insertion_index + 1, concat_transform)
+        adapted_dict['first_transform'].insert(current_insert_index, concat_transform)
+        current_insert_index += 1
+
+        # Update insertion_index for subsequent inserts
+        insertion_index = current_insert_index - 1
 
     # Step 7: For single named label, create alias 'label' → 'label_xxx'
     # This allows subsequent transforms to use generic 'label' key
@@ -1962,11 +1983,8 @@ def adapt_transforms_for_multimodal(transform_dict: dict, split_lists: SplitList
                 'allow_missing_keys': False
             }
         }
-        # Insert after ConcatItemsd (if exists) or after last early transform
-        insert_at = insertion_index + 1
-        if len(image_keys) > 1:
-            insert_at += 1  # Account for ConcatItemsd already inserted
-        adapted_dict['first_transform'].insert(insert_at, copy_label_transform)
+        # Insert after ConcatItemsd
+        adapted_dict['first_transform'].insert(insertion_index + 1, copy_label_transform)
 
     return adapted_dict
 
@@ -2042,3 +2060,213 @@ def extract_model_config(split_lists: SplitLists) -> dict:
         'in_channels': in_channels,
         'out_channels': out_channels
     }
+
+
+def adapt_transforms_for_resolution(
+    transform_dict: dict,
+    base_resolution: int = 2,
+    target_resolution: int = 1,
+) -> dict:
+    """Scale voxel-based parameters for different image resolutions.
+
+    Elastic deformation parameters (sigma, magnitude, translation) are specified
+    in voxels. When changing resolution, these need to be scaled to maintain
+    equivalent physical deformation.
+
+    Parameters
+    ----------
+    transform_dict : dict
+        Transform dictionary to adapt.
+    base_resolution : int
+        Resolution (in mm) the base parameters were designed for. Default 2mm.
+    target_resolution : int
+        Target resolution (in mm) to scale parameters for.
+
+    Returns
+    -------
+    dict
+        New transform dict with scaled parameters. Original is not modified.
+
+    Notes
+    -----
+    Scaling formula: new_value = base_value * (target_resolution / base_resolution)
+
+    For example, at 1mm resolution with 2mm base:
+    - sigma_range (3, 15) -> (1.5, 7.5)
+    - magnitude_range (3, 10) -> (1.5, 5)
+    - translate_range (0.5, 3) -> (0.25, 1.5)
+
+    Only affects Rand3DElasticd parameters. Other transforms use scale-invariant
+    parameters (fractions, angles, etc.).
+
+    See Also
+    --------
+    transform_dicts_references.md : Literature references for augmentation parameters
+    """
+    if base_resolution == target_resolution:
+        return transform_dict  # No scaling needed
+
+    adapted = deepcopy(transform_dict)
+    scale_factor = target_resolution / base_resolution
+
+    # Parameters to scale in Rand3DElasticd
+    voxel_params = ['sigma_range', 'magnitude_range', 'translate_range']
+
+    # Iterate through all transform lists
+    for list_name in adapted:
+        if not isinstance(adapted[list_name], list):
+            continue
+
+        for transform_entry in adapted[list_name]:
+            if not isinstance(transform_entry, dict):
+                continue
+
+            if 'Rand3DElasticd' in transform_entry:
+                params = transform_entry['Rand3DElasticd']
+                for param_name in voxel_params:
+                    if param_name in params:
+                        value = params[param_name]
+                        if isinstance(value, (list, tuple)):
+                            # Scale each element in tuple/list
+                            scaled = tuple(v * scale_factor for v in value)
+                            params[param_name] = scaled
+                        elif isinstance(value, (int, float)):
+                            params[param_name] = value * scale_factor
+
+    return adapted
+
+
+# Modality-specific parameter adjustments based on MRI physics literature
+# See transform_dicts_references.md for citations
+MODALITY_PARAMS = {
+    'dwi': {
+        # DWI (TRACE): Direct acquisition, full noise/artifact effects
+        'RandRicianNoised': {'std': 0.03},
+        'RandBiasFieldd': {'coeff_range': (0.0, 0.05)},
+        'RandKSpaceSpikeNoised': {'prob': 0.1},
+        'RandGibbsNoised': {'alpha': (0.5, 0.7)},
+    },
+    'adc': {
+        # ADC: Calculated map, noise propagated (heteroscedastic), bias partially cancelled
+        'RandRicianNoised': {'std': 0.02},  # Propagated, not direct
+        'RandBiasFieldd': {'coeff_range': (0.0, 0.02)},  # Residual only
+        'RandKSpaceSpikeNoised': {'prob': 0.05},  # Indirect effect
+        'RandGibbsNoised': {'alpha': (0.4, 0.6)},  # Propagates through calculation
+    },
+    # Default fallback for unknown modalities
+    '_default': {
+        'RandRicianNoised': {'std': 0.025},
+        'RandBiasFieldd': {'coeff_range': (0.0, 0.03)},
+        'RandKSpaceSpikeNoised': {'prob': 0.08},
+        'RandGibbsNoised': {'alpha': (0.45, 0.65)},
+    }
+}
+
+
+def expand_per_modality_transforms(
+    transform_dict: dict,
+    image_keys: List[str],
+) -> dict:
+    """Expand modality_intensity transforms to per-modality versions.
+
+    Transforms in the 'modality_intensity' section are designed to be applied
+    independently to each image modality BEFORE concatenation. This function
+    expands them into separate transforms for each modality with appropriate
+    modality-specific parameters.
+
+    Parameters
+    ----------
+    transform_dict : dict
+        Transform dictionary containing 'modality_intensity' section.
+    image_keys : List[str]
+        List of image keys, e.g., ['image_dwi', 'image_adc'].
+        The modality is extracted from the suffix (after 'image_').
+
+    Returns
+    -------
+    dict
+        New transform dict with expanded per-modality transforms.
+        The 'modality_intensity' section is replaced with 'expanded_modality_intensity'.
+
+    Notes
+    -----
+    For single modality (len(image_keys) == 1), returns the dict with minimal
+    changes - transforms use the single image key directly.
+
+    Modality-specific parameters are defined in MODALITY_PARAMS based on
+    MRI physics literature. See transform_dicts_references.md.
+
+    Examples
+    --------
+    Input:
+    >>> transform_dict = {
+    ...     'modality_intensity': [
+    ...         {'RandHistogramShiftd': {'keys': ['image'], 'prob': 0.1}},
+    ...     ]
+    ... }
+    >>> expand_per_modality_transforms(transform_dict, ['image_dwi', 'image_adc'])
+
+    Output (simplified):
+    >>> {
+    ...     'expanded_modality_intensity': [
+    ...         {'RandHistogramShiftd': {'keys': ['image_dwi'], 'prob': 0.1}},
+    ...         {'RandHistogramShiftd': {'keys': ['image_adc'], 'prob': 0.1}},
+    ...     ]
+    ... }
+    """
+    if 'modality_intensity' not in transform_dict:
+        # No modality_intensity section, nothing to expand
+        return transform_dict
+
+    adapted = deepcopy(transform_dict)
+    modality_transforms = adapted.pop('modality_intensity')
+
+    # Extract modality names from keys (e.g., 'image_dwi' -> 'dwi')
+    modalities = []
+    for key in image_keys:
+        if key.startswith('image_'):
+            modalities.append(key.replace('image_', ''))
+        elif key == 'image':
+            modalities.append('_default')
+        else:
+            modalities.append(key)
+
+    expanded_transforms = []
+
+    for transform_entry in modality_transforms:
+        if not isinstance(transform_entry, dict):
+            continue
+
+        transform_name = list(transform_entry.keys())[0]
+        base_params = transform_entry[transform_name]
+
+        # Expand to each modality
+        for i, image_key in enumerate(image_keys):
+            modality = modalities[i] if i < len(modalities) else '_default'
+
+            # Create modality-specific params
+            new_params = deepcopy(base_params)
+
+            # Replace 'image' key with specific modality key
+            if 'keys' in new_params:
+                new_keys = []
+                for k in new_params['keys']:
+                    if k == 'image':
+                        new_keys.append(image_key)
+                    else:
+                        new_keys.append(k)
+                new_params['keys'] = new_keys
+
+            # Apply modality-specific parameter overrides
+            modality_overrides = MODALITY_PARAMS.get(
+                modality, MODALITY_PARAMS['_default']
+            )
+            if transform_name in modality_overrides:
+                new_params.update(modality_overrides[transform_name])
+
+            expanded_transforms.append({transform_name: new_params})
+
+    # Store expanded transforms in new section
+    adapted['expanded_modality_intensity'] = expanded_transforms
+
+    return adapted

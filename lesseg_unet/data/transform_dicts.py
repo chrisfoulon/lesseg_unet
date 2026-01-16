@@ -1116,7 +1116,7 @@ unetr_cc = {
             'magnitude_range': (3, 10),  # hyper_params['Rand3DElastic_magnitude_range']
             'prob': tiny_prob,
             'rotate_range': (radians(1), radians(10)),
-            'shear_range': ([(shear_min, shear_max) for i in range(6)]),
+            'shear_range': ([(shear_min, shear_max) for _ in range(6)]),
             'translate_range': (0.5, 3),
             'scale_range': (0.02, 0.15),
             'padding_mode': "reflection",
@@ -1432,7 +1432,7 @@ unetr_elastic['mid_transform'].append({'Rand3DElasticd': {
             'magnitude_range': (5, 5),  # hyper_params['Rand3DElastic_magnitude_range']
             'prob': tiny_prob,
             # 'rotate_range': (radians(10), radians(10)),
-            # 'shear_range': ([(shear_min, shear_max) for i in range(6)]),
+            # 'shear_range': ([(shear_min, shear_max) for _ in range(6)]),
             # 'translate_range': (3, 3),
             # 'scale_range': (0.1, 0.1),
             'padding_mode': "zeros",
@@ -1595,3 +1595,215 @@ def destructive_bias(noise_value):
     # prepend to last_transform
     tr_dict['last_transform'] = to_add_list + tr_dict['last_transform']
     return tr_dict
+
+
+# =============================================================================
+# MULTI-MODAL TRANSFORM DICT
+# =============================================================================
+# Literature-grounded augmentations for multi-modal DWI/ADC data.
+# See transform_dicts_references.md for scientific citations.
+#
+# Key features:
+# - 'modality_intensity' section: Expanded per-modality by expand_per_modality_transforms
+# - Resolution scaling via adapt_transforms_for_resolution
+# - Configurable patch size
+# =============================================================================
+
+# Base parameters designed for 2mm resolution
+_BASE_RESOLUTION = 2
+
+# Default elastic deformation parameters (2mm base)
+_ELASTIC_PARAMS_2MM = {
+    'sigma_range': (3, 15),
+    'magnitude_range': (3, 10),
+    'translate_range': (0.5, 3),
+}
+
+
+def create_multimodal_transform_dict(
+    resolution_mm: int = 2,
+    patch_size: int = 96,
+    denoised_data: bool = False,
+) -> dict:
+    """Create a multi-modal aware transform dictionary.
+
+    Creates a transform dict designed for multi-modal data (e.g., DWI + ADC).
+    The 'modality_intensity' section contains transforms that will be expanded
+    to per-modality versions by `expand_per_modality_transforms`.
+
+    Parameters
+    ----------
+    resolution_mm : int
+        Image resolution in mm (1, 2, or 3). Elastic deformation parameters
+        are scaled accordingly. Default 2mm.
+    patch_size : int
+        Cubic patch size for RandCropByPosNegLabeld. Default 96.
+    denoised_data : bool
+        If True, reduces noise augmentation strength (for preprocessed data).
+        Default False.
+
+    Returns
+    -------
+    dict
+        Transform dictionary with structure:
+        - 'first_transform': Loading, channel-first
+        - 'modality_intensity': Per-modality intensity transforms (to be expanded)
+        - 'monai_transform': Spatial and shared transforms
+        - 'unetr_transform': UNETR-specific augmentations
+        - 'last_transform': Final normalization
+        - 'patches': Patch sampling
+
+    Notes
+    -----
+    This dict uses 'modality_intensity' as a placeholder. Call
+    `adapt_transforms_for_multimodal` to expand it for actual modalities.
+
+    The function internally calls `adapt_transforms_for_resolution` to scale
+    voxel-based parameters.
+
+    See Also
+    --------
+    adapt_transforms_for_resolution : Scales voxel-based parameters
+    expand_per_modality_transforms : Expands modality_intensity section
+    transform_dicts_references.md : Literature references
+
+    Examples
+    --------
+    >>> # For 1mm resolution data with 96^3 patches
+    >>> transform_dict = create_multimodal_transform_dict(resolution_mm=1, patch_size=96)
+
+    >>> # For denoised data (reduced augmentation)
+    >>> transform_dict = create_multimodal_transform_dict(denoised_data=True)
+    """
+    # Noise reduction factor for denoised data
+    noise_factor = 0.5 if denoised_data else 1.0
+
+    # Scale elastic params for resolution
+    scale = resolution_mm / _BASE_RESOLUTION
+    sigma_range = tuple(v * scale for v in _ELASTIC_PARAMS_2MM['sigma_range'])
+    magnitude_range = tuple(v * scale for v in _ELASTIC_PARAMS_2MM['magnitude_range'])
+    translate_range = tuple(v * scale for v in _ELASTIC_PARAMS_2MM['translate_range'])
+
+    transform_dict = {
+        'first_transform': [
+            {'LoadImaged': {'keys': ['image', 'label']}},
+            {'EnsureChannelFirstd': {'keys': ['image', 'label']}},
+            # Note: MyNormalizeIntensityd moved to modality_intensity
+            # to ensure per-modality normalization before concatenation
+            {'Binarized': {'keys': ['label'], 'lower_threshold': 0.5}},
+        ],
+
+        # Per-modality intensity transforms (expanded by expand_per_modality_transforms)
+        # These are applied BEFORE ConcatItemsd to each modality independently
+        'modality_intensity': [
+            # Normalization MUST be per-modality (no channel_wise support)
+            {'MyNormalizeIntensityd': {
+                'keys': ['image'],
+                'out_min_max': (0, 1),
+            }},
+            # Histogram shift - different histograms per modality
+            {'RandHistogramShiftd': {
+                'keys': ['image'],
+                'num_control_points': 20,
+                'prob': low_prob,
+            }},
+            # Gibbs ringing - affects both DWI and ADC (propagates through calculation)
+            {'RandGibbsNoised': {
+                'keys': ['image'],
+                'alpha': (0.5, 0.7),
+                'prob': high_prob * noise_factor,
+            }},
+            # K-space spike - affects both (params adjusted per-modality by expand function)
+            {'RandKSpaceSpikeNoised': {
+                'keys': ['image'],
+                'intensity_range': (8, 10),
+                'prob': low_prob,  # Adjusted per-modality
+            }},
+        ],
+
+        # Spatial and shared transforms (applied AFTER ConcatItemsd)
+        'monai_transform': [
+            # Elastic deformation - same deformation field to all channels
+            {'Rand3DElasticd': {
+                'keys': ['image', 'label'],
+                'sigma_range': sigma_range,
+                'magnitude_range': magnitude_range,
+                'prob': tiny_prob,
+                'rotate_range': (radians(1), radians(10)),
+                'shear_range': ([(shear_min, shear_max) for _ in range(6)]),
+                'translate_range': translate_range,
+                'scale_range': (0.02, 0.15),
+                'padding_mode': "reflection",
+                'mode': 'nearest',
+            }},
+            # Rician noise - HAS channel_wise support, can stay here
+            {'RandRicianNoised': {
+                'keys': ['image'],
+                'prob': low_prob * noise_factor,
+                'mean': 0.1,
+                'std': 0.025 * noise_factor,
+                'channel_wise': True,  # Independent noise per channel
+            }},
+            # Bias field - different pattern per channel (acceptable)
+            {'RandBiasFieldd': {
+                'keys': ['image'],
+                'prob': high_prob * noise_factor,
+                'coeff_range': (0.0, 0.05 * noise_factor),
+            }},
+        ],
+
+        'unetr_transform': [
+            {'RandFlipd': {
+                'keys': ['image', 'label'],
+                'spatial_axis': [0],
+                'prob': low_prob,
+            }},
+            {'RandShiftIntensityd': {
+                'keys': ['image'],
+                'offsets': 0.10,
+                'prob': high_prob,
+            }},
+        ],
+
+        'last_transform': [
+            # Reactivate if needed:
+            # {'Binarized': {
+            #     'keys': ['label'],
+            #     'lower_threshold': 0.25,
+            # }},
+            # Final normalization after all augmentations
+            {'MyNormalizeIntensityd': {
+                'keys': ['image'],
+                'out_min_max': (0, 1),
+            }},
+        ],
+
+        'patches': [
+            {'RandCropByPosNegLabeld': {
+                'keys': ['image', 'label'],
+                'label_key': 'label',
+                'spatial_size': [patch_size, patch_size, patch_size],
+                'pos': 1,
+                'neg': 3,  # High negative sampling for artifact rejection
+                'num_samples': 4,
+            }},
+        ],
+    }
+
+    return transform_dict
+
+
+# Convenience aliases for common configurations
+def mm1_p96(**kwargs):
+    """1mm resolution, 96^3 patches."""
+    return create_multimodal_transform_dict(resolution_mm=1, patch_size=96, **kwargs)
+
+
+def mm1_p64(**kwargs):
+    """1mm resolution, 64^3 patches."""
+    return create_multimodal_transform_dict(resolution_mm=1, patch_size=64, **kwargs)
+
+
+def mm2_p96(**kwargs):
+    """2mm resolution (default), 96^3 patches."""
+    return create_multimodal_transform_dict(resolution_mm=2, patch_size=96, **kwargs)
