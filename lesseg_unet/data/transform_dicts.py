@@ -1784,8 +1784,8 @@ def create_multimodal_transform_dict(
                 'label_key': 'label',
                 'spatial_size': [patch_size, patch_size, patch_size],
                 'pos': 1,
-                'neg': 2,  # High negative sampling for artifact rejection
-                'num_samples': 3,
+                'neg': 1,  # High negative sampling for artifact rejection
+                'num_samples': 1,
             }},
         ],
     }
