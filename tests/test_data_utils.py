@@ -418,3 +418,272 @@ class TestExtractModelConfig:
 
         assert config['in_channels'] == 1
         assert config['out_channels'] == 1
+
+
+class TestAdaptTransformsForResolution:
+    """Test adapt_transforms_for_resolution() function."""
+
+    def test_no_change_when_same_resolution(self):
+        """No scaling when base and target resolution match."""
+        from lesseg_unet.data_utils import adapt_transforms_for_resolution
+
+        transform_dict = {
+            'monai_transform': [
+                {'Rand3DElasticd': {
+                    'keys': ['image', 'label'],
+                    'sigma_range': (3, 15),
+                    'magnitude_range': (3, 10),
+                    'translate_range': (0.5, 3),
+                }}
+            ]
+        }
+
+        result = adapt_transforms_for_resolution(transform_dict, base_resolution=2, target_resolution=2)
+
+        # Should be unchanged (but a copy)
+        assert result['monai_transform'][0]['Rand3DElasticd']['sigma_range'] == (3, 15)
+        assert result['monai_transform'][0]['Rand3DElasticd']['magnitude_range'] == (3, 10)
+
+    def test_scale_down_for_higher_resolution(self):
+        """Parameters should scale down for 1mm (higher resolution)."""
+        from lesseg_unet.data_utils import adapt_transforms_for_resolution
+
+        transform_dict = {
+            'monai_transform': [
+                {'Rand3DElasticd': {
+                    'keys': ['image', 'label'],
+                    'sigma_range': (3, 15),
+                    'magnitude_range': (3, 10),
+                    'translate_range': (0.5, 3),
+                }}
+            ]
+        }
+
+        result = adapt_transforms_for_resolution(transform_dict, base_resolution=2, target_resolution=1)
+
+        # Scale factor = 1/2 = 0.5
+        assert result['monai_transform'][0]['Rand3DElasticd']['sigma_range'] == (1.5, 7.5)
+        assert result['monai_transform'][0]['Rand3DElasticd']['magnitude_range'] == (1.5, 5.0)
+        assert result['monai_transform'][0]['Rand3DElasticd']['translate_range'] == (0.25, 1.5)
+
+    def test_scale_up_for_lower_resolution(self):
+        """Parameters should scale up for 3mm (lower resolution)."""
+        from lesseg_unet.data_utils import adapt_transforms_for_resolution
+
+        transform_dict = {
+            'monai_transform': [
+                {'Rand3DElasticd': {
+                    'keys': ['image', 'label'],
+                    'sigma_range': (3, 15),
+                    'magnitude_range': (3, 10),
+                    'translate_range': (0.5, 3),
+                }}
+            ]
+        }
+
+        result = adapt_transforms_for_resolution(transform_dict, base_resolution=2, target_resolution=3)
+
+        # Scale factor = 3/2 = 1.5
+        assert result['monai_transform'][0]['Rand3DElasticd']['sigma_range'] == (4.5, 22.5)
+        assert result['monai_transform'][0]['Rand3DElasticd']['magnitude_range'] == (4.5, 15.0)
+        assert result['monai_transform'][0]['Rand3DElasticd']['translate_range'] == (0.75, 4.5)
+
+    def test_original_not_modified(self):
+        """Original transform dict should not be modified."""
+        from lesseg_unet.data_utils import adapt_transforms_for_resolution
+
+        transform_dict = {
+            'monai_transform': [
+                {'Rand3DElasticd': {
+                    'keys': ['image', 'label'],
+                    'sigma_range': (3, 15),
+                }}
+            ]
+        }
+
+        adapt_transforms_for_resolution(transform_dict, base_resolution=2, target_resolution=1)
+
+        # Original should be unchanged
+        assert transform_dict['monai_transform'][0]['Rand3DElasticd']['sigma_range'] == (3, 15)
+
+    def test_other_transforms_unchanged(self):
+        """Non-Rand3DElasticd transforms should be unchanged."""
+        from lesseg_unet.data_utils import adapt_transforms_for_resolution
+
+        transform_dict = {
+            'monai_transform': [
+                {'RandHistogramShiftd': {'keys': ['image'], 'prob': 0.1}},
+                {'Rand3DElasticd': {'sigma_range': (3, 15)}},
+            ]
+        }
+
+        result = adapt_transforms_for_resolution(transform_dict, base_resolution=2, target_resolution=1)
+
+        # RandHistogramShiftd should be unchanged
+        assert result['monai_transform'][0]['RandHistogramShiftd']['prob'] == 0.1
+
+
+class TestExpandPerModalityTransforms:
+    """Test expand_per_modality_transforms() function."""
+
+    def test_no_modality_intensity_section(self):
+        """Return unchanged if no modality_intensity section."""
+        from lesseg_unet.data_utils import expand_per_modality_transforms
+
+        transform_dict = {
+            'first_transform': [{'LoadImaged': {'keys': ['image', 'label']}}],
+            'monai_transform': [{'RandFlipd': {'keys': ['image', 'label']}}],
+        }
+
+        result = expand_per_modality_transforms(transform_dict, ['image_dwi', 'image_adc'])
+
+        # Should be unchanged (same structure)
+        assert 'first_transform' in result
+        assert 'monai_transform' in result
+        assert 'expanded_modality_intensity' not in result
+
+    def test_expand_for_two_modalities(self):
+        """Expand transforms for DWI and ADC modalities."""
+        from lesseg_unet.data_utils import expand_per_modality_transforms
+
+        transform_dict = {
+            'modality_intensity': [
+                {'RandHistogramShiftd': {'keys': ['image'], 'prob': 0.1}},
+            ]
+        }
+
+        result = expand_per_modality_transforms(transform_dict, ['image_dwi', 'image_adc'])
+
+        # Should have expanded transforms
+        assert 'expanded_modality_intensity' in result
+        assert 'modality_intensity' not in result
+
+        expanded = result['expanded_modality_intensity']
+        assert len(expanded) == 2  # One per modality
+
+        # Check keys are replaced
+        assert expanded[0]['RandHistogramShiftd']['keys'] == ['image_dwi']
+        assert expanded[1]['RandHistogramShiftd']['keys'] == ['image_adc']
+
+    def test_modality_specific_params_applied(self):
+        """Modality-specific parameters should be applied."""
+        from lesseg_unet.data_utils import expand_per_modality_transforms, MODALITY_PARAMS
+
+        transform_dict = {
+            'modality_intensity': [
+                {'RandKSpaceSpikeNoised': {'keys': ['image'], 'prob': 0.2}},
+            ]
+        }
+
+        result = expand_per_modality_transforms(transform_dict, ['image_dwi', 'image_adc'])
+
+        expanded = result['expanded_modality_intensity']
+
+        # DWI should have its specific prob
+        dwi_prob = expanded[0]['RandKSpaceSpikeNoised']['prob']
+        adc_prob = expanded[1]['RandKSpaceSpikeNoised']['prob']
+
+        # ADC should have lower prob (from MODALITY_PARAMS)
+        assert adc_prob == MODALITY_PARAMS['adc']['RandKSpaceSpikeNoised']['prob']
+        assert dwi_prob == MODALITY_PARAMS['dwi']['RandKSpaceSpikeNoised']['prob']
+
+    def test_single_modality_uses_default(self):
+        """Single modality with no specific params uses defaults."""
+        from lesseg_unet.data_utils import expand_per_modality_transforms
+
+        transform_dict = {
+            'modality_intensity': [
+                {'RandHistogramShiftd': {'keys': ['image'], 'prob': 0.1}},
+            ]
+        }
+
+        # Single modality case
+        result = expand_per_modality_transforms(transform_dict, ['image_flair'])
+
+        expanded = result['expanded_modality_intensity']
+        assert len(expanded) == 1
+        assert expanded[0]['RandHistogramShiftd']['keys'] == ['image_flair']
+
+
+class TestCreateMultimodalTransformDict:
+    """Test create_multimodal_transform_dict() function."""
+
+    def test_default_parameters(self):
+        """Default function call should return valid dict."""
+        from lesseg_unet.data.transform_dicts import create_multimodal_transform_dict
+
+        result = create_multimodal_transform_dict()
+
+        assert 'first_transform' in result
+        assert 'modality_intensity' in result
+        assert 'monai_transform' in result
+        assert 'last_transform' in result
+        assert 'patches' in result
+
+    def test_resolution_scaling(self):
+        """Resolution parameter should scale elastic params."""
+        from lesseg_unet.data.transform_dicts import create_multimodal_transform_dict
+
+        # 2mm base
+        result_2mm = create_multimodal_transform_dict(resolution_mm=2)
+        # 1mm should have smaller params
+        result_1mm = create_multimodal_transform_dict(resolution_mm=1)
+
+        elastic_2mm = result_2mm['monai_transform'][0]['Rand3DElasticd']
+        elastic_1mm = result_1mm['monai_transform'][0]['Rand3DElasticd']
+
+        # 1mm should have half the magnitude
+        assert elastic_1mm['sigma_range'][0] < elastic_2mm['sigma_range'][0]
+        assert elastic_1mm['magnitude_range'][0] < elastic_2mm['magnitude_range'][0]
+
+    def test_patch_size_parameter(self):
+        """Patch size parameter should be reflected in patches."""
+        from lesseg_unet.data.transform_dicts import create_multimodal_transform_dict
+
+        result_96 = create_multimodal_transform_dict(patch_size=96)
+        result_64 = create_multimodal_transform_dict(patch_size=64)
+
+        crop_96 = result_96['patches'][0]['RandCropByPosNegLabeld']
+        crop_64 = result_64['patches'][0]['RandCropByPosNegLabeld']
+
+        assert crop_96['spatial_size'] == [96, 96, 96]
+        assert crop_64['spatial_size'] == [64, 64, 64]
+
+    def test_denoised_data_reduces_noise(self):
+        """denoised_data=True should reduce noise parameters."""
+        from lesseg_unet.data.transform_dicts import create_multimodal_transform_dict
+
+        result_normal = create_multimodal_transform_dict(denoised_data=False)
+        result_denoised = create_multimodal_transform_dict(denoised_data=True)
+
+        # Find RandGibbsNoised in modality_intensity
+        gibbs_normal = None
+        gibbs_denoised = None
+        for t in result_normal['modality_intensity']:
+            if 'RandGibbsNoised' in t:
+                gibbs_normal = t['RandGibbsNoised']
+        for t in result_denoised['modality_intensity']:
+            if 'RandGibbsNoised' in t:
+                gibbs_denoised = t['RandGibbsNoised']
+
+        # Denoised should have lower probability
+        assert gibbs_denoised['prob'] < gibbs_normal['prob']
+
+    def test_convenience_functions(self):
+        """Test mm1_p96, mm1_p64, mm2_p96 convenience functions."""
+        from lesseg_unet.data.transform_dicts import mm1_p96, mm1_p64, mm2_p96
+
+        result_mm1_p96 = mm1_p96()
+        result_mm1_p64 = mm1_p64()
+        result_mm2_p96 = mm2_p96()
+
+        # Check patch sizes
+        assert result_mm1_p96['patches'][0]['RandCropByPosNegLabeld']['spatial_size'] == [96, 96, 96]
+        assert result_mm1_p64['patches'][0]['RandCropByPosNegLabeld']['spatial_size'] == [64, 64, 64]
+        assert result_mm2_p96['patches'][0]['RandCropByPosNegLabeld']['spatial_size'] == [96, 96, 96]
+
+        # Check resolution scaling (mm1 should have smaller elastic params than mm2)
+        elastic_mm1 = result_mm1_p96['monai_transform'][0]['Rand3DElasticd']
+        elastic_mm2 = result_mm2_p96['monai_transform'][0]['Rand3DElasticd']
+
+        assert elastic_mm1['sigma_range'][0] < elastic_mm2['sigma_range'][0]
