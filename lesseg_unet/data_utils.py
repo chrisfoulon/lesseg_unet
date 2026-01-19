@@ -2089,12 +2089,15 @@ def adapt_transforms_for_resolution(
 
     Notes
     -----
-    Scaling formula: new_value = base_value * (target_resolution / base_resolution)
+    Scaling formula: new_value = base_value * (base_resolution / target_resolution)
 
-    For example, at 1mm resolution with 2mm base:
-    - sigma_range (3, 15) -> (1.5, 7.5)
-    - magnitude_range (3, 10) -> (1.5, 5)
-    - translate_range (0.5, 3) -> (0.25, 1.5)
+    Higher resolution (smaller mm) means more voxels per physical distance,
+    so we need MORE voxels to achieve the same physical deformation.
+
+    For example, at 1mm resolution with 2mm base (scale = 2mm/1mm = 2):
+    - sigma_range (3, 15) -> (6, 30)
+    - magnitude_range (3, 10) -> (6, 20)
+    - translate_range (0.5, 3) -> (1, 6)
 
     Only affects Rand3DElasticd parameters. Other transforms use scale-invariant
     parameters (fractions, angles, etc.).
@@ -2107,7 +2110,7 @@ def adapt_transforms_for_resolution(
         return transform_dict  # No scaling needed
 
     adapted = deepcopy(transform_dict)
-    scale_factor = target_resolution / base_resolution
+    scale_factor = base_resolution / target_resolution
 
     # Parameters to scale in Rand3DElasticd
     voxel_params = ['sigma_range', 'magnitude_range', 'translate_range']

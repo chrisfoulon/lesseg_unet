@@ -444,8 +444,8 @@ class TestAdaptTransformsForResolution:
         assert result['monai_transform'][0]['Rand3DElasticd']['sigma_range'] == (3, 15)
         assert result['monai_transform'][0]['Rand3DElasticd']['magnitude_range'] == (3, 10)
 
-    def test_scale_down_for_higher_resolution(self):
-        """Parameters should scale down for 1mm (higher resolution)."""
+    def test_scale_up_for_higher_resolution(self):
+        """Parameters should scale UP for 1mm (higher resolution = more voxels needed)."""
         from lesseg_unet.data_utils import adapt_transforms_for_resolution
 
         transform_dict = {
@@ -461,13 +461,13 @@ class TestAdaptTransformsForResolution:
 
         result = adapt_transforms_for_resolution(transform_dict, base_resolution=2, target_resolution=1)
 
-        # Scale factor = 1/2 = 0.5
-        assert result['monai_transform'][0]['Rand3DElasticd']['sigma_range'] == (1.5, 7.5)
-        assert result['monai_transform'][0]['Rand3DElasticd']['magnitude_range'] == (1.5, 5.0)
-        assert result['monai_transform'][0]['Rand3DElasticd']['translate_range'] == (0.25, 1.5)
+        # Scale factor = 2/1 = 2 (need MORE voxels for same physical deformation)
+        assert result['monai_transform'][0]['Rand3DElasticd']['sigma_range'] == (6, 30)
+        assert result['monai_transform'][0]['Rand3DElasticd']['magnitude_range'] == (6, 20)
+        assert result['monai_transform'][0]['Rand3DElasticd']['translate_range'] == (1, 6)
 
-    def test_scale_up_for_lower_resolution(self):
-        """Parameters should scale up for 3mm (lower resolution)."""
+    def test_scale_down_for_lower_resolution(self):
+        """Parameters should scale DOWN for 3mm (lower resolution = fewer voxels needed)."""
         from lesseg_unet.data_utils import adapt_transforms_for_resolution
 
         transform_dict = {
@@ -483,10 +483,15 @@ class TestAdaptTransformsForResolution:
 
         result = adapt_transforms_for_resolution(transform_dict, base_resolution=2, target_resolution=3)
 
-        # Scale factor = 3/2 = 1.5
-        assert result['monai_transform'][0]['Rand3DElasticd']['sigma_range'] == (4.5, 22.5)
-        assert result['monai_transform'][0]['Rand3DElasticd']['magnitude_range'] == (4.5, 15.0)
-        assert result['monai_transform'][0]['Rand3DElasticd']['translate_range'] == (0.75, 4.5)
+        # Scale factor = 2/3 ≈ 0.667 (need FEWER voxels for same physical deformation)
+        import pytest
+        sigma = result['monai_transform'][0]['Rand3DElasticd']['sigma_range']
+        magnitude = result['monai_transform'][0]['Rand3DElasticd']['magnitude_range']
+        translate = result['monai_transform'][0]['Rand3DElasticd']['translate_range']
+
+        assert sigma == pytest.approx((2, 10), rel=1e-6)
+        assert magnitude == pytest.approx((2, 20/3), rel=1e-6)
+        assert translate == pytest.approx((1/3, 2), rel=1e-6)
 
     def test_original_not_modified(self):
         """Original transform dict should not be modified."""
@@ -621,20 +626,27 @@ class TestCreateMultimodalTransformDict:
         assert 'patches' in result
 
     def test_resolution_scaling(self):
-        """Resolution parameter should scale elastic params."""
+        """Resolution parameter should scale elastic params correctly.
+
+        Higher resolution (smaller mm) means more voxels per physical distance,
+        so we need MORE voxels (larger params) to achieve the same physical effect.
+        """
         from lesseg_unet.data.transform_dicts import create_multimodal_transform_dict
 
         # 2mm base
         result_2mm = create_multimodal_transform_dict(resolution_mm=2)
-        # 1mm should have smaller params
+        # 1mm should have LARGER params (more voxels needed for same physical deformation)
         result_1mm = create_multimodal_transform_dict(resolution_mm=1)
 
         elastic_2mm = result_2mm['monai_transform'][0]['Rand3DElasticd']
         elastic_1mm = result_1mm['monai_transform'][0]['Rand3DElasticd']
 
-        # 1mm should have half the magnitude
-        assert elastic_1mm['sigma_range'][0] < elastic_2mm['sigma_range'][0]
-        assert elastic_1mm['magnitude_range'][0] < elastic_2mm['magnitude_range'][0]
+        # 1mm should have DOUBLE the voxel params (scale = 2mm/1mm = 2)
+        assert elastic_1mm['sigma_range'][0] > elastic_2mm['sigma_range'][0]
+        assert elastic_1mm['magnitude_range'][0] > elastic_2mm['magnitude_range'][0]
+        # Verify exact scaling: 1mm params should be 2x 2mm params
+        assert elastic_1mm['sigma_range'][0] == elastic_2mm['sigma_range'][0] * 2
+        assert elastic_1mm['magnitude_range'][0] == elastic_2mm['magnitude_range'][0] * 2
 
     def test_patch_size_parameter(self):
         """Patch size parameter should be reflected in patches."""
@@ -682,8 +694,11 @@ class TestCreateMultimodalTransformDict:
         assert result_mm1_p64['patches'][0]['RandCropByPosNegLabeld']['spatial_size'] == [64, 64, 64]
         assert result_mm2_p96['patches'][0]['RandCropByPosNegLabeld']['spatial_size'] == [96, 96, 96]
 
-        # Check resolution scaling (mm1 should have smaller elastic params than mm2)
+        # Check resolution scaling (mm1 should have LARGER elastic params than mm2)
+        # Higher resolution = more voxels needed for same physical deformation
         elastic_mm1 = result_mm1_p96['monai_transform'][0]['Rand3DElasticd']
         elastic_mm2 = result_mm2_p96['monai_transform'][0]['Rand3DElasticd']
 
-        assert elastic_mm1['sigma_range'][0] < elastic_mm2['sigma_range'][0]
+        assert elastic_mm1['sigma_range'][0] > elastic_mm2['sigma_range'][0]
+        # Verify exact ratio: mm1 params should be 2x mm2 params
+        assert elastic_mm1['sigma_range'][0] == elastic_mm2['sigma_range'][0] * 2

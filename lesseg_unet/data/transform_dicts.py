@@ -1679,7 +1679,9 @@ def create_multimodal_transform_dict(
     noise_factor = 0.5 if denoised_data else 1.0
 
     # Scale elastic params for resolution
-    scale = resolution_mm / _BASE_RESOLUTION
+    # Higher resolution (smaller mm) = more voxels per physical distance
+    # So we need MORE voxels: scale = base / target (e.g., 2mm/1mm = 2)
+    scale = _BASE_RESOLUTION / resolution_mm
     sigma_range = tuple(v * scale for v in _ELASTIC_PARAMS_2MM['sigma_range'])
     magnitude_range = tuple(v * scale for v in _ELASTIC_PARAMS_2MM['magnitude_range'])
     translate_range = tuple(v * scale for v in _ELASTIC_PARAMS_2MM['translate_range'])
@@ -1718,6 +1720,13 @@ def create_multimodal_transform_dict(
                 'keys': ['image'],
                 'intensity_range': (8, 10),
                 'prob': low_prob,  # Adjusted per-modality
+            }},
+            # Intensity shift - MUST be per-modality (no channel_wise support)
+            # DWI and ADC have different intensity distributions
+            {'RandShiftIntensityd': {
+                'keys': ['image'],
+                'offsets': 0.10,
+                'prob': high_prob,
             }},
         ],
 
@@ -1758,11 +1767,8 @@ def create_multimodal_transform_dict(
                 'spatial_axis': [0],
                 'prob': low_prob,
             }},
-            {'RandShiftIntensityd': {
-                'keys': ['image'],
-                'offsets': 0.10,
-                'prob': high_prob,
-            }},
+            # NOTE: RandShiftIntensityd moved to modality_intensity
+            # It has no channel_wise support, so must be applied per-modality
         ],
 
         'last_transform': [
