@@ -1619,6 +1619,13 @@ _ELASTIC_PARAMS_2MM = {
     'translate_range': (0.5, 3),
 }
 
+# Maximum values to prevent OOM (large sigma creates huge Gaussian kernels)
+# sigma=15 → kernel ~91³ (~750K elements), reasonable
+# sigma=30 → kernel ~181³ (~6M elements), OOM risk!
+_MAX_SIGMA = 15  # Cap sigma to keep kernel size manageable
+_MAX_MAGNITUDE = 15  # Cap magnitude for stability
+_MAX_TRANSLATE = 5  # Cap translation range
+
 
 def create_multimodal_transform_dict(
     resolution_mm: int = 2,
@@ -1682,9 +1689,17 @@ def create_multimodal_transform_dict(
     # Higher resolution (smaller mm) = more voxels per physical distance
     # So we need MORE voxels: scale = base / target (e.g., 2mm/1mm = 2)
     scale = _BASE_RESOLUTION / resolution_mm
-    sigma_range = tuple(v * scale for v in _ELASTIC_PARAMS_2MM['sigma_range'])
-    magnitude_range = tuple(v * scale for v in _ELASTIC_PARAMS_2MM['magnitude_range'])
-    translate_range = tuple(v * scale for v in _ELASTIC_PARAMS_2MM['translate_range'])
+
+    # Scale and cap to prevent OOM (large sigma creates huge Gaussian kernels)
+    sigma_range = tuple(
+        min(v * scale, _MAX_SIGMA) for v in _ELASTIC_PARAMS_2MM['sigma_range']
+    )
+    magnitude_range = tuple(
+        min(v * scale, _MAX_MAGNITUDE) for v in _ELASTIC_PARAMS_2MM['magnitude_range']
+    )
+    translate_range = tuple(
+        min(v * scale, _MAX_TRANSLATE) for v in _ELASTIC_PARAMS_2MM['translate_range']
+    )
 
     transform_dict = {
         'first_transform': [
