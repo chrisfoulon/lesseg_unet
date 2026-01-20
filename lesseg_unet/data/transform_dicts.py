@@ -1619,12 +1619,33 @@ _ELASTIC_PARAMS_2MM = {
     'translate_range': (0.5, 3),
 }
 
-# Maximum values to prevent OOM (large sigma creates huge Gaussian kernels)
-# sigma=15 → kernel ~91³ (~750K elements), reasonable
-# sigma=30 → kernel ~181³ (~6M elements), OOM risk!
-_MAX_SIGMA = 15  # Cap sigma to keep kernel size manageable
-_MAX_MAGNITUDE = 15  # Cap magnitude for stability
-_MAX_TRANSLATE = 5  # Cap translation range
+# Maximum values at 2mm BASE resolution to prevent OOM
+# These are scaled by resolution to maintain constant computational cost
+# sigma=15 at 2mm → kernel ~91³ (~750K elements), reasonable
+_MAX_SIGMA_2MM = 15
+_MAX_MAGNITUDE_2MM = 15
+_MAX_TRANSLATE_2MM = 5
+
+
+def _get_resolution_caps(resolution_mm: float) -> tuple:
+    """Calculate resolution-aware caps for elastic deformation parameters.
+
+    Maintains approximately constant computational cost regardless of resolution.
+    Higher resolution images are larger (N³ scales as 1/res³), so we reduce
+    the maximum sigma proportionally to keep kernel computations manageable.
+
+    Formula: max_param(res) = max_param_2mm × (res / 2)
+
+    At 1mm: sigma_max = 7.5, magnitude_max = 7.5, translate_max = 2.5
+    At 2mm: sigma_max = 15, magnitude_max = 15, translate_max = 5 (base)
+    At 3mm: sigma_max = 22.5, magnitude_max = 22.5, translate_max = 7.5
+    """
+    scale = resolution_mm / _BASE_RESOLUTION
+    return (
+        _MAX_SIGMA_2MM * scale,
+        _MAX_MAGNITUDE_2MM * scale,
+        _MAX_TRANSLATE_2MM * scale,
+    )
 
 
 def create_multimodal_transform_dict(
@@ -1690,15 +1711,19 @@ def create_multimodal_transform_dict(
     # So we need MORE voxels: scale = base / target (e.g., 2mm/1mm = 2)
     scale = _BASE_RESOLUTION / resolution_mm
 
-    # Scale and cap to prevent OOM (large sigma creates huge Gaussian kernels)
+    # Get resolution-aware caps (maintains constant computational cost)
+    max_sigma, max_magnitude, max_translate = _get_resolution_caps(resolution_mm)
+
+    # Scale and cap to prevent OOM
+    # At 1mm: caps are (7.5, 7.5, 2.5) - same kernel cost as 2mm's (15, 15, 5)
     sigma_range = tuple(
-        min(v * scale, _MAX_SIGMA) for v in _ELASTIC_PARAMS_2MM['sigma_range']
+        min(v * scale, max_sigma) for v in _ELASTIC_PARAMS_2MM['sigma_range']
     )
     magnitude_range = tuple(
-        min(v * scale, _MAX_MAGNITUDE) for v in _ELASTIC_PARAMS_2MM['magnitude_range']
+        min(v * scale, max_magnitude) for v in _ELASTIC_PARAMS_2MM['magnitude_range']
     )
     translate_range = tuple(
-        min(v * scale, _MAX_TRANSLATE) for v in _ELASTIC_PARAMS_2MM['translate_range']
+        min(v * scale, max_translate) for v in _ELASTIC_PARAMS_2MM['translate_range']
     )
 
     transform_dict = {
