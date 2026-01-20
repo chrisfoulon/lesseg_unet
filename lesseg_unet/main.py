@@ -408,6 +408,9 @@ def main():
     parser.add_argument('-nf', '--folds_number', default=5, type=int, help='Number of folds for cross-validation (default: 5)')
     # Datasets and Loaders parameters
     parser.add_argument('-nw', '--num_workers', default=4, type=int, help='Number of dataloader workers')
+    parser.add_argument('--no-persistent-workers', action='store_true',
+                        help='Disable persistent DataLoader workers. Reduces memory but slower. '
+                             'Use this if you experience OOM on epoch 2+ with many workers.')
     parser.add_argument('-bs', '--batch_size', default=10, type=int, help='Batch size for the training loop')
     parser.add_argument('-vbs', '--val_batch_size', default=10, type=int, help='Batch size for the validation loop')
 
@@ -1332,6 +1335,7 @@ def main_worker(local_rank, args, kwargs):
                           debug=args.debug,
                           feature_size=args.feature_size,
                           network_depth=args.network_depth if hasattr(args, 'network_depth') else None,
+                          persistent_workers=not args.no_persistent_workers,
                           **kwargs)
     else:
         if args.checkpoint is None:

@@ -190,6 +190,7 @@ def training(img_path_list: Sequence,
              debug=False,
              feature_size=None,
              network_depth=None,
+             persistent_workers=True,
              **kwargs
              ):
     """
@@ -669,7 +670,8 @@ def training(img_path_list: Sequence,
                 cache_dir=cache_dir,
                 cache_rate=cache_rate,
                 cache_num=cache_num,
-                world_size=world_size, rank=dist.get_rank(), shuffle_training=shuffle_training
+                world_size=world_size, rank=dist.get_rank(), shuffle_training=shuffle_training,
+                training_persistent_workers=persistent_workers
             )
 
         # Register objects for cleanup on Ctrl+C
@@ -746,7 +748,7 @@ def training(img_path_list: Sequence,
                     cache_rate=cache_rate,
                     cache_num=cache_num,
                     world_size=world_size, rank=dist.get_rank(), shuffle_training=shuffle_training,
-                    training_persistent_workers=False
+                    training_persistent_workers=persistent_workers
                 )
                 # Update cleanup context with new loaders
                 _cleanup_context['train_loader'] = train_loader
