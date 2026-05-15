@@ -31,23 +31,46 @@ from monai.transforms import (
 from lesseg_unet.loss_and_metric import DistanceRatioMetric
 
 
+def fix_nan_dice(dice, pred_tensor, label_tensor):
+    """
+    Fix NaN Dice when the GT is empty (0/0 undefined by the Dice formula).
+
+    MONAI returns NaN when both pred and GT are all-zero. The correct values are:
+      - GT empty, pred empty   → 1.0 (perfect, nothing to find and nothing predicted)
+      - GT empty, pred non-empty → 0.0 (false positive, penalise)
+
+    Args:
+        dice: Dice value from MONAI (may be nan)
+        pred_tensor: predicted binary tensor
+        label_tensor: ground-truth binary tensor
+
+    Returns:
+        Corrected Dice value
+    """
+    if not np.isnan(dice):
+        return dice
+    if label_tensor.sum() == 0 and pred_tensor.sum() == 0:
+        return 1.0
+    return 0.0
+
+
 def fix_zero_dice_distance(dice, distance, max_distance):
     """
-    Fix distance when both dice and distance are 0 (empty predictions).
+    Fix distance when HD95 is undefined (empty prediction vs non-empty GT).
 
-    When predictions are empty, MONAI's HausdorffDistanceMetric returns 0.0
-    instead of max_distance as expected. This function corrects this behavior
-    by setting distance to max_distance when both dice=0 and distance=0.
+    MONAI's HausdorffDistanceMetric returns nan/inf (newer versions) or 0.0
+    (older versions) when the prediction is empty but the GT is not. In both
+    cases the correct value is max_distance (the image diagonal in voxels).
 
     Args:
         dice: Dice coefficient value
         distance: Hausdorff distance value
-        max_distance: Maximum possible distance in the image
+        max_distance: Maximum possible distance in the image (image diagonal)
 
     Returns:
         Corrected distance value
     """
-    if dice == 0.0 and distance == 0.0:
+    if np.isnan(distance) or np.isinf(distance) or (dice == 0.0 and distance == 0.0):
         return max_distance
     return distance
 

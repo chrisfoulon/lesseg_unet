@@ -48,7 +48,9 @@ def create_swinunetr_model(  # device: torch.device,
                            hyper_params: dict = None) -> Tuple[SwinUNETR, dict]:
     if hyper_params is None:
         hyper_params = default_swinunetr_hyper_params
-    model = SwinUNETR(**hyper_params)  # .to(device)
+    # img_size was removed in MONAI 1.5+ (dynamic sizes); strip it from old checkpoints
+    params = {k: v for k, v in hyper_params.items() if k != 'img_size'}
+    model = SwinUNETR(**params)  # .to(device)
     return model, hyper_params
 
 
