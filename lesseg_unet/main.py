@@ -1204,7 +1204,7 @@ def main_worker(local_rank, args, kwargs):
             patch_size=patch_size if patch_size else (64, 64, 64),  # Default if unknown
             num_workers=args.num_workers,
             network_depth=args.network_depth if hasattr(args, 'network_depth') and args.network_depth else None,
-            feature_size=args.feature_size if args.feature_size else 48,  # Default
+            feature_size=args.feature_size,
             use_amp=not args.disable_mixed_precision,
             num_gpus=args.num_gpus if hasattr(args, 'num_gpus') and args.num_gpus else 1,
             vram_safety_margin=args.vram_safety_margin if hasattr(args, 'vram_safety_margin') else 0.95,

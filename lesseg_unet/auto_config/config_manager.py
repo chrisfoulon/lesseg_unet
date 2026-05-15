@@ -66,8 +66,8 @@ class TrainingConfig:
     val_batch_size: int
     patch_size: tuple[int, int, int]
     num_workers: int
-    network_depth: int
-    feature_size: int
+    network_depth: Optional[int]
+    feature_size: Optional[int]
     use_amp: bool
     num_gpus: int
     vram_safety_margin: float

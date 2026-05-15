@@ -575,10 +575,10 @@ def training(img_path_list: Sequence,
         if checkpoint_to_share is None:
             if model_type.lower() == 'unetr' or model_type.lower() == 'swinunetr':
                 if model_type.lower() == 'unetr':
-                    hyper_params = net.default_unetr_hyper_params
+                    hyper_params = dict(net.default_unetr_hyper_params)
                     hyper_params['img_size'] = model_img_size  # UNETR still requires img_size
                 else:
-                    hyper_params = net.default_swinunetr_hyper_params
+                    hyper_params = dict(net.default_swinunetr_hyper_params)
                     # SwinUNETR: img_size removed in MONAI 1.5+ - now accepts dynamic sizes
                 if feature_size is not None:
                     hyper_params['feature_size'] = int(feature_size)
