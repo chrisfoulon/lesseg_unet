@@ -359,15 +359,15 @@ def create_training_data_loader(train_ds: monai.data.Dataset,
     if sampler is not None:
         shuffle = False
 
-    # CRITICAL: CacheDataset with num_workers > 0 creates separate cache per worker!
-    # This causes massive RAM usage (num_workers × cache_size) and slow performance
-    # Force num_workers=0 for CacheDataset and PersistentDataset (RAM caching only)
-    if isinstance(train_ds, (CacheDataset, PersistentDataset)):
+    # CacheDataset (RAM) with num_workers > 0 causes each worker to hold its own
+    # copy of the cache, multiplying RAM usage by num_workers. Force single-threaded.
+    # PersistentDataset (disk) uses per-item hash files and is safe with multiple
+    # workers — workers read/write separate files concurrently without conflict.
+    if isinstance(train_ds, CacheDataset) and not isinstance(train_ds, PersistentDataset):
         if dataloader_workers > 0:
             logging.warning(
-                f'CacheDataset/PersistentDataset detected with num_workers={dataloader_workers}. '
-                f'Forcing num_workers=0 to prevent per-worker cache duplication. '
-                f'This is expected and will not slow down training (data is already cached).'
+                f'CacheDataset (RAM) detected with num_workers={dataloader_workers}. '
+                f'Forcing num_workers=0 to prevent per-worker cache duplication.'
             )
         dataloader_workers = 0
 
@@ -396,15 +396,14 @@ def create_validation_data_loader(val_ds: monai.data.Dataset,
                                   sampler=None):
     print('Creating validation data loader')
 
-    # CRITICAL: CacheDataset with num_workers > 0 creates separate cache per worker!
-    # This causes massive RAM usage (num_workers × cache_size) and slow performance
-    # Force num_workers=0 for CacheDataset and PersistentDataset (RAM caching only)
-    if isinstance(val_ds, (CacheDataset, PersistentDataset)):
+    # CacheDataset (RAM) with num_workers > 0 causes each worker to hold its own
+    # copy of the cache, multiplying RAM usage by num_workers. Force single-threaded.
+    # PersistentDataset (disk) uses per-item hash files and is safe with multiple workers.
+    if isinstance(val_ds, CacheDataset) and not isinstance(val_ds, PersistentDataset):
         if dataloader_workers > 0:
             logging.warning(
-                f'CacheDataset/PersistentDataset detected with num_workers={dataloader_workers}. '
-                f'Forcing num_workers=0 to prevent per-worker cache duplication. '
-                f'This is expected and will not slow down validation (data is already cached).'
+                f'CacheDataset (RAM) detected with num_workers={dataloader_workers}. '
+                f'Forcing num_workers=0 to prevent per-worker cache duplication.'
             )
         dataloader_workers = 0
 
