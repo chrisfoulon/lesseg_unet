@@ -191,6 +191,9 @@ def training(img_path_list: Sequence,
              feature_size=None,
              network_depth=None,
              persistent_workers=True,
+             use_lr_scheduler=False,
+             lr_scheduler_patience=10,
+             lr_scheduler_factor=0.5,
              **kwargs
              ):
     """
@@ -521,6 +524,7 @@ def training(img_path_list: Sequence,
         """
         utils.logging_rank_0(f'Creating monai {model_type}', dist.get_rank())
         scaler = torch.amp.GradScaler('cuda') if enable_amp else None
+        scheduler = None
         starting_epoch = 0
         if checkpoint_to_share is not None:
             starting_epoch = checkpoint_to_share[0]['epoch']
@@ -533,6 +537,14 @@ def training(img_path_list: Sequence,
             optimizer.load_state_dict(checkpoint['optim_dict'])
             if scaler is not None and checkpoint.get('scaler_dict') is not None:
                 scaler.load_state_dict(checkpoint['scaler_dict'])
+            if use_lr_scheduler:
+                scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                    optimizer, mode='min', patience=lr_scheduler_patience,
+                    factor=lr_scheduler_factor
+                )
+                if checkpoint.get('scheduler_dict') is not None:
+                    scheduler.load_state_dict(checkpoint['scheduler_dict'])
+                    utils.logging_rank_0('Restored LR scheduler state from checkpoint', dist.get_rank())
             utils.logging_rank_0(f'{model_type} created and succesfully loaded from {pretrained_point} with '
                                  f'hyper parameters: {hyper_params}',
                                  dist.get_rank())
@@ -587,7 +599,10 @@ def training(img_path_list: Sequence,
 
                 # Apply gradient checkpointing if specified (SwinUNETR only)
                 if model_type.lower() == 'swinunetr' and 'use_checkpoint' in kwargs:
-                    hyper_params['use_checkpoint'] = kwargs['use_checkpoint']
+                    ckpt_val = kwargs['use_checkpoint']
+                    if isinstance(ckpt_val, str):
+                        ckpt_val = ckpt_val.lower() == 'true'
+                    hyper_params['use_checkpoint'] = bool(ckpt_val)
                     utils.logging_rank_0(
                         f'SwinUNETR gradient checkpointing: {kwargs["use_checkpoint"]}',
                         dist.get_rank()
@@ -627,6 +642,16 @@ def training(img_path_list: Sequence,
                                  dist.get_rank())
             # print(f'[Rank {dist.get_rank()}]model created')
             optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+            if use_lr_scheduler:
+                scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                    optimizer, mode='min', patience=lr_scheduler_patience,
+                    factor=lr_scheduler_factor
+                )
+                utils.logging_rank_0(
+                    f'LR scheduler enabled: ReduceLROnPlateau(patience={lr_scheduler_patience}, '
+                    f'factor={lr_scheduler_factor})',
+                    dist.get_rank()
+                )
             # use amp to accelerate training
         if dist.get_rank() == 0:
             total_param_count = count_unique_parameters(model.named_parameters())
@@ -1233,6 +1258,16 @@ def training(img_path_list: Sequence,
                         mean_dist_str = f'/ Current mean distance {val_epoch_dist.item()}'
                         utils.tensorboard_write_rank_0(writer, 'val_distance', val_epoch_dist.item(), epoch + 1,
                                                        dist.get_rank())
+                    if scheduler is not None:
+                        scheduler.step(mean_loss_val.item())
+                        current_lr = optimizer.param_groups[0]['lr']
+                        utils.logging_rank_0(
+                            f'LR scheduler step: val_loss={mean_loss_val.item():.4f}, lr={current_lr:.2e}',
+                            dist.get_rank()
+                        )
+                        utils.tensorboard_write_rank_0(
+                            writer, 'learning_rate', current_lr, epoch + 1, dist.get_rank()
+                        )
                     """
                     BEST EPOCH CONDITION AND SAVE CHECKPOINT
                     """
@@ -1279,7 +1314,8 @@ def training(img_path_list: Sequence,
                             checkpoint_path = utils.save_checkpoint(
                                 model, epoch + 1, fold, optimizer, scaler, hyper_params,
                                 output_fold_dir, model_type, transform_dict,
-                                f'best_dice_and_dist_model_segmentation3d_epo{epoch_suffix}.pth')
+                                f'best_dice_and_dist_model_segmentation3d_epo{epoch_suffix}.pth',
+                                scheduler=scheduler)
                             utils.logging_rank_0(f'New best (dice and dist) model saved in {checkpoint_path}',
                                                  dist.get_rank())
                             str_best_dist_epoch = (
@@ -1293,7 +1329,8 @@ def training(img_path_list: Sequence,
                             checkpoint_path = utils.save_checkpoint(
                                 model, epoch + 1, fold, optimizer, scaler, hyper_params,
                                 output_fold_dir, model_type, transform_dict,
-                                f'best_dice_model_segmentation3d_epo{epoch_suffix}.pth')
+                                f'best_dice_model_segmentation3d_epo{epoch_suffix}.pth',
+                                scheduler=scheduler)
                             utils.logging_rank_0(f'New best model saved in {checkpoint_path}', dist.get_rank())
                             str_best_epoch = (
                                     f'\n{best_epoch_pref_str} {best_metric_epoch} '

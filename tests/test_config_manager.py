@@ -64,6 +64,7 @@ def auto_config_result():
         network_depth=5,
         feature_size=48,
         use_amp=True,
+        use_checkpoint=False,
         num_gpus=1,
         vram_safety_margin=0.95,
         reasoning={'batch_size': 'Binary search found max batch=4'},
