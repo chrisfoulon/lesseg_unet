@@ -537,12 +537,24 @@ def main():
     else:
         logging_level = logging.INFO
     log_file_path = str(Path(output_root, '__logging_training.txt'))
-    logging.basicConfig(filename=log_file_path, level=logging_level)
-    file_handler = logging.StreamHandler(sys.stdout)
-    logging.getLogger().addHandler(file_handler)
+    # main.py is the application entry point, so it owns root-logger configuration
+    # (the package itself only attaches a NullHandler and never calls basicConfig).
+    # Console output goes to every rank; the log file is written by rank 0 only so
+    # that multiple DDP ranks do not clobber the same file. The process group is not
+    # initialized yet, so the rank comes from torchrun's env vars. force=True clears
+    # any stray handler an earlier logging call may have installed, so our formatter
+    # always applies and console output is never duplicated.
+    _log_handlers = [logging.StreamHandler(sys.stdout)]
+    _rank = os.environ.get('RANK', os.environ.get('LOCAL_RANK', '0'))
+    if _rank == '0':
+        _log_handlers.append(logging.FileHandler(log_file_path))
+    logging.basicConfig(
+        level=logging_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=_log_handlers,
+        force=True,
+    )
     logging.info('log file stored in {}'.format(log_file_path))
-    if not Path(log_file_path).is_file():
-        print(f'{log_file_path} was not created! Thanks ddp ....')
     if unknown:
         kwargs = utils.kwargs_argparse(unknown)
         print(f'Unlisted arguments : {kwargs}')

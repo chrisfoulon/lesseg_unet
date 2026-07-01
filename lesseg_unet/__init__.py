@@ -10,11 +10,14 @@ import warnings
 
 __version__ = "2.0.13"
 
-# Configure logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+# Library best practice: do NOT configure the root logger here (no basicConfig()).
+# A library should only attach a NullHandler to its own logger and leave handler and
+# level configuration to the application entry point (see lesseg_unet/main.py). Calling
+# basicConfig() at import time hijacks the root logger of any program that imports this
+# package, and previously made main.py's own basicConfig(filename=...) a silent no-op
+# (so no training log file was ever written) and duplicated all console output.
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 def _check_cuda_availability():
@@ -61,19 +64,19 @@ def _check_cuda_availability():
             )
         # Only log on first import (debug mode only)
         elif cuda_available:
-            logging.debug(
+            logger.debug(
                 f"GPU acceleration enabled: {torch.cuda.device_count()} GPU(s) detected "
                 f"(CUDA {cuda_version})"
             )
         elif cuda_version is None:
-            logging.debug("CPU-only mode: PyTorch compiled without CUDA support")
+            logger.debug("CPU-only mode: PyTorch compiled without CUDA support")
 
     except ImportError:
         # PyTorch not installed yet (during setup)
         pass
     except Exception as e:
         # Don't crash on import if check fails
-        logging.debug(f"CUDA availability check failed: {e}")
+        logger.debug(f"CUDA availability check failed: {e}")
 
 
 # Run CUDA check on import (but don't crash if it fails)
