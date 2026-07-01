@@ -52,10 +52,15 @@ def cleanup_on_exit(signum=None, frame=None):
         del _cleanup_context['optimizer']
     if 'scaler' in _cleanup_context and _cleanup_context['scaler'] is not None:
         del _cleanup_context['scaler']
-    if 'train_loader' in _cleanup_context:
-        del _cleanup_context['train_loader']
-    if 'val_loader' in _cleanup_context:
-        del _cleanup_context['val_loader']
+    for _key in ['train_loader', 'val_loader']:
+        if _key in _cleanup_context:
+            _loader = _cleanup_context[_key]
+            try:
+                if hasattr(_loader, '_iterator') and _loader._iterator is not None:
+                    _loader._iterator._shutdown_workers()
+            except Exception:
+                pass
+            del _cleanup_context[_key]
 
     # Clear CUDA cache if using GPU
     if torch.cuda.is_available():
@@ -190,10 +195,18 @@ def training(img_path_list: Sequence,
              debug=False,
              feature_size=None,
              network_depth=None,
-             persistent_workers=True,
+             persistent_workers=False,
              use_lr_scheduler=False,
              lr_scheduler_patience=10,
              lr_scheduler_factor=0.5,
+             ram_cache_dir=None,
+             prefetch_factor=2,
+             val_workers=4,
+             sw_overlap=None,
+             hausdorff_freq=1,
+             monitor_epochs=5,
+             monitor_interval=1.0,
+             val_interval: int = 1,
              **kwargs
              ):
     """
@@ -383,6 +396,11 @@ def training(img_path_list: Sequence,
     # Save the split_lists to easily get the content of the folds and all
     with open(Path(output_dir, 'split_lists.json'), 'w+') as f:
         json.dump(split_lists, f, indent=4)
+    # Remap paths to RAM-backed directory after saving JSON (JSON keeps original HDD paths
+    # so resume-after-reboot re-copies correctly without any saved-state changes)
+    if ram_cache_dir is not None:
+        from lesseg_unet.ram_cache import setup_ram_cache
+        split_lists = setup_ram_cache(split_lists, Path(ram_cache_dir))
     # TODO The controls could just be added to the split_lists and the control key can be added to the transforms
     """
     We want the same thing for the controls here. The input is control_list a list of dict of list like [{'image':[]}]
@@ -499,7 +517,8 @@ def training(img_path_list: Sequence,
             non_blocking = False
         if v == 'True' or v == 1:
             non_blocking = True
-    val_interval = 1
+    if val_interval < 1:
+        raise ValueError(f'val_interval must be >= 1, got {val_interval}')
     # val_meh_thr = 0.7
     # val_trash_thr = 0.3
     # If pretrained_point is not None, we will load the model from the checkpoint here because we need to know the
@@ -684,6 +703,16 @@ def training(img_path_list: Sequence,
         else:
             writer = None
         utils.print_rank_0('Tensorboard SummaryWriter created', dist.get_rank())
+        _monitor = None
+        if monitor_epochs > 0 and dist.get_rank() == 0:
+            from lesseg_unet.resource_monitor import ResourceMonitor
+            _monitor = ResourceMonitor(
+                output_path=Path(output_fold_dir) / 'resource_monitor.csv',
+                interval=monitor_interval,
+                stop_after_epochs=monitor_epochs,
+                device=device,
+            )
+            _monitor.start()
         # Creates both the training and validation loaders based on the fold number
         # (e.g. fold 0 means the first sublist of split_lists will be the validation set for this fold)
         if ctr_split_lists is None or delayed_control_training:
@@ -696,7 +725,9 @@ def training(img_path_list: Sequence,
                 cache_rate=cache_rate,
                 cache_num=cache_num,
                 world_size=world_size, rank=dist.get_rank(), shuffle_training=shuffle_training,
-                training_persistent_workers=persistent_workers
+                training_persistent_workers=persistent_workers,
+                prefetch_factor=prefetch_factor,
+                val_workers=val_workers
             )
 
         # Register objects for cleanup on Ctrl+C
@@ -746,6 +777,9 @@ def training(img_path_list: Sequence,
         for epoch in range(starting_epoch, epoch_num):
             utils.print_rank_0('-' * 10, dist.get_rank())
             utils.print_rank_0(f'epoch {epoch + 1}/{epoch_num}', dist.get_rank())
+            if _monitor is not None:
+                _monitor.set_epoch(epoch + 1)
+                _monitor.set_phase('overhead')
             # If ctr_split_lists is not None we need to create a new training loader with the controls
             if ctr_split_lists is not None and use_controls:
                 # We need to add the same number of controls as the abnormal images in each fold after shuffling them
@@ -773,7 +807,9 @@ def training(img_path_list: Sequence,
                     cache_rate=cache_rate,
                     cache_num=cache_num,
                     world_size=world_size, rank=dist.get_rank(), shuffle_training=shuffle_training,
-                    training_persistent_workers=persistent_workers
+                    training_persistent_workers=persistent_workers,
+                    prefetch_factor=prefetch_factor,
+                    val_workers=val_workers
                 )
                 # Update cleanup context with new loaders
                 _cleanup_context['train_loader'] = train_loader
@@ -803,6 +839,8 @@ def training(img_path_list: Sequence,
             """
             TRAINING INITIALISATION
             """
+            if _monitor is not None:
+                _monitor.set_phase('train')
             if dist.get_rank() == 0:
                 train_iter = tqdm(train_loader, desc=f'Training[{epoch + 1}] loss/mean_loss:[N/A]')
             else:
@@ -1120,6 +1158,8 @@ def training(img_path_list: Sequence,
             VALIDATION LOOP
             """
             if (epoch + 1) % val_interval == 0:
+                if _monitor is not None:
+                    _monitor.set_phase('val')
                 # if (epoch + 1) % val_interval == 0 and dist.get_rank() == 0:
                 model.eval()
                 with torch.no_grad():
@@ -1131,7 +1171,8 @@ def training(img_path_list: Sequence,
                     ctr_val_epoch_loss = 0
                     ctr_val_epoch_volume = 0
                     # val_batch_dist_list = None
-                    if 'dist' in val_loss_fct.lower():
+                    compute_dist = 'dist' in val_loss_fct.lower() and (epoch % hausdorff_freq == 0)
+                    if compute_dist:
                         # val_batch_dist_list = []
                         val_epoch_dist = 0
                     pbar = tqdm(val_loader, desc=f'Val[{epoch + 1}] avg_metric:[N/A]')
@@ -1150,8 +1191,9 @@ def training(img_path_list: Sequence,
                         # In case CoordConv is used
                         with torch.amp.autocast(device_type='cuda', enabled=enable_amp):
                             # masks_only_val_labels = val_labels[:, :1, :, :, :]
+                            _sw_kwargs = {} if sw_overlap is None else {'overlap': sw_overlap}
                             val_outputs = sliding_window_inference(val_inputs, model_img_size,
-                                                                   val_batch_size, model)
+                                                                   val_batch_size, model, **_sw_kwargs)
                             val_loss = val_loss_function(val_outputs, val_labels)
                             # loss_list.append(val_loss.item())
                             val_epoch_loss += val_loss
@@ -1190,7 +1232,7 @@ def training(img_path_list: Sequence,
                             dice_metric(y_pred=val_output_convert, y=val_labels)
                             dice = dice_metric.aggregate()
                             val_epoch_dice += dice
-                            if 'dist' in val_loss_fct.lower():
+                            if compute_dist:
                                 hausdorff_metric(y_pred=val_output_convert, y=val_labels)
                                 # For whatever reason, this metric is going back to cpu unlike the dice_metric ...
                                 distance = hausdorff_metric.aggregate().to(device)
@@ -1209,7 +1251,7 @@ def training(img_path_list: Sequence,
 
                         dist.all_reduce(val_epoch_dice, op=dist.ReduceOp.SUM)
                         val_epoch_dice /= world_size
-                        if 'dist' in val_loss_fct.lower():
+                        if compute_dist:
                             dist.all_reduce(val_epoch_dist, op=dist.ReduceOp.SUM)
                             val_epoch_dist /= world_size
                         if ctr_val_inputs is not None:
@@ -1224,8 +1266,6 @@ def training(img_path_list: Sequence,
                     dice_metric.reset()
                     mean_dice_val = val_epoch_dice
                     # mean_dice_val = np.mean(val_batch_dice_list)
-                    utils.tensorboard_write_rank_0(writer, 'val_mean_dice', val_epoch_dice.item(), epoch + 1,
-                                                   dist.get_rank())
                     utils.tensorboard_write_rank_0(writer, 'val_mean_dice', val_epoch_dice.item(), epoch + 1,
                                                    dist.get_rank())
                     """
@@ -1251,7 +1291,7 @@ def training(img_path_list: Sequence,
                     """
                     mean_dist_val = None
                     mean_dist_str = ''
-                    if 'dist' in val_loss_fct.lower():
+                    if compute_dist:
                         val_epoch_dist /= step
                         mean_dist_val = val_epoch_dist
                         hausdorff_metric.reset()
@@ -1362,6 +1402,9 @@ def training(img_path_list: Sequence,
                         epoch_time_list.append(epoch_time)
                         print(f'First epoch time: '
                               f'{epoch_time_list[0]} and average epoch time {np.mean(epoch_time_list)}')
+                        if _monitor is not None and (epoch + 1) >= monitor_epochs:
+                            _monitor.stop()
+                            _monitor = None
 
                         if stop_best_epoch != -1:
                             if best_epoch_count > stop_best_epoch:
@@ -1389,13 +1432,12 @@ def training(img_path_list: Sequence,
             stop_epoch = flag_to_share[0]
             dist.barrier()
 
-            # Strategic garbage collection to reduce memory fragmentation
-            # Only every 10 epochs to minimize overhead
-            if (epoch + 1) % 10 == 0:
-                gc.collect()
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                utils.logging_rank_0(f'Epoch {epoch + 1}: Memory cleanup performed', dist.get_rank())
+            # Release VRAM held by validation loop before next training epoch.
+            # Validation leaves up to 6 GB cached; without this, epoch N+1 training
+            # starts with that as overhead and can OOM even though allocated tensors are freed.
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
             if stop_epoch:
                 break

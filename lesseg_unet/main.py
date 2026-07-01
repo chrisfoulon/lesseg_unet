@@ -316,6 +316,8 @@ def main():
     # Tranformation
     parser.add_argument('-trs', '--transform_dict', type=str,
                         help='file path to a json dictionary of transformations')
+    parser.add_argument('--num_samples', type=int, default=None,
+                        help='Number of patches sampled per subject per iteration (overrides transform default of 5)')
     parser.add_argument('-clamp', action='store_true', help='Apply intensity clamping (with default value if not given'
                                                             ' with --clamp_low and --clamp_high)')
     parser.add_argument('-cl', '--clamp_low', type=float, help='Define the low quantile of intensity clamping')
@@ -408,9 +410,13 @@ def main():
     parser.add_argument('-nf', '--folds_number', default=5, type=int, help='Number of folds for cross-validation (default: 5)')
     # Datasets and Loaders parameters
     parser.add_argument('-nw', '--num_workers', default=4, type=int, help='Number of dataloader workers')
-    parser.add_argument('--no-persistent-workers', action='store_true',
-                        help='Disable persistent DataLoader workers. Reduces memory but slower. '
-                             'Use this if you experience OOM on epoch 2+ with many workers.')
+    parser.add_argument('-vnw', '--val_workers', default=4, type=int,
+                        help='Number of validation dataloader workers (default: 4). '
+                             'Keep low when using --persistent-workers to avoid RAM spikes '
+                             'at the training/validation boundary.')
+    parser.add_argument('--persistent-workers', action='store_true',
+                        help='Enable persistent DataLoader workers (kept alive between epochs). '
+                             'Saves ~2s spawn overhead per epoch but risks RAM spikes at epoch boundaries.')
     parser.add_argument('-bs', '--batch_size', default=10, type=int, help='Batch size for the training loop')
     parser.add_argument('-vbs', '--val_batch_size', default=10, type=int, help='Batch size for the validation loop')
 
@@ -427,6 +433,33 @@ def main():
                         help='Absolute number of samples to cache (overrides rate, for RAM mode)')
     parser.add_argument('-cr', '--cache_rate', type=float, default=1.0,
                         help='Fraction of dataset to cache (0.0-1.0, for RAM mode)')
+    parser.add_argument('--prefetch-factor', type=int, default=2,
+                        help='Number of batches pre-loaded per worker (default: 2). '
+                             'Increase to 4-6 to reduce GPU starvation when CPU is the bottleneck.')
+    parser.add_argument('--ram-dir', type=str, default=None,
+                        help='Copy input NIfTIs to this RAM-backed directory before training '
+                             '(e.g. /tmp/lesseg). Must be a tmpfs mount. Files already present '
+                             'with matching size are skipped, so re-runs and post-reboot restarts '
+                             'are handled automatically.')
+    parser.add_argument('--sw-overlap', type=float, default=None,
+                        help='Sliding window inference overlap fraction (0.0–1.0). '
+                             'Default: MONAI default (0.25). Use 0.0 for ~2x faster validation '
+                             'at a small accuracy cost on patch boundaries.')
+    parser.add_argument('--val-interval', type=int, default=1,
+                        help='Run validation every N epochs (default: 1). '
+                             'Note: LR scheduler patience is in validation events, so scale '
+                             '--lr_scheduler_patience inversely (e.g. patience=2 with val-interval=5 '
+                             'equals patience=10 with val-interval=1).')
+    parser.add_argument('--hausdorff-freq', type=int, default=1,
+                        help='Compute Hausdorff/surface-distance metric every N validation epochs '
+                             '(default: 1, i.e. every epoch). Set to e.g. 5 to skip it on '
+                             'intermediate epochs and save ~4 min per skipped epoch.')
+    parser.add_argument('--monitor-epochs', type=int, default=5,
+                        help='Number of epochs for which to log per-second resource metrics '
+                             '(RAM, GPU, workers) to resource_monitor.csv (default: 5). '
+                             'Set to 0 to disable.')
+    parser.add_argument('--monitor-interval', type=float, default=1.0,
+                        help='Resource monitor sampling interval in seconds (default: 1.0).')
     # Epochs parameters
     parser.add_argument('-ne', '--num_epochs', default=50, type=int, help='Number of epochs')
     parser.add_argument('-sbe', '--stop_best_epoch', type=int, help='Number of epochs without improvement before it '
@@ -849,7 +882,10 @@ def main_worker(local_rank, args, kwargs):
             if td in dir(tr_dicts):
                 transform_dict = getattr(tr_dicts, td)
                 if callable(transform_dict):
-                    transform_dict = transform_dict()
+                    td_kwargs = {}
+                    if args.num_samples is not None:
+                        td_kwargs['num_samples'] = args.num_samples
+                    transform_dict = transform_dict(**td_kwargs)
             else:
                 transform_dict = None
                 for d in dir(tr_dicts):
@@ -1335,7 +1371,15 @@ def main_worker(local_rank, args, kwargs):
                           debug=args.debug,
                           feature_size=args.feature_size,
                           network_depth=args.network_depth if hasattr(args, 'network_depth') else None,
-                          persistent_workers=not args.no_persistent_workers,
+                          persistent_workers=args.persistent_workers,
+                          prefetch_factor=args.prefetch_factor,
+                          val_workers=args.val_workers,
+                          ram_cache_dir=args.ram_dir,
+                          sw_overlap=args.sw_overlap,
+                          val_interval=args.val_interval,
+                          hausdorff_freq=args.hausdorff_freq,
+                          monitor_epochs=args.monitor_epochs,
+                          monitor_interval=args.monitor_interval,
                           **kwargs)
     else:
         if args.checkpoint is None:
@@ -1457,4 +1501,9 @@ def main_worker(local_rank, args, kwargs):
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method('spawn')
     main()
-    dist.destroy_process_group()  # Cleanly shut it down
+    # The training path already destroys the process group at the end of training().
+    # Only destroy here if it is still initialized (e.g. the segmentation/validation
+    # path, which never enters training()). Guard prevents a double-destroy
+    # AssertionError ("pg is not None") at shutdown after a completed training run.
+    if dist.is_initialized():
+        dist.destroy_process_group()  # Cleanly shut it down

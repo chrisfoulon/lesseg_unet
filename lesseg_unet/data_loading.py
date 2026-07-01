@@ -288,6 +288,19 @@ def create_dataset(
         )
 
 
+def _stems_match(query: str, target: str) -> bool:
+    """Return True if target stem equals query stem or starts with it at a non-digit boundary.
+
+    Prevents SOOP_sub-28 from matching SOOP_sub-280 while still allowing
+    SOOP_sub-28 to match SOOP_sub-28_label (suffix after a non-digit character).
+    """
+    if target == query:
+        return True
+    return (target.startswith(query)
+            and len(target) > len(query)
+            and not target[len(query)].isdigit())
+
+
 def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
                            img_pref: str = None, image_cut_prefix: str = None,
                            image_cut_suffix: str = None, check_inputs=True) -> (dict, dict):
@@ -300,17 +313,20 @@ def match_img_seg_by_names(img_path_list: Sequence, seg_path_list: Sequence,
             matching_les_list = []
         else:
             def condition(les):
-                matched = Path(img).name.split('.nii')[0] in Path(les).name.split('.nii')[0]
-                if matched:
+                img_stem = Path(img).name.split('.nii')[0]
+                les_stem = Path(les).name.split('.nii')[0]
+                if _stems_match(img_stem, les_stem):
                     return True
                 else:
                     if image_cut_suffix is not None and image_cut_prefix is not None:
-                        return Path(img).name.split(
-                            image_cut_prefix)[-1].split(image_cut_suffix)[0] in Path(les).name.split('.nii')[0]
+                        cut_stem = img_stem.split(image_cut_prefix)[-1].split(image_cut_suffix)[0]
+                        return _stems_match(cut_stem, les_stem)
                     if image_cut_suffix is not None:
-                        return Path(img).name.split(image_cut_suffix)[0] in Path(les).name.split('.nii')[0]
+                        cut_stem = img_stem.split(image_cut_suffix)[0]
+                        return _stems_match(cut_stem, les_stem)
                     if image_cut_prefix is not None:
-                        return Path(img).name.split(image_cut_prefix)[-1] in Path(les).name.split('.nii')[0]
+                        cut_stem = img_stem.split(image_cut_prefix)[-1]
+                        return _stems_match(cut_stem, les_stem)
             # TODO make it work with both prefix and suffix
             matching_les_list = [str(les) for les in seg_path_list if condition(les)]
         if len(matching_les_list) == 0:
@@ -351,23 +367,23 @@ def create_file_dict_lists(raw_img_path_list: Sequence, raw_seg_path_list: Seque
 def create_training_data_loader(train_ds: monai.data.Dataset,
                                 batch_size: int = 10,
                                 dataloader_workers: int = 4,
-                                persistent_workers=True,
+                                persistent_workers=False,
                                 shuffle=True,
-                                sampler=None):
+                                sampler=None,
+                                prefetch_factor: int = 2):
     print('Creating training data loader')
     # The shuffle option is determined in the sampler
     if sampler is not None:
         shuffle = False
 
-    # CacheDataset (RAM) with num_workers > 0 causes each worker to hold its own
-    # copy of the cache, multiplying RAM usage by num_workers. Force single-threaded.
-    # PersistentDataset (disk) uses per-item hash files and is safe with multiple
-    # workers — workers read/write separate files concurrently without conflict.
+    # CacheDataset (RAM) with spawn workers causes each worker to receive its own
+    # full pickle of the cache, multiplying RAM by num_workers. Force single-threaded.
+    # PersistentDataset (disk) uses per-item hash files and is safe with multiple workers.
     if isinstance(train_ds, CacheDataset) and not isinstance(train_ds, PersistentDataset):
         if dataloader_workers > 0:
             logging.warning(
                 f'CacheDataset (RAM) detected with num_workers={dataloader_workers}. '
-                f'Forcing num_workers=0 to prevent per-worker cache duplication.'
+                f'Forcing num_workers=0: spawn workers would pickle the entire cache per worker.'
             )
         dataloader_workers = 0
 
@@ -384,8 +400,7 @@ def create_training_data_loader(train_ds: monai.data.Dataset,
         # pin_memory=torch.cuda.is_available(),
         persistent_workers=use_persistent,
         sampler=sampler,
-        # Reduce prefetch to lower memory/fd pressure
-        prefetch_factor=2 if dataloader_workers > 0 else None
+        prefetch_factor=prefetch_factor if dataloader_workers > 0 else None
     )
     return train_loader
 
@@ -396,24 +411,18 @@ def create_validation_data_loader(val_ds: monai.data.Dataset,
                                   sampler=None):
     print('Creating validation data loader')
 
-    # CacheDataset (RAM) with num_workers > 0 causes each worker to hold its own
-    # copy of the cache, multiplying RAM usage by num_workers. Force single-threaded.
-    # PersistentDataset (disk) uses per-item hash files and is safe with multiple workers.
     if isinstance(val_ds, CacheDataset) and not isinstance(val_ds, PersistentDataset):
         if dataloader_workers > 0:
             logging.warning(
                 f'CacheDataset (RAM) detected with num_workers={dataloader_workers}. '
-                f'Forcing num_workers=0 to prevent per-worker cache duplication.'
+                f'Forcing num_workers=0: spawn workers would pickle the entire cache per worker.'
             )
         dataloader_workers = 0
-
-    # persistent_workers requires num_workers > 0
-    use_persistent = dataloader_workers > 0
 
     val_loader = DataLoader(val_ds, batch_size=batch_size, num_workers=dataloader_workers,
                             pin_memory=False,
                             # pin_memory=torch.cuda.is_available(),
-                            persistent_workers=use_persistent,
+                            persistent_workers=False,
                             sampler=sampler)
     return val_loader
 
@@ -484,7 +493,8 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
                             dataloader_workers, val_batch_size=1,
                             cache_training_mode='none', cache_validation_mode='none',
                             cache_dir=None, cache_rate=1.0, cache_num=None,
-                            world_size=1, rank=0, shuffle_training=True, training_persistent_workers=True):
+                            world_size=1, rank=0, shuffle_training=True, training_persistent_workers=False,
+                            prefetch_factor=2, val_workers=4):
     train_data_list = []
     val_data_list = []
     for ind, chunk in enumerate(split_lists):
@@ -526,7 +536,8 @@ def create_fold_dataloaders(split_lists, fold, train_img_transforms, val_img_tra
     # data_loader_checker_first(train_ds, 'validation')
     train_loader = create_training_data_loader(train_ds, batch_size, dataloader_workers,
                                                sampler=train_sampler, shuffle=shuffle_training,
-                                               persistent_workers=training_persistent_workers)
-    val_loader = create_validation_data_loader(val_ds, val_batch_size, dataloader_workers, sampler=val_sampler)
+                                               persistent_workers=training_persistent_workers,
+                                               prefetch_factor=prefetch_factor)
+    val_loader = create_validation_data_loader(val_ds, val_batch_size, val_workers, sampler=val_sampler)
 
     return train_loader, val_loader

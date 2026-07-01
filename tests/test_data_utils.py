@@ -626,27 +626,25 @@ class TestCreateMultimodalTransformDict:
         assert 'patches' in result
 
     def test_resolution_scaling(self):
-        """Resolution parameter should scale elastic params correctly.
+        """Resolution parameter should scale affine translate_range correctly.
 
         Higher resolution (smaller mm) means more voxels per physical distance,
-        so we need MORE voxels (larger params) to achieve the same physical effect.
+        so we need MORE voxels (larger translate_range) to achieve the same
+        physical displacement.
         """
         from lesseg_unet.data.transform_dicts import create_multimodal_transform_dict
 
         # 2mm base
         result_2mm = create_multimodal_transform_dict(resolution_mm=2)
-        # 1mm should have LARGER params (more voxels needed for same physical deformation)
+        # 1mm should have LARGER params (more voxels needed for same physical translation)
         result_1mm = create_multimodal_transform_dict(resolution_mm=1)
 
-        elastic_2mm = result_2mm['monai_transform'][0]['Rand3DElasticd']
-        elastic_1mm = result_1mm['monai_transform'][0]['Rand3DElasticd']
+        affine_2mm = result_2mm['monai_transform'][0]['RandAffined']
+        affine_1mm = result_1mm['monai_transform'][0]['RandAffined']
 
-        # 1mm should have DOUBLE the voxel params (scale = 2mm/1mm = 2)
-        assert elastic_1mm['sigma_range'][0] > elastic_2mm['sigma_range'][0]
-        assert elastic_1mm['magnitude_range'][0] > elastic_2mm['magnitude_range'][0]
-        # Verify exact scaling: 1mm params should be 2x 2mm params
-        assert elastic_1mm['sigma_range'][0] == elastic_2mm['sigma_range'][0] * 2
-        assert elastic_1mm['magnitude_range'][0] == elastic_2mm['magnitude_range'][0] * 2
+        # translate_range[0] scales exactly 2x (uncapped): 0.5 → 1.0
+        assert affine_1mm['translate_range'][0] > affine_2mm['translate_range'][0]
+        assert affine_1mm['translate_range'][0] == affine_2mm['translate_range'][0] * 2
 
     def test_patch_size_parameter(self):
         """Patch size parameter should be reflected in patches."""
@@ -694,11 +692,228 @@ class TestCreateMultimodalTransformDict:
         assert result_mm1_p64['patches'][0]['RandCropByPosNegLabeld']['spatial_size'] == [64, 64, 64]
         assert result_mm2_p96['patches'][0]['RandCropByPosNegLabeld']['spatial_size'] == [96, 96, 96]
 
-        # Check resolution scaling (mm1 should have LARGER elastic params than mm2)
-        # Higher resolution = more voxels needed for same physical deformation
-        elastic_mm1 = result_mm1_p96['monai_transform'][0]['Rand3DElasticd']
-        elastic_mm2 = result_mm2_p96['monai_transform'][0]['Rand3DElasticd']
+        # Check resolution scaling (mm1 should have LARGER translate_range than mm2)
+        # Higher resolution = more voxels needed for same physical displacement
+        affine_mm1 = result_mm1_p96['monai_transform'][0]['RandAffined']
+        affine_mm2 = result_mm2_p96['monai_transform'][0]['RandAffined']
 
-        assert elastic_mm1['sigma_range'][0] > elastic_mm2['sigma_range'][0]
-        # Verify exact ratio: mm1 params should be 2x mm2 params
-        assert elastic_mm1['sigma_range'][0] == elastic_mm2['sigma_range'][0] * 2
+        assert affine_mm1['translate_range'][0] > affine_mm2['translate_range'][0]
+        # Verify exact ratio: mm1 translate_range[0] should be 2x mm2 (uncapped)
+        assert affine_mm1['translate_range'][0] == affine_mm2['translate_range'][0] * 2
+
+
+class TestPatchAugmentVariants:
+    """Test mm1_p96_pa / mm1_p64_pa / mm2_p96_pa patch-level augmentation variants."""
+
+    def test_patch_augment_section_present(self):
+        from lesseg_unet.data.transform_dicts import mm1_p96_pa
+
+        result = mm1_p96_pa()
+        assert 'patch_augment' in result
+        assert any('RandAffined' in e for e in result['patch_augment'])
+
+    def test_affine_removed_from_monai_transform(self):
+        from lesseg_unet.data.transform_dicts import mm1_p96_pa
+
+        result = mm1_p96_pa()
+        assert not any('RandAffined' in e for e in result['monai_transform'])
+
+    def test_patch_augment_after_patches(self):
+        from lesseg_unet.data.transform_dicts import mm1_p96_pa
+
+        keys = list(mm1_p96_pa().keys())
+        assert keys.index('patch_augment') > keys.index('patches')
+
+    def test_resolution_scaling_preserved(self):
+        from lesseg_unet.data.transform_dicts import mm1_p96_pa, mm2_p96_pa
+
+        affine_mm1 = mm1_p96_pa()['patch_augment'][0]['RandAffined']
+        affine_mm2 = mm2_p96_pa()['patch_augment'][0]['RandAffined']
+        assert affine_mm1['translate_range'][0] == affine_mm2['translate_range'][0] * 2
+
+    def test_original_mm1_p96_unchanged(self):
+        from lesseg_unet.data.transform_dicts import mm1_p96
+
+        result = mm1_p96()
+        assert 'patch_augment' not in result
+        assert any('RandAffined' in e for e in result['monai_transform'])
+
+    def test_all_pa_variants_have_correct_patch_size(self):
+        from lesseg_unet.data.transform_dicts import mm1_p96_pa, mm1_p64_pa, mm2_p96_pa
+
+        assert mm1_p96_pa()['patches'][0]['RandCropByPosNegLabeld']['spatial_size'] == [96, 96, 96]
+        assert mm1_p64_pa()['patches'][0]['RandCropByPosNegLabeld']['spatial_size'] == [64, 64, 64]
+        assert mm2_p96_pa()['patches'][0]['RandCropByPosNegLabeld']['spatial_size'] == [96, 96, 96]
+
+
+class TestPatchGibbsNoSpike:
+    """Test mm1_p64_pag / mm1_p96_pag / mm2_p96_pag variants."""
+
+    def test_kspace_spike_removed(self):
+        from lesseg_unet.data.transform_dicts import mm1_p64_pag
+
+        result = mm1_p64_pag()
+        assert not any('RandKSpaceSpikeNoised' in e for e in result['modality_intensity'])
+
+    def test_gibbs_not_in_modality_intensity(self):
+        from lesseg_unet.data.transform_dicts import mm1_p64_pag
+
+        result = mm1_p64_pag()
+        assert not any('RandGibbsNoised' in e for e in result['modality_intensity'])
+
+    def test_gibbs_in_patch_augment(self):
+        from lesseg_unet.data.transform_dicts import mm1_p64_pag
+
+        result = mm1_p64_pag()
+        assert 'patch_augment' in result
+        assert any('RandGibbsNoised' in e for e in result['patch_augment'])
+
+    def test_affine_still_in_patch_augment(self):
+        from lesseg_unet.data.transform_dicts import mm1_p64_pag
+
+        result = mm1_p64_pag()
+        assert any('RandAffined' in e for e in result['patch_augment'])
+
+    def test_patch_augment_after_patches(self):
+        from lesseg_unet.data.transform_dicts import mm1_p64_pag
+
+        keys = list(mm1_p64_pag().keys())
+        assert keys.index('patch_augment') > keys.index('patches')
+
+    def test_gibbs_uses_image_key(self):
+        from lesseg_unet.data.transform_dicts import mm1_p64_pag
+
+        result = mm1_p64_pag()
+        gibbs_entries = [e for e in result['patch_augment'] if 'RandGibbsNoised' in e]
+        assert len(gibbs_entries) == 1
+        assert gibbs_entries[0]['RandGibbsNoised']['keys'] == ['image']
+
+    def test_original_pa_unchanged(self):
+        from lesseg_unet.data.transform_dicts import mm1_p64_pa
+
+        result = mm1_p64_pa()
+        assert any('RandGibbsNoised' in e for e in result['modality_intensity'])
+        assert any('RandKSpaceSpikeNoised' in e for e in result['modality_intensity'])
+
+    def test_pag_patch_sizes(self):
+        from lesseg_unet.data.transform_dicts import mm1_p96_pag, mm1_p64_pag, mm2_p96_pag
+
+        assert mm1_p96_pag()['patches'][0]['RandCropByPosNegLabeld']['spatial_size'] == [96, 96, 96]
+        assert mm1_p64_pag()['patches'][0]['RandCropByPosNegLabeld']['spatial_size'] == [64, 64, 64]
+        assert mm2_p96_pag()['patches'][0]['RandCropByPosNegLabeld']['spatial_size'] == [96, 96, 96]
+
+
+class TestStemsMatch:
+    """Tests for _stems_match — the word-boundary helper used in match_img_seg_by_names."""
+
+    def _fn(self, query, target):
+        from lesseg_unet.data_loading import _stems_match
+        return _stems_match(query, target)
+
+    def test_exact_match(self):
+        assert self._fn('SOOP_sub-28', 'SOOP_sub-28') is True
+
+    def test_label_suffix_underscore(self):
+        # label file has a _label suffix — must still match
+        assert self._fn('SOOP_sub-28', 'SOOP_sub-28_label') is True
+
+    def test_digit_continuation_no_match(self):
+        # SOOP_sub-28 must NOT match SOOP_sub-280 (the original bug)
+        assert self._fn('SOOP_sub-28', 'SOOP_sub-280') is False
+
+    def test_digit_continuation_multi(self):
+        # Covers the full set that triggered the crash (sub-281 through sub-289)
+        for suffix in ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9'):
+            assert self._fn('SOOP_sub-28', f'SOOP_sub-28{suffix}') is False
+
+    def test_unrelated_label_no_match(self):
+        assert self._fn('SOOP_sub-28', 'SOOP_sub-99') is False
+
+    def test_query_longer_than_target_no_match(self):
+        # image stem longer than label stem — should not match
+        assert self._fn('SOOP_sub-28_trace', 'SOOP_sub-28') is False
+
+    def test_empty_strings(self):
+        assert self._fn('', '') is True
+
+    def test_single_digit_subject(self):
+        # sub-1 must not match sub-10, sub-100, sub-1000, etc.
+        assert self._fn('SOOP_sub-1', 'SOOP_sub-10') is False
+        assert self._fn('SOOP_sub-1', 'SOOP_sub-100') is False
+        assert self._fn('SOOP_sub-1', 'SOOP_sub-1') is True
+        assert self._fn('SOOP_sub-1', 'SOOP_sub-1_seg') is True
+
+
+class TestMatchImgSegByNames:
+    """Integration tests for match_img_seg_by_names using tmp paths."""
+
+    def _make_files(self, tmp_path, names):
+        files = []
+        for name in names:
+            f = tmp_path / name
+            f.touch()
+            files.append(str(f))
+        return files
+
+    def test_exact_stem_match(self, tmp_path):
+        from lesseg_unet.data_loading import match_img_seg_by_names
+        img_dir = tmp_path / 'img'
+        img_dir.mkdir()
+        seg_dir = tmp_path / 'seg'
+        seg_dir.mkdir()
+        imgs = self._make_files(img_dir, ['SOOP_sub-28.nii.gz'])
+        segs = self._make_files(seg_dir, ['SOOP_sub-28.nii.gz'])
+        result, unmatched = match_img_seg_by_names(imgs, segs, check_inputs=False)
+        assert len(result) == 1
+        assert unmatched == []
+
+    def test_no_digit_collision(self, tmp_path):
+        from lesseg_unet.data_loading import match_img_seg_by_names
+        img_dir = tmp_path / 'img'
+        img_dir.mkdir()
+        seg_dir = tmp_path / 'seg'
+        seg_dir.mkdir()
+        imgs = self._make_files(img_dir, ['SOOP_sub-28.nii.gz'])
+        # label dir contains sub-28 AND sub-280 through sub-289
+        seg_names = ['SOOP_sub-28.nii.gz'] + [f'SOOP_sub-28{i}.nii.gz' for i in range(10)]
+        segs = self._make_files(seg_dir, seg_names)
+        result, unmatched = match_img_seg_by_names(imgs, segs, check_inputs=False)
+        assert len(result) == 1
+        assert unmatched == []
+
+    def test_label_suffix_still_matches(self, tmp_path):
+        from lesseg_unet.data_loading import match_img_seg_by_names
+        img_dir = tmp_path / 'img'
+        img_dir.mkdir()
+        seg_dir = tmp_path / 'seg'
+        seg_dir.mkdir()
+        imgs = self._make_files(img_dir, ['SOOP_sub-28.nii.gz'])
+        segs = self._make_files(seg_dir, ['SOOP_sub-28_label.nii.gz'])
+        result, unmatched = match_img_seg_by_names(imgs, segs, check_inputs=False)
+        assert len(result) == 1
+
+    def test_cut_suffix_multimodal(self, tmp_path):
+        from lesseg_unet.data_loading import match_img_seg_by_names
+        img_dir = tmp_path / 'img'
+        img_dir.mkdir()
+        seg_dir = tmp_path / 'seg'
+        seg_dir.mkdir()
+        # image has modality suffix; label does not
+        imgs = self._make_files(img_dir, ['SOOP_sub-28_trace.nii.gz'])
+        segs = self._make_files(seg_dir, ['SOOP_sub-28.nii.gz'])
+        result, unmatched = match_img_seg_by_names(
+            imgs, segs, image_cut_suffix='_trace', check_inputs=False)
+        assert len(result) == 1
+
+    def test_cut_suffix_no_digit_collision(self, tmp_path):
+        from lesseg_unet.data_loading import match_img_seg_by_names
+        img_dir = tmp_path / 'img'
+        img_dir.mkdir()
+        seg_dir = tmp_path / 'seg'
+        seg_dir.mkdir()
+        imgs = self._make_files(img_dir, ['SOOP_sub-28_trace.nii.gz'])
+        seg_names = ['SOOP_sub-28.nii.gz'] + [f'SOOP_sub-28{i}.nii.gz' for i in range(10)]
+        segs = self._make_files(seg_dir, seg_names)
+        result, unmatched = match_img_seg_by_names(
+            imgs, segs, image_cut_suffix='_trace', check_inputs=False)
+        assert len(result) == 1

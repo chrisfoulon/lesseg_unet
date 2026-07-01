@@ -1652,6 +1652,7 @@ def create_multimodal_transform_dict(
     resolution_mm: int = 2,
     patch_size: int = 96,
     denoised_data: bool = False,
+    num_samples: int = 5,
 ) -> dict:
     """Create a multi-modal aware transform dictionary.
 
@@ -1773,17 +1774,15 @@ def create_multimodal_transform_dict(
         # Spatial and shared transforms (applied AFTER ConcatItemsd)
         'monai_transform': [
             # Elastic deformation - same deformation field to all channels
-            {'Rand3DElasticd': {
+            {'RandAffined': {
                 'keys': ['image', 'label'],
-                'sigma_range': sigma_range,
-                'magnitude_range': magnitude_range,
-                'prob': tiny_prob,
+                'prob': low_prob,
                 'rotate_range': (radians(1), radians(10)),
                 'shear_range': ([(shear_min, shear_max) for _ in range(6)]),
                 'translate_range': translate_range,
                 'scale_range': (0.02, 0.15),
-                'padding_mode': "reflection",
-                'mode': 'nearest',
+                'mode': ('bilinear', 'nearest'),
+                'padding_mode': 'reflection',
             }},
             # Rician noise - HAS channel_wise support, can stay here
             {'RandRicianNoised': {
@@ -1831,7 +1830,7 @@ def create_multimodal_transform_dict(
                 'spatial_size': [patch_size, patch_size, patch_size],
                 'pos': 1,
                 'neg': 1,  # High negative sampling for artifact rejection
-                'num_samples': 5,
+                'num_samples': num_samples,
             }},
         ],
     }
@@ -1853,3 +1852,74 @@ def mm1_p64(**kwargs):
 def mm2_p96(**kwargs):
     """2mm resolution (default), 96^3 patches."""
     return create_multimodal_transform_dict(resolution_mm=2, patch_size=96, **kwargs)
+
+
+def _with_patch_augment(td: dict) -> dict:
+    """Move RandAffined from monai_transform to a patch_augment section after patches.
+
+    Affine augmentation on a 96³ patch is ~25x faster than on the full 182³ volume.
+    Each patch is augmented independently via MONAI Compose map_items.
+    """
+    affine = [e for e in td['monai_transform'] if 'RandAffined' in e]
+    td['monai_transform'] = [e for e in td['monai_transform'] if 'RandAffined' not in e]
+    td['patch_augment'] = affine
+    return td
+
+
+def mm1_p96_pa(**kwargs):
+    """1mm resolution, 96^3 patches, affine augmentation applied at patch level."""
+    return _with_patch_augment(create_multimodal_transform_dict(resolution_mm=1, patch_size=96, **kwargs))
+
+
+def mm1_p64_pa(**kwargs):
+    """1mm resolution, 64^3 patches, affine augmentation applied at patch level."""
+    return _with_patch_augment(create_multimodal_transform_dict(resolution_mm=1, patch_size=64, **kwargs))
+
+
+def mm2_p96_pa(**kwargs):
+    """2mm resolution, 96^3 patches, affine augmentation applied at patch level."""
+    return _with_patch_augment(create_multimodal_transform_dict(resolution_mm=2, patch_size=96, **kwargs))
+
+
+def _with_patch_gibbs_no_spike(td: dict) -> dict:
+    """Move affine + Gibbs to patch level; remove KSpaceSpike entirely.
+
+    Extends _with_patch_augment by also:
+    - Removing RandKSpaceSpikeNoised from modality_intensity (full-image herringbone
+      pattern is qualitatively wrong at patch scale and not used by nnUNet).
+    - Moving RandGibbsNoised from modality_intensity to patch_augment (edge-ringing
+      approximation is acceptable at patch scale; saves ~232 MB FFT workspace per worker).
+
+    In patch_augment, Gibbs uses keys=['image'] on the concatenated (N_ch, patch³) tensor.
+    MONAI applies the same alpha to all channels, which is physically sensible (same
+    k-space truncation for co-registered modalities).
+    """
+    td = _with_patch_augment(td)
+    gibbs = [e for e in td['modality_intensity'] if 'RandGibbsNoised' in e]
+    td['modality_intensity'] = [
+        e for e in td['modality_intensity']
+        if 'RandGibbsNoised' not in e and 'RandKSpaceSpikeNoised' not in e
+    ]
+    td['patch_augment'] = td.get('patch_augment', []) + gibbs
+    return td
+
+
+def mm1_p96_pag(**kwargs):
+    """1mm resolution, 96^3 patches, affine + Gibbs at patch level, no KSpace spike."""
+    return _with_patch_gibbs_no_spike(
+        create_multimodal_transform_dict(resolution_mm=1, patch_size=96, **kwargs)
+    )
+
+
+def mm1_p64_pag(**kwargs):
+    """1mm resolution, 64^3 patches, affine + Gibbs at patch level, no KSpace spike."""
+    return _with_patch_gibbs_no_spike(
+        create_multimodal_transform_dict(resolution_mm=1, patch_size=64, **kwargs)
+    )
+
+
+def mm2_p96_pag(**kwargs):
+    """2mm resolution, 96^3 patches, affine + Gibbs at patch level, no KSpace spike."""
+    return _with_patch_gibbs_no_spike(
+        create_multimodal_transform_dict(resolution_mm=2, patch_size=96, **kwargs)
+    )
